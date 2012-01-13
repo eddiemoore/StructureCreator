@@ -2,13 +2,6 @@
 
 */
 
-
-$(function() {
-	
-	//$('#schema-file').change()
-});
-
-
 var schema_file;
 
 
@@ -47,6 +40,7 @@ function folderLoop(xml) {
 			folderLoop(node);
 		} else if (node.nodeName === "file") {
 			log("it's a file");
+			log(node.getAttribute('name'));
 		}
 	};
 }
