@@ -1,0 +1,15 @@
+<folder name='%BASE%'>
+	<folder name='assets' />
+	<folder name='docs' />
+	<folder name='release'>
+		<folder name='css'>
+			<file name='style.css'><![CDATA[*{ margin:0; padding: 0; }]]></file>
+		</folder>
+		<folder name='images' />
+		<folder name='js' />
+		<folder name='xml'>
+			<file name='config.xml'>This is a test</file>
+		</folder>
+		<file name='index.html'><![CDATA[hello this is the index file]]></file>
+	</folder>
+</folder>
