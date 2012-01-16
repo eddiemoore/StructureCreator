@@ -8,7 +8,7 @@
 		<folder name='images' />
 		<folder name='js' />
 		<folder name='xml'>
-			<file name='config.xml'>This is a test</file>
+			<file name='config.xml' url="http://flashstructurecreator.googlecode.com/svn/trunk/templates/config.xml" />
 		</folder>
 		<file name='index.html'><![CDATA[hello this is the index file]]></file>
 	</folder>

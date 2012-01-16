@@ -10,4 +10,3 @@ function schemaFileSelect(evt) {
 
 document.getElementById('schema_file').addEventListener('change', schemaFileSelect, false);
 document.getElementById('create_project').addEventListener('click', StructureCreator.start, false);
-
