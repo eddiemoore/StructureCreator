@@ -4,66 +4,125 @@
   <meta charset="utf-8">
   <title>StructureCreator</title>
 
-  <link rel="stylesheet" href="css/style.css">
-
-  <script src="js/libs/modernizr-2.0.6.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="css/bootstrap.css">
+  <link rel="stylesheet" type="text/css" href="css/bootstrap-responsive.css">
+  <style>
+  .show-grid {
+    margin-top:10px;
+    margin-bottom: 10px;
+  }
+  </style>
 </head>
 
 <body>
 
-  <div id="container">
-    <header>
+  <div class="container">
+    <header class="hero-unit">
       <h1>StructureCreator</h1>
     </header>
+
     <div id="main" role="main">
 
-      <section>
-        <!-- Insert dropdown for saved profiles -->
-        <h2>Select a premade project</h2>
-        <select id="project_select"></select>
-      </section>
-      
-      <section>
-        <h2>Select Schema Type</h2>
-        
-        <label for="schema_type_file">
-          <input type="radio" name="schema_type" value="file" id="schema_type_file" />
-          File
-        </label>
+      <form class="form-horizontal">
 
-        <label for="schema_type_url">
-          <input type="radio" name="schema_type" value="url" id="schema_type_url" />
-          URL
-        </label>
+        <section>
+          <!-- Insert dropdown for saved profiles -->
+          <h2>Select a premade project</h2>
+          <select id="project_select"></select>
+        </section>
+
+        <hr />
         
         <section>
-          <input type="file" name="schema_file" id="schema_file" />
-          <input type="url" name="schema_url" id="schema_url" />
+          <h2>Select Schema Type</h2>
+          
+          <div class="btn-group" data-toggle="buttons-radio">
+            <button class="btn btn-primary" id="rd-file">File</button>
+            <button class="btn btn-primary" id="rd-url">URL</button>
+          </div>
+          
+          <div class="control-group" id="file-box">
+            <label class="control-label">Select a file</label>
+            <div class="controls">
+              <input type="file" name="schema_file" id="schema_file" class="input-file" />
+            </div>
+          </div>
+
+          <div class="control-group" id="url-box">
+            <label class="control-label">Schema URL</label>
+            <div class="controls">
+              <input type="url" name="schema_url" id="schema_url" class="input-xlarge" placeholder="Schema URL" />
+            </div>
+          </div>
         </section>
-      </section>
 
-      <section id="custom_vars">
-        <!-- Custom Variable Fields -->
-        <div class="variablebar">
-          <input type="text" class="variable" />
-          <input type="text" class="value" />
-        </div>
-      </section>
+        <hr />
 
+        <section id="custom_vars">
+          <h2>Custom Variables</h2>
+          <!-- Custom Variable Fields -->
+          <script id="customVar-template" type="text/x-handlebars-template">
+            <div class="row show-grid" data-id="{{id}}">
+              <div class="span4">
+                <input type="text" class="span4" placeholder="Variable" />
+              </div>
+              <div class="span4">
+                <input type="text" class="span4" placeholder="Value" />
+              </div>
+              <div class="span4">
+                <button class="btn btn-danger"><i class="icon-remove icon-white"></i></button>
+              </div>
+            </div>
+          </script>
+        </section>
 
+        <button id="add" class="btn btn-success"><i class="icon-plus icon-white"></i></button>
 
-      <section>
-        <button id="create_project">Create Project</button>
-      </section>
+        <hr />
+
+        <section>
+          <button id="create_project" class="btn btn-primary btn-large">Create Project</button>
+        </section>
       
-
+      </form>
     </div>
   </div>
 
-  
-  <script defer src="js/plugins.js"></script>
-  <script defer src="js/mylibs/structurecreator.js"></script>
-  <script defer src="js/script.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+  <script src="js/bootstrap.js"></script>
+  <script src="js/bootstrap-button.js"></script>
+  <script src="js/libs/handlebars-1.0.0.beta.6.js"></script>
+  <script>
+    var rdbtngroup = $('.btn-group');
+    rdbtngroup.button();
+    rdbtngroup.find('button').on('mouseup', function(e) {
+      var id = $(this).attr('id');
+      if (id.indexOf('file') > -1) {
+        $('#file-box').show('slow');
+        $('#url-box').hide();
+      } else {
+        $('#file-box').hide();
+        $('#url-box').show('slow');
+      }
+    });
+
+    $('#file-box').hide();
+    $('#url-box').hide();
+
+    $('form').on('submit', function() {
+      return false;
+    });
+
+    var source   = $("#customVar-template").html(),
+        template = Handlebars.compile(source),
+        custom_vars = [],
+        i = 0;
+    $('#add').click(function(e) {
+      var data = { id : i };
+      $('#custom_vars').append( template(data) );
+      i++;
+    });
+  </script>
   
 </body>
 </html>
