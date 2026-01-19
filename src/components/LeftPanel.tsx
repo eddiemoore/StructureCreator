@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
@@ -9,10 +9,12 @@ import {
   FolderIcon,
   UploadIcon,
   LayersIcon,
-  CodeIcon,
   PlusIcon,
+  StarIcon,
+  TrashIcon,
+  SaveIcon,
 } from "./Icons";
-import type { SchemaTree } from "../types/schema";
+import type { SchemaTree, Template } from "../types/schema";
 import type { ReactNode } from "react";
 
 type SchemaSourceType = "xml" | "folder";
@@ -67,6 +69,8 @@ export const LeftPanel = () => {
     outputPath,
     projectName,
     variables,
+    templates,
+    templatesLoading,
     setSchemaPath,
     setSchemaContent,
     setSchemaTree,
@@ -75,6 +79,8 @@ export const LeftPanel = () => {
     updateVariable,
     addVariable,
     removeVariable,
+    setTemplates,
+    setTemplatesLoading,
   } = useAppStore();
 
   const [sourceType, setSourceType] = useState<SchemaSourceType>("xml");
@@ -82,6 +88,83 @@ export const LeftPanel = () => {
   const [isAddingVariable, setIsAddingVariable] = useState(false);
   const [newVarName, setNewVarName] = useState("");
   const [newVarValue, setNewVarValue] = useState("");
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [newTemplateDescription, setNewTemplateDescription] = useState("");
+
+  // Load templates on mount
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const loadTemplates = async () => {
+    setTemplatesLoading(true);
+    try {
+      const templates = await invoke<Template[]>("cmd_list_templates");
+      setTemplates(templates);
+    } catch (e) {
+      console.error("Failed to load templates:", e);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  };
+
+  const handleSaveAsTemplate = async () => {
+    if (!schemaContent || !newTemplateName.trim()) return;
+
+    try {
+      await invoke("cmd_create_template", {
+        name: newTemplateName.trim(),
+        description: newTemplateDescription.trim() || null,
+        schemaXml: schemaContent,
+        iconColor: null,
+      });
+      setIsSavingTemplate(false);
+      setNewTemplateName("");
+      setNewTemplateDescription("");
+      loadTemplates();
+    } catch (e) {
+      console.error("Failed to save template:", e);
+    }
+  };
+
+  const handleLoadTemplate = async (template: Template) => {
+    try {
+      // Increment use count
+      await invoke("cmd_use_template", { id: template.id });
+
+      // Load the schema
+      setSchemaPath(`template:${template.name}`);
+      setSchemaContent(template.schema_xml);
+
+      const tree = await invoke<SchemaTree>("cmd_parse_schema", { content: template.schema_xml });
+      setSchemaTree(tree);
+
+      loadTemplates(); // Refresh to update use count
+    } catch (e) {
+      console.error("Failed to load template:", e);
+    }
+  };
+
+  const handleToggleFavorite = async (e: React.MouseEvent, templateId: string) => {
+    e.stopPropagation();
+    try {
+      await invoke("cmd_toggle_favorite", { id: templateId });
+      loadTemplates();
+    } catch (e) {
+      console.error("Failed to toggle favorite:", e);
+    }
+  };
+
+  const handleDeleteTemplate = async (e: React.MouseEvent, templateId: string) => {
+    e.stopPropagation();
+    try {
+      await invoke("cmd_delete_template", { id: templateId });
+      loadTemplates();
+    } catch (e) {
+      console.error("Failed to delete template:", e);
+    }
+  };
 
   const handleSelectSchema = async () => {
     try {
@@ -421,27 +504,119 @@ export const LeftPanel = () => {
       </div>
 
       {/* Templates Section */}
-      <div className="p-4 flex-1 overflow-auto mac-scroll">
-        <SectionTitle>Templates</SectionTitle>
-        <div className="space-y-2">
-          <div className="mac-sidebar-item p-3 bg-card-bg border border-border-muted rounded-mac">
-            <div className="w-8 h-8 bg-system-blue/10 rounded-mac flex items-center justify-center text-system-blue">
-              <LayersIcon size={16} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-mac-sm font-medium text-text-primary">Flash Project</div>
-              <div className="text-mac-xs text-text-muted">ActionScript setup</div>
+      <div className="p-4 flex-1 overflow-auto mac-scroll flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <SectionTitle>Templates</SectionTitle>
+          {schemaContent && (
+            <button
+              onClick={() => setIsSavingTemplate(true)}
+              className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-system-blue hover:bg-system-blue/10 transition-colors"
+              title="Save as template"
+            >
+              <SaveIcon size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Save Template Form */}
+        {isSavingTemplate && (
+          <div className="p-3 bg-card-bg rounded-mac border border-system-blue mb-3">
+            <div className="text-mac-xs font-medium text-text-primary mb-2">Save as Template</div>
+            <input
+              type="text"
+              value={newTemplateName}
+              onChange={(e) => setNewTemplateName(e.target.value)}
+              placeholder="Template name"
+              className="w-full mac-input mb-2 text-mac-sm"
+              autoFocus
+            />
+            <input
+              type="text"
+              value={newTemplateDescription}
+              onChange={(e) => setNewTemplateDescription(e.target.value)}
+              placeholder="Description (optional)"
+              className="w-full mac-input mb-2 text-mac-sm"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsSavingTemplate(false);
+                  setNewTemplateName("");
+                  setNewTemplateDescription("");
+                }}
+                className="px-2 py-1 text-mac-xs text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAsTemplate}
+                disabled={!newTemplateName.trim()}
+                className="px-2 py-1 text-mac-xs font-medium text-system-blue hover:bg-system-blue/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
             </div>
           </div>
-          <div className="mac-sidebar-item p-3 bg-card-bg border border-border-muted rounded-mac">
-            <div className="w-8 h-8 bg-system-green/10 rounded-mac flex items-center justify-center text-system-green">
-              <CodeIcon size={16} />
+        )}
+
+        <div className="space-y-2 flex-1">
+          {templatesLoading ? (
+            <div className="text-center text-text-muted text-mac-sm py-4">
+              Loading templates...
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-mac-sm font-medium text-text-primary">React App</div>
-              <div className="text-mac-xs text-text-muted">Modern React setup</div>
+          ) : templates.length === 0 ? (
+            <div className="text-center text-text-muted text-mac-sm py-4">
+              <LayersIcon size={24} className="mx-auto mb-2 opacity-30" />
+              <div>No templates yet</div>
+              <div className="text-mac-xs mt-1">Load a schema and save it as a template</div>
             </div>
-          </div>
+          ) : (
+            templates.map((template) => (
+              <div
+                key={template.id}
+                onClick={() => handleLoadTemplate(template)}
+                className="mac-sidebar-item p-3 bg-card-bg border border-border-muted rounded-mac cursor-pointer group"
+              >
+                <div
+                  className="w-8 h-8 rounded-mac flex items-center justify-center flex-shrink-0"
+                  style={{
+                    backgroundColor: `${template.icon_color || "#0a84ff"}15`,
+                    color: template.icon_color || "#0a84ff",
+                  }}
+                >
+                  <LayersIcon size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-mac-sm font-medium text-text-primary truncate">
+                    {template.name}
+                  </div>
+                  <div className="text-mac-xs text-text-muted truncate">
+                    {template.description || `Used ${template.use_count} times`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => handleToggleFavorite(e, template.id)}
+                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                      template.is_favorite
+                        ? "text-system-orange"
+                        : "text-text-muted hover:text-system-orange"
+                    }`}
+                    title={template.is_favorite ? "Remove from favorites" : "Add to favorites"}
+                  >
+                    <StarIcon size={14} filled={template.is_favorite} />
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteTemplate(e, template.id)}
+                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors"
+                    title="Delete template"
+                  >
+                    <TrashIcon size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </aside>

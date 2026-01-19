@@ -1,10 +1,14 @@
+mod database;
 mod schema;
 
+use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput};
 use schema::{parse_xml_schema, scan_folder_to_schema, schema_to_xml, SchemaTree};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use tauri::{Manager, State};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
@@ -320,12 +324,118 @@ fn download_file(url: &str) -> Result<String, String> {
     }
 }
 
+// Template commands
+pub struct AppState {
+    pub db: Database,
+}
+
+#[tauri::command]
+fn cmd_list_templates(state: State<Mutex<AppState>>) -> Result<Vec<Template>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.list_templates().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_get_template(state: State<Mutex<AppState>>, id: String) -> Result<Option<Template>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.get_template(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_create_template(
+    state: State<Mutex<AppState>>,
+    name: String,
+    description: Option<String>,
+    schema_xml: String,
+    icon_color: Option<String>,
+) -> Result<Template, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state
+        .db
+        .create_template(CreateTemplateInput {
+            name,
+            description,
+            schema_xml,
+            icon_color,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_update_template(
+    state: State<Mutex<AppState>>,
+    id: String,
+    name: Option<String>,
+    description: Option<String>,
+    icon_color: Option<String>,
+) -> Result<Option<Template>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state
+        .db
+        .update_template(
+            &id,
+            UpdateTemplateInput {
+                name,
+                description,
+                icon_color,
+            },
+        )
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_delete_template(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.delete_template(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_toggle_favorite(state: State<Mutex<AppState>>, id: String) -> Result<Option<Template>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.toggle_favorite(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_use_template(state: State<Mutex<AppState>>, id: String) -> Result<Option<Template>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.increment_use_count(&id).map_err(|e| e.to_string())?;
+    state.db.get_template(&id).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![cmd_parse_schema, cmd_scan_folder, cmd_export_schema_xml, cmd_create_structure, cmd_create_structure_from_tree])
+        .setup(|app| {
+            // Get app data directory
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .expect("Failed to get app data directory");
+
+            // Initialize database
+            let db = Database::new(app_data_dir).expect("Failed to initialize database");
+
+            // Store app state
+            app.manage(Mutex::new(AppState { db }));
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            cmd_parse_schema,
+            cmd_scan_folder,
+            cmd_export_schema_xml,
+            cmd_create_structure,
+            cmd_create_structure_from_tree,
+            cmd_list_templates,
+            cmd_get_template,
+            cmd_create_template,
+            cmd_update_template,
+            cmd_delete_template,
+            cmd_toggle_favorite,
+            cmd_use_template
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

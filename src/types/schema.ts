@@ -24,9 +24,13 @@ export interface Variable {
 export interface Template {
   id: string;
   name: string;
-  description: string;
-  schema: string;
-  icon?: string;
+  description: string | null;
+  schema_xml: string;
+  icon_color: string | null;
+  is_favorite: boolean;
+  use_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface LogEntry {
@@ -76,6 +80,10 @@ export interface AppState {
   // Variables
   variables: Variable[];
 
+  // Templates
+  templates: Template[];
+  templatesLoading: boolean;
+
   // Progress
   progress: CreationProgress;
 
@@ -93,6 +101,8 @@ export interface AppState {
   updateVariable: (name: string, value: string) => void;
   addVariable: (name: string, value: string) => void;
   removeVariable: (name: string) => void;
+  setTemplates: (templates: Template[]) => void;
+  setTemplatesLoading: (loading: boolean) => void;
   setProgress: (progress: Partial<CreationProgress>) => void;
   addLog: (log: Omit<LogEntry, "id" | "timestamp">) => void;
   clearLogs: () => void;

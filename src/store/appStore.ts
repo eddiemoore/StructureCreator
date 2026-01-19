@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, Template } from "../types/schema";
 
 const initialProgress: CreationProgress = {
   current: 0,
@@ -23,6 +23,10 @@ export const useAppStore = create<AppState>((set) => ({
     { name: "%BASE%", value: "my-project" },
     { name: "%DATE%", value: new Date().toISOString().split("T")[0] },
   ],
+
+  // Templates
+  templates: [],
+  templatesLoading: false,
 
   // Progress
   progress: initialProgress,
@@ -74,6 +78,10 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({
       variables: state.variables.filter((v) => v.name !== name),
     })),
+
+  setTemplates: (templates: Template[]) => set({ templates }),
+
+  setTemplatesLoading: (templatesLoading: boolean) => set({ templatesLoading }),
 
   setProgress: (progress: Partial<CreationProgress>) =>
     set((state) => ({
