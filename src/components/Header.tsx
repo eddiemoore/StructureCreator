@@ -1,4 +1,4 @@
-import { FolderPlusIcon, GridIcon, SettingsIcon } from "./Icons";
+import { FolderPlusIcon, SettingsIcon } from "./Icons";
 
 export const Header = () => {
   return (
@@ -12,10 +12,6 @@ export const Header = () => {
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <button className="mac-button-secondary flex items-center gap-2 text-mac-base">
-          <GridIcon size={16} className="text-text-secondary" />
-          Templates
-        </button>
         <button className="mac-button-secondary flex items-center gap-2 text-mac-base">
           <SettingsIcon size={16} className="text-text-secondary" />
           Settings
