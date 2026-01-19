@@ -40,6 +40,8 @@ export default {
         card: {
           bg: "var(--color-card-bg)",
         },
+        // Accent color (configurable)
+        accent: "var(--color-accent)",
       },
       fontFamily: {
         sans: [

@@ -33,6 +33,32 @@ export interface Template {
   updated_at: string;
 }
 
+export type ThemeMode = "light" | "dark" | "system";
+
+export type AccentColor = "blue" | "purple" | "green" | "orange" | "pink";
+
+export interface Settings {
+  defaultOutputPath: string | null;
+  defaultProjectName: string;
+  theme: ThemeMode;
+  accentColor: AccentColor;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  defaultOutputPath: null,
+  defaultProjectName: "my-project",
+  theme: "system",
+  accentColor: "blue",
+};
+
+export const ACCENT_COLORS: Record<AccentColor, string> = {
+  blue: "#0a84ff",
+  purple: "#bf5af2",
+  green: "#30d158",
+  orange: "#ff9f0a",
+  pink: "#ff375f",
+};
+
 export interface LogEntry {
   id: string;
   type: "success" | "pending" | "error" | "info" | "warning";
@@ -84,6 +110,10 @@ export interface AppState {
   templates: Template[];
   templatesLoading: boolean;
 
+  // Settings
+  settings: Settings;
+  settingsLoading: boolean;
+
   // Progress
   progress: CreationProgress;
 
@@ -103,6 +133,9 @@ export interface AppState {
   removeVariable: (name: string) => void;
   setTemplates: (templates: Template[]) => void;
   setTemplatesLoading: (loading: boolean) => void;
+  setSettings: (settings: Settings) => void;
+  setSettingsLoading: (loading: boolean) => void;
+  updateSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
   setProgress: (progress: Partial<CreationProgress>) => void;
   addLog: (log: Omit<LogEntry, "id" | "timestamp">) => void;
   clearLogs: () => void;

@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* Light mode colors */
+    /* Light mode colors (default) */
     --color-bg: #ffffff;
     --color-bg-secondary: #f5f5f7;
     --color-bg-tertiary: #f0f0f0;
@@ -22,16 +22,18 @@
 
     --color-card-bg: #ffffff;
 
-    /* System colors (consistent) */
-    --color-system-blue: #0a84ff;
+    /* System colors */
     --color-system-green: #34c759;
     --color-system-red: #ff3b30;
     --color-system-orange: #ff9500;
+
+    /* Accent color (configurable) */
+    --color-accent: #0a84ff;
   }
 
+  /* Dark mode via system preference (when theme is "system") */
   @media (prefers-color-scheme: dark) {
-    :root {
-      /* Dark mode colors */
+    :root:not(.theme-light) {
       --color-bg: #1e1e1e;
       --color-bg-secondary: #2d2d2d;
       --color-bg-tertiary: #3d3d3d;
@@ -49,6 +51,46 @@
 
       --color-card-bg: #2d2d2d;
     }
+  }
+
+  /* Force dark mode via class */
+  :root.theme-dark {
+    --color-bg: #1e1e1e;
+    --color-bg-secondary: #2d2d2d;
+    --color-bg-tertiary: #3d3d3d;
+    --color-bg-hover: #4d4d4d;
+    --color-sidebar: #252525;
+
+    --color-text-primary: #f5f5f7;
+    --color-text-secondary: #a1a1a6;
+    --color-text-muted: #6e6e73;
+    --color-text-placeholder: #545456;
+
+    --color-border-default: #3d3d3d;
+    --color-border-muted: #2d2d2d;
+    --color-border-subtle: #252525;
+
+    --color-card-bg: #2d2d2d;
+  }
+
+  /* Force light mode via class */
+  :root.theme-light {
+    --color-bg: #ffffff;
+    --color-bg-secondary: #f5f5f7;
+    --color-bg-tertiary: #f0f0f0;
+    --color-bg-hover: #e8e8e8;
+    --color-sidebar: #f9f9f9;
+
+    --color-text-primary: #1d1d1f;
+    --color-text-secondary: #6e6e73;
+    --color-text-muted: #86868b;
+    --color-text-placeholder: #aeaeb2;
+
+    --color-border-default: #d2d2d7;
+    --color-border-muted: #e5e5ea;
+    --color-border-subtle: #f0f0f0;
+
+    --color-card-bg: #ffffff;
   }
 }
 
@@ -101,16 +143,16 @@ body {
 
 /* macOS Button Styles */
 .mac-button-primary {
-  background-color: #0a84ff;
+  background-color: var(--color-accent);
   color: white;
   font-weight: 500;
   border-radius: 6px;
   padding: 0.5rem 1rem;
-  transition: background-color 150ms;
+  transition: background-color 150ms, opacity 150ms;
 }
 
 .mac-button-primary:hover {
-  background-color: #0071e3;
+  filter: brightness(0.9);
 }
 
 .mac-button-primary:active {
@@ -153,8 +195,8 @@ body {
 
 .mac-input:focus {
   outline: none;
-  border-color: #0a84ff;
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
 
 /* macOS Segmented Control */
@@ -211,7 +253,7 @@ body {
 }
 
 .mac-sidebar-item.active {
-  background-color: #0a84ff;
+  background-color: var(--color-accent);
   color: white;
 }
 
@@ -248,5 +290,5 @@ body {
 /* Focus ring for accessibility */
 .mac-focus-ring:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.4);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }

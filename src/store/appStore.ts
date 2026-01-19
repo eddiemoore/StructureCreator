@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, Template } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, Template, Settings } from "../types/schema";
+import { DEFAULT_SETTINGS } from "../types/schema";
 
 const initialProgress: CreationProgress = {
   current: 0,
@@ -27,6 +28,10 @@ export const useAppStore = create<AppState>((set) => ({
   // Templates
   templates: [],
   templatesLoading: false,
+
+  // Settings
+  settings: DEFAULT_SETTINGS,
+  settingsLoading: false,
 
   // Progress
   progress: initialProgress,
@@ -82,6 +87,15 @@ export const useAppStore = create<AppState>((set) => ({
   setTemplates: (templates: Template[]) => set({ templates }),
 
   setTemplatesLoading: (templatesLoading: boolean) => set({ templatesLoading }),
+
+  setSettings: (settings: Settings) => set({ settings }),
+
+  setSettingsLoading: (settingsLoading: boolean) => set({ settingsLoading }),
+
+  updateSetting: <K extends keyof Settings>(key: K, value: Settings[K]) =>
+    set((state) => ({
+      settings: { ...state.settings, [key]: value },
+    })),
 
   setProgress: (progress: Partial<CreationProgress>) =>
     set((state) => ({

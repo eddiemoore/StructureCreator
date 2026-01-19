@@ -8,7 +8,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    Manager, State, Emitter,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
@@ -402,6 +405,19 @@ fn cmd_use_template(state: State<Mutex<AppState>>, id: String) -> Result<Option<
     state.db.get_template(&id).map_err(|e| e.to_string())
 }
 
+// Settings commands
+#[tauri::command]
+fn cmd_get_settings(state: State<Mutex<AppState>>) -> Result<std::collections::HashMap<String, String>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.get_all_settings().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_set_setting(state: State<Mutex<AppState>>, key: String, value: String) -> Result<(), String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.set_setting(&key, &value).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -420,6 +436,77 @@ pub fn run() {
             // Store app state
             app.manage(Mutex::new(AppState { db }));
 
+            // Create native menu
+            let handle = app.handle();
+
+            // Settings menu item
+            let settings_item = MenuItem::with_id(handle, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
+
+            // App submenu (macOS style)
+            let app_submenu = Submenu::with_items(
+                handle,
+                "Structure Creator",
+                true,
+                &[
+                    &PredefinedMenuItem::about(handle, Some("About Structure Creator"), None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &settings_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::services(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::hide(handle, None)?,
+                    &PredefinedMenuItem::hide_others(handle, None)?,
+                    &PredefinedMenuItem::show_all(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::quit(handle, None)?,
+                ],
+            )?;
+
+            // Edit submenu
+            let edit_submenu = Submenu::with_items(
+                handle,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(handle, None)?,
+                    &PredefinedMenuItem::redo(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::cut(handle, None)?,
+                    &PredefinedMenuItem::copy(handle, None)?,
+                    &PredefinedMenuItem::paste(handle, None)?,
+                    &PredefinedMenuItem::select_all(handle, None)?,
+                ],
+            )?;
+
+            // Window submenu
+            let window_submenu = Submenu::with_items(
+                handle,
+                "Window",
+                true,
+                &[
+                    &PredefinedMenuItem::minimize(handle, None)?,
+                    &PredefinedMenuItem::maximize(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::close_window(handle, None)?,
+                ],
+            )?;
+
+            // Build menu
+            let menu = Menu::with_items(
+                handle,
+                &[&app_submenu, &edit_submenu, &window_submenu],
+            )?;
+
+            app.set_menu(menu)?;
+
+            // Handle menu events
+            app.on_menu_event(move |app_handle, event| {
+                if event.id().as_ref() == "settings" {
+                    // Emit event to frontend to open settings
+                    let _ = app_handle.emit("open-settings", ());
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -434,7 +521,9 @@ pub fn run() {
             cmd_update_template,
             cmd_delete_template,
             cmd_toggle_favorite,
-            cmd_use_template
+            cmd_use_template,
+            cmd_get_settings,
+            cmd_set_setting
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

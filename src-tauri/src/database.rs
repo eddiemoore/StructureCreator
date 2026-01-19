@@ -1,5 +1,6 @@
 use rusqlite::{Connection, Result as SqliteResult};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -65,6 +66,14 @@ impl Database {
                 use_count INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             )",
             [],
         )?;
@@ -228,5 +237,56 @@ impl Database {
         )?;
 
         Ok(())
+    }
+
+    // Settings methods
+    pub fn get_all_settings(&self) -> SqliteResult<HashMap<String, String>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        let mut settings = HashMap::new();
+        for row in rows {
+            let (key, value) = row?;
+            settings.insert(key, value);
+        }
+
+        Ok(settings)
+    }
+
+    pub fn get_setting(&self, key: &str) -> SqliteResult<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = ?")?;
+        let mut rows = stmt.query([key])?;
+
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> SqliteResult<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [key, value],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn delete_setting(&self, key: &str) -> SqliteResult<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let rows_affected = conn.execute("DELETE FROM settings WHERE key = ?", [key])?;
+
+        Ok(rows_affected > 0)
     }
 }
