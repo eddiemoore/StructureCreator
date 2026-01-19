@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Structure Creator - Design Mockup</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0a0e14;
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #1c2128;
+            --bg-elevated: #21262d;
+
+            --cyan-dim: #1a4a5c;
+            --cyan-muted: #2d6a7a;
+            --cyan-primary: #22d3ee;
+            --cyan-bright: #67e8f9;
+            --cyan-glow: rgba(34, 211, 238, 0.15);
+
+            --green-muted: #2d5a3d;
+            --green-primary: #10b981;
+            --green-bright: #34d399;
+
+            --amber-muted: #5a4a2d;
+            --amber-primary: #f59e0b;
+            --amber-bright: #fbbf24;
+
+            --red-muted: #5a2d2d;
+            --red-primary: #ef4444;
+
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+
+            --border-default: #30363d;
+            --border-muted: #21262d;
+
+            --grid-color: rgba(34, 211, 238, 0.03);
+            --grid-accent: rgba(34, 211, 238, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Blueprint Grid Background */
+        .blueprint-grid {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px),
+                linear-gradient(var(--grid-accent) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-accent) 1px, transparent 1px);
+            background-size:
+                20px 20px,
+                20px 20px,
+                100px 100px,
+                100px 100px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-container {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: 300px 1fr 320px;
+            grid-template-rows: auto 1fr auto;
+            min-height: 100vh;
+            gap: 1px;
+            background: var(--border-muted);
+        }
+
+        /* Header */
+        .header {
+            grid-column: 1 / -1;
+            background: var(--bg-primary);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-default);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--cyan-primary), var(--cyan-dim));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px var(--cyan-glow);
+        }
+
+        .logo-icon svg {
+            width: 20px;
+            height: 20px;
+            color: var(--bg-deep);
+        }
+
+        .logo-text {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .logo-text span {
+            color: var(--cyan-primary);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            font-family: 'Outfit', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid var(--border-default);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--cyan-muted);
+        }
+
+        .btn-primary {
+            background: var(--cyan-primary);
+            border-color: var(--cyan-primary);
+            color: var(--bg-deep);
+        }
+
+        .btn-primary:hover {
+            background: var(--cyan-bright);
+            border-color: var(--cyan-bright);
+            box-shadow: 0 0 20px var(--cyan-glow);
+        }
+
+        .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Left Panel - Schema & Settings */
+        .panel-left {
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-section {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-muted);
+        }
+
+        .panel-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-muted);
+        }
+
+        /* File Input Zone */
+        .file-drop-zone {
+            border: 2px dashed var(--border-default);
+            border-radius: 8px;
+            padding: 24px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--bg-secondary);
+        }
+
+        .file-drop-zone:hover {
+            border-color: var(--cyan-muted);
+            background: rgba(34, 211, 238, 0.02);
+        }
+
+        .file-drop-zone.active {
+            border-color: var(--cyan-primary);
+            background: var(--cyan-glow);
+        }
+
+        .file-drop-icon {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 12px;
+            color: var(--cyan-primary);
+            opacity: 0.6;
+        }
+
+        .file-drop-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .file-drop-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .loaded-file {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--green-muted);
+        }
+
+        .loaded-file-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--green-muted);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--green-bright);
+        }
+
+        .loaded-file-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .loaded-file-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .loaded-file-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .loaded-file-remove {
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loaded-file-remove:hover {
+            background: var(--red-muted);
+            color: var(--red-primary);
+        }
+
+        /* Input Fields */
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 10px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--cyan-muted);
+            box-shadow: 0 0 0 3px var(--cyan-glow);
+        }
+
+        .input-field::placeholder {
+            color: var(--text-muted);
+        }
+
+        .folder-input {
+            display: flex;
+            gap: 8px;
+        }
+
+        .folder-input .input-field {
+            flex: 1;
+        }
+
+        .folder-input .btn {
+            flex-shrink: 0;
+            padding: 10px;
+        }
+
+        /* Variables List */
+        .variables-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .variable-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            border: 1px solid var(--border-muted);
+        }
+
+        .variable-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--amber-bright);
+            background: var(--amber-muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .variable-arrow {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .variable-value {
+            flex: 1;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+
+        /* Main Content - Tree Preview */
+        .main-content {
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tree-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .tree-title {
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tree-stats {
+            display: flex;
+            gap: 16px;
+        }
+
+        .tree-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .tree-stat-icon {
+            width: 14px;
+            height: 14px;
+            opacity: 0.6;
+        }
+
+        .tree-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            color: var(--cyan-primary);
+        }
+
+        .tree-container {
+            flex: 1;
+            overflow: auto;
+            padding: 16px 20px;
+        }
+
+        /* Tree View */
+        .tree-view {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .tree-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            margin-left: calc(var(--depth, 0) * 20px);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .tree-item:hover {
+            background: var(--bg-secondary);
+        }
+
+        .tree-item-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .tree-item-icon.folder {
+            color: var(--cyan-primary);
+        }
+
+        .tree-item-icon.file {
+            color: var(--text-muted);
+        }
+
+        .tree-item-icon.file-url {
+            color: var(--amber-primary);
+        }
+
+        .tree-item-name {
+            color: var(--text-primary);
+        }
+
+        .tree-item-name.folder {
+            font-weight: 500;
+        }
+
+        .tree-item-url {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-left: auto;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Right Panel - Actions & Progress */
+        .panel-right {
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Action Card */
+        .action-card {
+            padding: 20px 16px;
+            border-bottom: 1px solid var(--border-muted);
+        }
+
+        .action-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 14px 20px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn-create {
+            background: linear-gradient(135deg, var(--cyan-primary), var(--cyan-muted));
+            color: var(--bg-deep);
+        }
+
+        .action-btn-create:hover {
+            box-shadow: 0 4px 20px var(--cyan-glow), 0 0 40px var(--cyan-glow);
+            transform: translateY(-1px);
+        }
+
+        .action-btn-create:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .action-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .action-options {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .option-toggle {
+            flex: 1;
+            padding: 10px;
+            font-size: 11px;
+            font-weight: 500;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .option-toggle:hover {
+            border-color: var(--cyan-muted);
+        }
+
+        .option-toggle.active {
+            background: var(--cyan-glow);
+            border-color: var(--cyan-muted);
+            color: var(--cyan-primary);
+        }
+
+        /* Progress Section */
+        .progress-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .progress-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .progress-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+        }
+
+        .progress-status {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--cyan-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--cyan-primary);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .progress-bar-container {
+            padding: 0 16px;
+            margin-top: 12px;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 67%;
+            background: linear-gradient(90deg, var(--cyan-primary), var(--cyan-bright));
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .progress-log {
+            flex: 1;
+            overflow: auto;
+            padding: 12px 16px;
+        }
+
+        .log-entry {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 6px 0;
+            font-size: 11px;
+            border-bottom: 1px solid var(--border-muted);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-icon {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .log-icon.success {
+            color: var(--green-primary);
+        }
+
+        .log-icon.pending {
+            color: var(--amber-primary);
+        }
+
+        .log-icon.error {
+            color: var(--red-primary);
+        }
+
+        .log-message {
+            flex: 1;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .log-time {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+        }
+
+        /* Footer */
+        .footer {
+            grid-column: 1 / -1;
+            background: var(--bg-secondary);
+            padding: 10px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-default);
+        }
+
+        .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .footer-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .footer-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green-primary);
+        }
+
+        /* Templates Grid */
+        .templates-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            padding: 0;
+        }
+
+        .template-card {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .template-card:hover {
+            border-color: var(--cyan-muted);
+            background: var(--bg-tertiary);
+        }
+
+        .template-card-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--cyan-dim);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--cyan-bright);
+            margin-bottom: 12px;
+        }
+
+        .template-card-name {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .template-card-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-default);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="blueprint-grid"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <line x1="12" y1="11" x2="12" y2="17"></line>
+                        <line x1="9" y1="14" x2="15" y2="14"></line>
+                    </svg>
+                </div>
+                <span class="logo-text">Structure<span>Creator</span></span>
+            </div>
+            <div class="header-actions">
+                <button class="btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    Templates
+                </button>
+                <button class="btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    Settings
+                </button>
+            </div>
+        </header>
+
+        <!-- Left Panel -->
+        <aside class="panel-left">
+            <div class="panel-section">
+                <div class="section-title">Schema File</div>
+                <div class="loaded-file">
+                    <div class="loaded-file-icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <div class="loaded-file-info">
+                        <div class="loaded-file-name">schema.xml</div>
+                        <div class="loaded-file-meta">29 lines - 1.2 KB</div>
+                    </div>
+                    <button class="loaded-file-remove">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Output Settings</div>
+                <div class="input-group">
+                    <label class="input-label">Output Folder</label>
+                    <div class="folder-input">
+                        <input type="text" class="input-field" value="/Users/ed/projects" readonly>
+                        <button class="btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Project Name</label>
+                    <input type="text" class="input-field" placeholder="my-project" value="my-awesome-project">
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Variables</div>
+                <div class="variables-list">
+                    <div class="variable-item">
+                        <span class="variable-name">%BASE%</span>
+                        <span class="variable-arrow">-></span>
+                        <span class="variable-value">my-awesome-project</span>
+                    </div>
+                    <div class="variable-item">
+                        <span class="variable-name">%DATE%</span>
+                        <span class="variable-arrow">-></span>
+                        <span class="variable-value">2026-01-19</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section" style="flex: 1; overflow: auto;">
+                <div class="section-title">Templates</div>
+                <div class="templates-grid">
+                    <div class="template-card">
+                        <div class="template-card-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                <polyline points="2 17 12 22 22 17"></polyline>
+                                <polyline points="2 12 12 17 22 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="template-card-name">Flash Project</div>
+                        <div class="template-card-desc">Classic ActionScript setup</div>
+                    </div>
+                    <div class="template-card">
+                        <div class="template-card-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="16 18 22 12 16 6"></polyline>
+                                <polyline points="8 6 2 12 8 18"></polyline>
+                            </svg>
+                        </div>
+                        <div class="template-card-name">React App</div>
+                        <div class="template-card-desc">Modern React setup</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="tree-header">
+                <div class="tree-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 11 12 14 22 4"></polyline>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                    Structure Preview
+                </div>
+                <div class="tree-stats">
+                    <div class="tree-stat">
+                        <svg class="tree-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        <span class="tree-stat-value">9</span> folders
+                    </div>
+                    <div class="tree-stat">
+                        <svg class="tree-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-stat-value">7</span> files
+                    </div>
+                    <div class="tree-stat">
+                        <svg class="tree-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        <span class="tree-stat-value">6</span> downloads
+                    </div>
+                </div>
+            </div>
+            <div class="tree-container">
+                <div class="tree-view">
+                    <div class="tree-item" style="--depth: 0">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">my-awesome-project</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 1">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">assets</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 1">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">docs</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 1">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">release</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 2">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">css</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 3">
+                        <svg class="tree-item-icon file-url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">style.css</span>
+                        <span class="tree-item-url">structurecreator.com/...</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 2">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">images</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 2">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">js</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 3">
+                        <svg class="tree-item-icon file-url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">swfaddress.js</span>
+                        <span class="tree-item-url">structurecreator.com/...</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 3">
+                        <svg class="tree-item-icon file-url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">swfobject.js</span>
+                        <span class="tree-item-url">structurecreator.com/...</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 2">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">xml</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 3">
+                        <svg class="tree-item-icon file-url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">config.xml</span>
+                        <span class="tree-item-url">structurecreator.com/...</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 2">
+                        <svg class="tree-item-icon file-url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">index.html</span>
+                        <span class="tree-item-url">structurecreator.com/...</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 1">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">source</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 2">
+                        <svg class="tree-item-icon folder" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"></path>
+                        </svg>
+                        <span class="tree-item-name folder">com/asual/swfaddress</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 3">
+                        <svg class="tree-item-icon file-url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">SWFAddress.as</span>
+                        <span class="tree-item-url">structurecreator.com/...</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 3">
+                        <svg class="tree-item-icon file-url" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">SWFAddressEvent.as</span>
+                        <span class="tree-item-url">structurecreator.com/...</span>
+                    </div>
+                    <div class="tree-item" style="--depth: 2">
+                        <svg class="tree-item-icon file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span class="tree-item-name">main.fla</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Panel -->
+        <aside class="panel-right">
+            <div class="action-card">
+                <div class="action-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                    Execute
+                </div>
+                <button class="action-btn action-btn-create">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <line x1="12" y1="11" x2="12" y2="17"></line>
+                        <line x1="9" y1="14" x2="15" y2="14"></line>
+                    </svg>
+                    Create Structure
+                </button>
+                <div class="action-options">
+                    <button class="option-toggle active">Dry Run</button>
+                    <button class="option-toggle">Overwrite</button>
+                </div>
+            </div>
+
+            <div class="progress-section">
+                <div class="progress-header">
+                    <span class="progress-title">Progress</span>
+                    <span class="progress-status">
+                        <span class="status-dot"></span>
+                        Creating...
+                    </span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill"></div>
+                    </div>
+                </div>
+                <div class="progress-meta">
+                    <span>12 of 16 items</span>
+                    <span>67%</span>
+                </div>
+                <div class="progress-log">
+                    <div class="log-entry">
+                        <svg class="log-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span class="log-message">Created folder: assets</span>
+                        <span class="log-time">0.2s</span>
+                    </div>
+                    <div class="log-entry">
+                        <svg class="log-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span class="log-message">Created folder: docs</span>
+                        <span class="log-time">0.1s</span>
+                    </div>
+                    <div class="log-entry">
+                        <svg class="log-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span class="log-message">Created folder: release/css</span>
+                        <span class="log-time">0.1s</span>
+                    </div>
+                    <div class="log-entry">
+                        <svg class="log-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span class="log-message">Downloaded: style.css</span>
+                        <span class="log-time">0.8s</span>
+                    </div>
+                    <div class="log-entry">
+                        <svg class="log-icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span class="log-message">Downloading: swfaddress.js</span>
+                        <span class="log-time">...</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-left">
+                <div class="footer-status">
+                    <span class="footer-status-dot"></span>
+                    Ready
+                </div>
+                <span>Tauri 2.0 - v1.0.0</span>
+            </div>
+            <span>Made with Rust + React</span>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<folder name='%BASE%'>
+	<folder name='assets' />
+	<folder name='docs' />
+	<folder name='release'>
+		<folder name='css'>
+			<file name='style.css' url="http://structurecreator.com/templates/style.css" />
+		</folder>
+		<folder name='images' />
+		<folder name='js'>
+			<file name='swfaddress.js' url="http://structurecreator.com/templates/swfaddress.js" />
+			<file name='swfobject.js' url="http://structurecreator.com/templates/swfobject.js" />
+		</folder>
+		<folder name='xml'>
+			<file name='config.xml' url="http://structurecreator.com/templates/config.xml" />
+		</folder>
+		<file name='index.html' url="http://structurecreator.com/templates/1_2/index.html" />
+	</folder>
+	<folder name='source'>
+		<folder name='com'>
+			<folder name='asual'>
+				<folder name='swfaddress'>
+					<file name='SWFAddress.as' url="http://structurecreator.com/templates/SWFAddress.as" />
+					<file name='SWFAddressEvent.as' url="http://structurecreator.com/templates/SWFAddressEvent.as" />
+				</folder>
+			</folder>
+		</folder>
+		<file name='main.fla' exportpath="../release/" classpath="" />
+	</folder>
+</folder>
