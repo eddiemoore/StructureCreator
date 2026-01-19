@@ -57,6 +57,24 @@ export const useAppStore = create<AppState>((set) => ({
       ),
     })),
 
+  addVariable: (name: string, value: string) =>
+    set((state) => {
+      // Ensure name has % wrapping
+      const varName = name.startsWith("%") ? name : `%${name}%`;
+      // Check if variable already exists
+      if (state.variables.some((v) => v.name === varName)) {
+        return state;
+      }
+      return {
+        variables: [...state.variables, { name: varName, value }],
+      };
+    }),
+
+  removeVariable: (name: string) =>
+    set((state) => ({
+      variables: state.variables.filter((v) => v.name !== name),
+    })),
+
   setProgress: (progress: Partial<CreationProgress>) =>
     set((state) => ({
       progress: { ...state.progress, ...progress },

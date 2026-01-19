@@ -6,16 +6,15 @@ import { Footer } from "./components/Footer";
 
 function App() {
   return (
-    <>
-      <div className="blueprint-grid" />
-      <div className="relative z-10 grid grid-cols-[300px_1fr_320px] grid-rows-[auto_1fr_auto] min-h-screen gap-px bg-border-muted">
-        <Header />
+    <div className="bg-mac-bg min-h-screen flex flex-col">
+      <Header />
+      <div className="flex-1 grid grid-cols-[280px_1fr_300px] border-t border-border-muted">
         <LeftPanel />
         <TreePreview />
         <RightPanel />
-        <Footer />
       </div>
-    </>
+      <Footer />
+    </div>
   );
 }
 

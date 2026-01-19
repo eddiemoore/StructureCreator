@@ -2,6 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    /* Light mode colors */
+    --color-bg: #ffffff;
+    --color-bg-secondary: #f5f5f7;
+    --color-bg-tertiary: #f0f0f0;
+    --color-bg-hover: #e8e8e8;
+    --color-sidebar: #f9f9f9;
+
+    --color-text-primary: #1d1d1f;
+    --color-text-secondary: #6e6e73;
+    --color-text-muted: #86868b;
+    --color-text-placeholder: #aeaeb2;
+
+    --color-border-default: #d2d2d7;
+    --color-border-muted: #e5e5ea;
+    --color-border-subtle: #f0f0f0;
+
+    --color-card-bg: #ffffff;
+
+    /* System colors (consistent) */
+    --color-system-blue: #0a84ff;
+    --color-system-green: #34c759;
+    --color-system-red: #ff3b30;
+    --color-system-orange: #ff9500;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Dark mode colors */
+      --color-bg: #1e1e1e;
+      --color-bg-secondary: #2d2d2d;
+      --color-bg-tertiary: #3d3d3d;
+      --color-bg-hover: #4d4d4d;
+      --color-sidebar: #252525;
+
+      --color-text-primary: #f5f5f7;
+      --color-text-secondary: #a1a1a6;
+      --color-text-muted: #6e6e73;
+      --color-text-placeholder: #545456;
+
+      --color-border-default: #3d3d3d;
+      --color-border-muted: #2d2d2d;
+      --color-border-subtle: #252525;
+
+      --color-card-bg: #2d2d2d;
+    }
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -9,43 +59,175 @@
 }
 
 body {
-  font-family: "Outfit", sans-serif;
-  background: #0a0e14;
-  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
   min-height: 100vh;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Blueprint Grid Background */
-.blueprint-grid {
-  position: fixed;
-  inset: 0;
-  background-image: linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px),
-    linear-gradient(rgba(34, 211, 238, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.08) 1px, transparent 1px);
-  background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Scrollbar */
+/* macOS-style Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #161b22;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #30363d;
+  background: var(--color-text-muted);
   border-radius: 4px;
+  opacity: 0.5;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6e7681;
+  opacity: 0.8;
+}
+
+/* Hide scrollbar when not hovering (macOS style) */
+.mac-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.mac-scroll:hover {
+  scrollbar-color: var(--color-text-muted) transparent;
+}
+
+/* macOS Button Styles */
+.mac-button-primary {
+  background-color: #0a84ff;
+  color: white;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  transition: background-color 150ms;
+}
+
+.mac-button-primary:hover {
+  background-color: #0071e3;
+}
+
+.mac-button-primary:active {
+  opacity: 0.8;
+}
+
+.mac-button-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mac-button-secondary {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border-default);
+  transition: background-color 150ms;
+}
+
+.mac-button-secondary:hover {
+  background-color: var(--color-bg-hover);
+}
+
+/* macOS Input Styles */
+.mac-input {
+  background-color: var(--color-card-bg);
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  transition: all 150ms;
+}
+
+.mac-input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.mac-input:focus {
+  outline: none;
+  border-color: #0a84ff;
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
+}
+
+/* macOS Segmented Control */
+.mac-segment {
+  background-color: var(--color-bg-tertiary);
+  border-radius: 6px;
+  padding: 2px;
+  display: flex;
+  gap: 2px;
+}
+
+.mac-segment-button {
+  flex: 1;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 5px;
+  color: var(--color-text-secondary);
+  transition: all 150ms;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.mac-segment-button.active {
+  background-color: var(--color-card-bg);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* macOS Card/Panel */
+.mac-panel {
+  background-color: var(--color-card-bg);
+  border-radius: 10px;
+  border: 1px solid var(--color-border-muted);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* macOS Sidebar Item */
+.mac-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  transition: background-color 100ms;
+  cursor: pointer;
+}
+
+.mac-sidebar-item:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.mac-sidebar-item.active {
+  background-color: #0a84ff;
+  color: white;
+}
+
+/* Subtle divider */
+.mac-divider {
+  height: 1px;
+  background-color: var(--color-border-muted);
+}
+
+/* Section header */
+.mac-section-header {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* Animations */
@@ -61,4 +243,10 @@ body {
 
 .animate-pulse-slow {
   animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Focus ring for accessibility */
+.mac-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.4);
 }

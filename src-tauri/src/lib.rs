@@ -190,7 +190,12 @@ fn create_node(
                     // Download file from URL
                     match download_file(url) {
                         Ok(content) => {
-                            match fs::write(&current_path, &content) {
+                            // Replace variables in downloaded content
+                            let mut file_content = content;
+                            for (var_name, var_value) in variables {
+                                file_content = file_content.replace(var_name, var_value);
+                            }
+                            match fs::write(&current_path, &file_content) {
                                 Ok(_) => {
                                     summary.files_downloaded += 1;
                                     logs.push(LogEntry {
@@ -223,8 +228,12 @@ fn create_node(
                     }
                 } else {
                     // Create file with content (or empty if no content)
-                    let file_content = node.content.as_deref().unwrap_or("");
-                    match fs::write(&current_path, file_content) {
+                    // Replace variables in file content
+                    let mut file_content = node.content.clone().unwrap_or_default();
+                    for (var_name, var_value) in variables {
+                        file_content = file_content.replace(var_name, var_value);
+                    }
+                    match fs::write(&current_path, &file_content) {
                         Ok(_) => {
                             summary.files_created += 1;
                             let has_content = node.content.is_some();

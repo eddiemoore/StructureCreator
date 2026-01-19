@@ -91,6 +91,8 @@ export interface AppState {
   setProjectName: (name: string) => void;
   setVariables: (variables: Variable[]) => void;
   updateVariable: (name: string, value: string) => void;
+  addVariable: (name: string, value: string) => void;
+  removeVariable: (name: string) => void;
   setProgress: (progress: Partial<CreationProgress>) => void;
   addLog: (log: Omit<LogEntry, "id" | "timestamp">) => void;
   clearLogs: () => void;

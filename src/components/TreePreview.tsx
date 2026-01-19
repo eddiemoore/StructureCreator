@@ -1,6 +1,5 @@
 import { useAppStore } from "../store/appStore";
 import {
-  CheckSquareIcon,
   FolderIcon,
   FileIcon,
   DownloadIcon,
@@ -23,22 +22,22 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
   return (
     <>
       <div
-        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-bg-secondary cursor-pointer transition-colors"
+        className="flex items-center gap-2 px-2 py-1 rounded-mac hover:bg-mac-bg-hover cursor-default transition-colors"
         style={{ marginLeft: `${depth * 20}px` }}
       >
         {isFolder ? (
-          <FolderIcon size={16} className="text-cyan-primary flex-shrink-0" />
+          <FolderIcon size={16} className="text-system-blue flex-shrink-0" />
         ) : (
           <FileIcon
             size={16}
-            className={`flex-shrink-0 ${hasUrl ? "text-amber-400" : "text-text-muted"}`}
+            className={`flex-shrink-0 ${hasUrl ? "text-system-orange" : "text-text-muted"}`}
           />
         )}
-        <span className={`font-mono text-sm ${isFolder ? "font-medium" : ""}`}>
+        <span className={`font-mono text-mac-sm ${isFolder ? "font-medium text-text-primary" : "text-text-secondary"}`}>
           {displayName}
         </span>
         {hasUrl && (
-          <span className="ml-auto text-[11px] text-text-muted truncate max-w-[200px]">
+          <span className="ml-auto text-mac-xs text-text-muted truncate max-w-[200px]">
             {new URL(node.url!).hostname}/...
           </span>
         )}
@@ -59,53 +58,51 @@ export const TreePreview = () => {
   const { schemaTree, projectName } = useAppStore();
 
   return (
-    <main className="bg-bg-primary flex flex-col overflow-hidden">
+    <main className="bg-mac-bg flex flex-col overflow-hidden border-r border-border-muted">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-border-muted flex items-center justify-between">
-        <div className="flex items-center gap-2.5 text-sm font-semibold">
-          <CheckSquareIcon size={18} />
+      <div className="px-4 py-3 border-b border-border-muted flex items-center justify-between bg-mac-bg-secondary">
+        <div className="text-mac-base font-medium text-text-primary">
           Structure Preview
         </div>
         {schemaTree && (
           <div className="flex gap-4">
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <FolderIcon size={14} className="opacity-60" />
-              <span className="font-mono font-medium text-cyan-primary">
+            <div className="flex items-center gap-1.5 text-mac-xs text-text-secondary">
+              <FolderIcon size={14} className="text-system-blue" />
+              <span className="font-mono font-medium">
                 {schemaTree.stats.folders}
-              </span>{" "}
-              folders
+              </span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <FileIcon size={14} className="opacity-60" />
-              <span className="font-mono font-medium text-cyan-primary">
+            <div className="flex items-center gap-1.5 text-mac-xs text-text-secondary">
+              <FileIcon size={14} className="text-text-muted" />
+              <span className="font-mono font-medium">
                 {schemaTree.stats.files}
-              </span>{" "}
-              files
+              </span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <DownloadIcon size={14} className="opacity-60" />
-              <span className="font-mono font-medium text-cyan-primary">
-                {schemaTree.stats.downloads}
-              </span>{" "}
-              downloads
-            </div>
+            {schemaTree.stats.downloads > 0 && (
+              <div className="flex items-center gap-1.5 text-mac-xs text-text-secondary">
+                <DownloadIcon size={14} className="text-system-orange" />
+                <span className="font-mono font-medium">
+                  {schemaTree.stats.downloads}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Tree View */}
-      <div className="flex-1 overflow-auto p-5">
+      <div className="flex-1 overflow-auto p-4 mac-scroll">
         {schemaTree ? (
-          <div className="font-mono text-sm leading-relaxed">
+          <div className="leading-relaxed">
             <TreeItem node={schemaTree.root} depth={0} projectName={projectName} />
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-text-muted">
             <div className="text-center">
               <FolderIcon size={48} className="mx-auto mb-4 opacity-20" />
-              <div className="text-sm">No schema loaded</div>
-              <div className="text-xs mt-1">
-                Select a schema file to preview the structure
+              <div className="text-mac-base">No schema loaded</div>
+              <div className="text-mac-xs mt-1">
+                Select a schema file to preview
               </div>
             </div>
           </div>

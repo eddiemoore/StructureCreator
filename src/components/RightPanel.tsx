@@ -2,13 +2,12 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store/appStore";
 import {
-  BoltIcon,
   FolderPlusIcon,
   CheckIcon,
   ClockIcon,
   AlertCircleIcon,
 } from "./Icons";
-import type { CreateResult, ResultSummary, SchemaTree } from "../types/schema";
+import type { CreateResult, ResultSummary } from "../types/schema";
 
 const WarningIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
   <svg
@@ -85,7 +84,6 @@ export const RightPanel = () => {
       let result: CreateResult;
 
       if (schemaContent) {
-        // Use XML content directly
         result = await invoke<CreateResult>("cmd_create_structure", {
           content: schemaContent,
           outputPath,
@@ -94,7 +92,6 @@ export const RightPanel = () => {
           overwrite,
         });
       } else if (schemaTree) {
-        // Use schema tree directly (preserves file contents from folder scan)
         result = await invoke<CreateResult>("cmd_create_structure_from_tree", {
           tree: schemaTree,
           outputPath,
@@ -106,7 +103,6 @@ export const RightPanel = () => {
         throw new Error("No schema available");
       }
 
-      // Process logs from backend
       result.logs.forEach((log) => {
         addLog({
           type: log.log_type as "success" | "error" | "warning" | "info",
@@ -137,39 +133,28 @@ export const RightPanel = () => {
   const errorCount = progress.logs.filter((l) => l.type === "error").length;
 
   return (
-    <aside className="bg-bg-primary flex flex-col overflow-hidden">
+    <aside className="bg-mac-sidebar flex flex-col overflow-hidden">
       {/* Action Card */}
-      <div className="p-5 border-b border-border-muted">
-        <div className="flex items-center gap-2.5 text-sm font-semibold mb-4">
-          <BoltIcon size={18} />
-          Execute
-        </div>
+      <div className="p-4 border-b border-border-muted">
+        <div className="text-mac-xs font-medium text-text-muted mb-3">Execute</div>
         <button
           onClick={handleCreate}
           disabled={!canExecute || progress.status === "running"}
-          className="w-full py-3.5 px-5 bg-gradient-to-r from-cyan-primary to-cyan-muted text-bg-deep font-semibold rounded-lg flex items-center justify-center gap-2.5 hover:shadow-[0_4px_20px_rgba(34,211,238,0.15),0_0_40px_rgba(34,211,238,0.15)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+          className="mac-button-primary w-full py-3 flex items-center justify-center gap-2 text-mac-base"
         >
           <FolderPlusIcon size={18} />
           Create Structure
         </button>
-        <div className="flex gap-2 mt-3">
+        <div className="mac-segment mt-3">
           <button
             onClick={() => setDryRun(!dryRun)}
-            className={`flex-1 py-2.5 text-[11px] font-medium rounded-md border transition-all ${
-              dryRun
-                ? "bg-cyan-primary/10 border-cyan-muted text-cyan-primary"
-                : "bg-bg-secondary border-border-default text-text-secondary hover:border-cyan-muted"
-            }`}
+            className={`mac-segment-button ${dryRun ? "active" : ""}`}
           >
             Dry Run
           </button>
           <button
             onClick={() => setOverwrite(!overwrite)}
-            className={`flex-1 py-2.5 text-[11px] font-medium rounded-md border transition-all ${
-              overwrite
-                ? "bg-cyan-primary/10 border-cyan-muted text-cyan-primary"
-                : "bg-bg-secondary border-border-default text-text-secondary hover:border-cyan-muted"
-            }`}
+            className={`mac-segment-button ${overwrite ? "active" : ""}`}
           >
             Overwrite
           </button>
@@ -180,21 +165,21 @@ export const RightPanel = () => {
       {summary && (
         <div className="px-4 py-3 border-b border-border-muted">
           <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="p-2 bg-bg-secondary rounded-md">
-              <div className="text-lg font-bold text-green-400">
+            <div className="p-2 bg-card-bg rounded-mac border border-border-muted">
+              <div className="text-mac-lg font-semibold text-system-green">
                 {summary.folders_created + summary.files_created + summary.files_downloaded}
               </div>
-              <div className="text-[10px] text-text-muted">Created</div>
+              <div className="text-mac-xs text-text-muted">Created</div>
             </div>
-            <div className="p-2 bg-bg-secondary rounded-md">
-              <div className="text-lg font-bold text-amber-400">{summary.skipped}</div>
-              <div className="text-[10px] text-text-muted">Skipped</div>
+            <div className="p-2 bg-card-bg rounded-mac border border-border-muted">
+              <div className="text-mac-lg font-semibold text-system-orange">{summary.skipped}</div>
+              <div className="text-mac-xs text-text-muted">Skipped</div>
             </div>
-            <div className="p-2 bg-bg-secondary rounded-md">
-              <div className={`text-lg font-bold ${summary.errors > 0 ? "text-red-400" : "text-text-muted"}`}>
+            <div className="p-2 bg-card-bg rounded-mac border border-border-muted">
+              <div className={`text-mac-lg font-semibold ${summary.errors > 0 ? "text-system-red" : "text-text-muted"}`}>
                 {summary.errors}
               </div>
-              <div className="text-[10px] text-text-muted">Errors</div>
+              <div className="text-mac-xs text-text-muted">Errors</div>
             </div>
           </div>
         </div>
@@ -202,24 +187,24 @@ export const RightPanel = () => {
 
       {/* Progress Section */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-border-muted flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+        <div className="px-4 py-3 border-b border-border-muted flex items-center justify-between bg-mac-bg-secondary">
+          <span className="text-mac-xs font-medium text-text-muted">
             Activity Log
           </span>
           {progress.status === "running" && (
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-cyan-primary">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-primary animate-pulse-slow" />
+            <span className="flex items-center gap-1.5 text-mac-xs font-medium text-system-blue">
+              <span className="w-1.5 h-1.5 rounded-full bg-system-blue animate-pulse-slow" />
               Creating...
             </span>
           )}
           {progress.status === "completed" && (
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-green-400">
+            <span className="flex items-center gap-1.5 text-mac-xs font-medium text-system-green">
               <CheckIcon size={12} />
               Completed
             </span>
           )}
           {progress.status === "error" && (
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-red-400">
+            <span className="flex items-center gap-1.5 text-mac-xs font-medium text-system-red">
               <AlertCircleIcon size={12} />
               {errorCount} Error{errorCount !== 1 ? "s" : ""}
             </span>
@@ -227,9 +212,9 @@ export const RightPanel = () => {
         </div>
 
         {/* Log Entries */}
-        <div className="flex-1 overflow-auto px-4 py-3">
+        <div className="flex-1 overflow-auto px-4 py-3 mac-scroll bg-card-bg">
           {progress.logs.length === 0 ? (
-            <div className="text-center text-text-muted text-xs py-8">
+            <div className="text-center text-text-muted text-mac-sm py-8">
               No activity yet
             </div>
           ) : (
@@ -237,30 +222,30 @@ export const RightPanel = () => {
               {progress.logs.map((log) => (
                 <div
                   key={log.id}
-                  className={`py-1.5 text-[11px] border-b border-border-muted last:border-0 ${
+                  className={`py-1.5 text-mac-xs border-b border-border-subtle last:border-0 ${
                     log.type === "error" ? "cursor-pointer" : ""
                   }`}
                   onClick={() => log.type === "error" && log.details && toggleErrorDetails(log.id)}
                 >
                   <div className="flex items-start gap-2">
                     {log.type === "success" && (
-                      <CheckIcon size={14} className="text-green-400 flex-shrink-0 mt-0.5" />
+                      <CheckIcon size={14} className="text-system-green flex-shrink-0 mt-0.5" />
                     )}
                     {log.type === "pending" && (
-                      <ClockIcon size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                      <ClockIcon size={14} className="text-system-orange flex-shrink-0 mt-0.5" />
                     )}
                     {log.type === "warning" && (
-                      <WarningIcon size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                      <WarningIcon size={14} className="text-system-orange flex-shrink-0 mt-0.5" />
                     )}
                     {log.type === "error" && (
-                      <AlertCircleIcon size={14} className="text-red-400 flex-shrink-0 mt-0.5" />
+                      <AlertCircleIcon size={14} className="text-system-red flex-shrink-0 mt-0.5" />
                     )}
                     {log.type === "info" && (
-                      <div className="w-3.5 h-3.5 rounded-full border-2 border-text-muted flex-shrink-0 mt-0.5" />
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-border-default flex-shrink-0 mt-0.5" />
                     )}
                     <span
                       className={`flex-1 font-mono break-all ${
-                        log.type === "error" ? "text-red-300" : "text-text-secondary"
+                        log.type === "error" ? "text-system-red" : "text-text-secondary"
                       }`}
                     >
                       {log.message}
@@ -271,9 +256,8 @@ export const RightPanel = () => {
                       )}
                     </span>
                   </div>
-                  {/* Expanded error details */}
                   {log.type === "error" && log.details && expandedErrors.has(log.id) && (
-                    <div className="mt-2 ml-6 p-2 bg-red-950/30 border border-red-900/50 rounded text-[10px] text-red-200 font-mono whitespace-pre-wrap">
+                    <div className="mt-2 ml-6 p-2 bg-system-red/5 border border-system-red/20 rounded-mac text-mac-xs text-system-red font-mono whitespace-pre-wrap">
                       {log.details}
                     </div>
                   )}
