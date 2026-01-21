@@ -3,8 +3,11 @@ import {
   FolderIcon,
   FileIcon,
   DownloadIcon,
+  CodeIcon,
+  GridIcon,
 } from "./Icons";
 import type { SchemaNode } from "../types/schema";
+import { VisualSchemaEditor } from "./VisualSchemaEditor";
 
 interface TreeItemProps {
   node: SchemaNode;
@@ -55,16 +58,37 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
 };
 
 export const TreePreview = () => {
-  const { schemaTree, projectName } = useAppStore();
+  const { schemaTree, projectName, isEditMode, setEditMode } = useAppStore();
 
   return (
     <main className="bg-mac-bg flex flex-col overflow-hidden border-r border-border-muted">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border-muted flex items-center justify-between bg-mac-bg-secondary">
-        <div className="text-mac-base font-medium text-text-primary">
-          Structure Preview
+        <div className="flex items-center gap-3">
+          <div className="text-mac-base font-medium text-text-primary">
+            {isEditMode ? "Schema Editor" : "Structure Preview"}
+          </div>
+          {schemaTree && (
+            <button
+              onClick={() => setEditMode(!isEditMode)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-mac hover:bg-mac-bg-hover text-mac-xs text-text-secondary hover:text-text-primary transition-colors"
+              title={isEditMode ? "Switch to Preview" : "Switch to Editor"}
+            >
+              {isEditMode ? (
+                <>
+                  <CodeIcon size={14} />
+                  <span>Preview</span>
+                </>
+              ) : (
+                <>
+                  <GridIcon size={14} />
+                  <span>Edit</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
-        {schemaTree && (
+        {schemaTree && !isEditMode && (
           <div className="flex gap-4">
             <div className="flex items-center gap-1.5 text-mac-xs text-text-secondary">
               <FolderIcon size={14} className="text-system-blue" />
@@ -90,24 +114,28 @@ export const TreePreview = () => {
         )}
       </div>
 
-      {/* Tree View */}
-      <div className="flex-1 overflow-auto p-4 mac-scroll">
-        {schemaTree ? (
-          <div className="leading-relaxed">
-            <TreeItem node={schemaTree.root} depth={0} projectName={projectName} />
-          </div>
-        ) : (
-          <div className="h-full flex items-center justify-center text-text-muted">
-            <div className="text-center">
-              <FolderIcon size={48} className="mx-auto mb-4 opacity-20" />
-              <div className="text-mac-base">No schema loaded</div>
-              <div className="text-mac-xs mt-1">
-                Select a schema file to preview
+      {/* Tree View / Editor */}
+      {isEditMode ? (
+        <VisualSchemaEditor />
+      ) : (
+        <div className="flex-1 overflow-auto p-4 mac-scroll">
+          {schemaTree ? (
+            <div className="leading-relaxed">
+              <TreeItem node={schemaTree.root} depth={0} projectName={projectName} />
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-text-muted">
+              <div className="text-center">
+                <FolderIcon size={48} className="mx-auto mb-4 opacity-20" />
+                <div className="text-mac-base">No schema loaded</div>
+                <div className="text-mac-xs mt-1">
+                  Select a schema file to preview
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </main>
   );
 };

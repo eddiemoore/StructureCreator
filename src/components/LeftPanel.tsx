@@ -82,6 +82,7 @@ export const LeftPanel = () => {
     setVariables,
     setTemplates,
     setTemplatesLoading,
+    createNewSchema,
   } = useAppStore();
 
   const [sourceType, setSourceType] = useState<SchemaSourceType>("xml");
@@ -337,6 +338,17 @@ export const LeftPanel = () => {
             Folder
           </button>
         </div>
+
+        {/* New Schema Button */}
+        {!schemaPath && sourceType === "xml" && (
+          <button
+            onClick={createNewSchema}
+            className="w-full py-2 px-3 mb-3 text-mac-sm font-medium rounded-mac border border-accent bg-accent/5 text-accent hover:bg-accent/10 transition-colors flex items-center justify-center gap-1.5"
+          >
+            <PlusIcon size={14} />
+            Create New Schema
+          </button>
+        )}
 
         {schemaPath ? (
           <div className="space-y-2">
