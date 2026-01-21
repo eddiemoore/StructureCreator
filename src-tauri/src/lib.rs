@@ -1839,6 +1839,17 @@ pub fn run() {
                 ],
             )?;
 
+            // File submenu
+            let new_schema_item = MenuItem::with_id(handle, "new_schema", "New Schema", true, Some("CmdOrCtrl+N"))?;
+            let file_submenu = Submenu::with_items(
+                handle,
+                "File",
+                true,
+                &[
+                    &new_schema_item,
+                ],
+            )?;
+
             // Edit submenu
             let edit_submenu = Submenu::with_items(
                 handle,
@@ -1871,16 +1882,21 @@ pub fn run() {
             // Build menu
             let menu = Menu::with_items(
                 handle,
-                &[&app_submenu, &edit_submenu, &window_submenu],
+                &[&app_submenu, &file_submenu, &edit_submenu, &window_submenu],
             )?;
 
             app.set_menu(menu)?;
 
             // Handle menu events
             app.on_menu_event(move |app_handle, event| {
-                if event.id().as_ref() == "settings" {
-                    // Emit event to frontend to open settings
-                    let _ = app_handle.emit("open-settings", ());
+                match event.id().as_ref() {
+                    "settings" => {
+                        let _ = app_handle.emit("open-settings", ());
+                    }
+                    "new_schema" => {
+                        let _ = app_handle.emit("new-schema", ());
+                    }
+                    _ => {}
                 }
             });
 

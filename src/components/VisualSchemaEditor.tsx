@@ -23,6 +23,30 @@ import { CSS } from "@dnd-kit/utilities";
 import { FolderIcon, FileIcon, PlusIcon, TrashIcon, SaveIcon } from "./Icons";
 import type { SchemaNode } from "../types/schema";
 
+// Helper: Find node by ID
+const findNode = (node: SchemaNode, nodeId: string): SchemaNode | null => {
+  if (node.id === nodeId) return node;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findNode(child, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+// Helper: Find parent of a node
+const findParent = (root: SchemaNode, nodeId: string): SchemaNode | null => {
+  if (root.children) {
+    for (const child of root.children) {
+      if (child.id === nodeId) return root;
+      const found = findParent(child, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
 interface EditableTreeItemProps {
   node: SchemaNode;
   depth: number;
@@ -82,6 +106,7 @@ const EditableTreeItem = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
     if (e.key === "Enter") {
       handleSave();
     } else if (e.key === "Escape") {
@@ -319,10 +344,37 @@ export const VisualSchemaEditor = () => {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (over && active.id !== over.id) {
-      // For now, we'll implement basic reordering
-      // Full parent-changing drag-drop would require more complex logic
-      moveSchemaNode(active.id as string, null, 0);
+    if (over && active.id !== over.id && schemaTree) {
+      const activeId = active.id as string;
+      const overId = over.id as string;
+
+      const overNode = findNode(schemaTree.root, overId);
+      if (!overNode) {
+        setActiveId(null);
+        return;
+      }
+
+      // Determine target parent and index
+      let targetParentId: string;
+      let targetIndex: number;
+
+      if (overNode.type === "folder") {
+        // Dropping onto a folder: add as first child
+        targetParentId = overId;
+        targetIndex = 0;
+      } else {
+        // Dropping onto a file: insert as sibling after the file
+        const parent = findParent(schemaTree.root, overId);
+        if (!parent) {
+          setActiveId(null);
+          return;
+        }
+        targetParentId = parent.id!;
+        const overIndex = parent.children?.findIndex(c => c.id === overId) ?? 0;
+        targetIndex = overIndex + 1;
+      }
+
+      moveSchemaNode(activeId, targetParentId, targetIndex);
     }
 
     setActiveId(null);
@@ -342,9 +394,13 @@ export const VisualSchemaEditor = () => {
     try {
       const xml = await invoke<string>("cmd_export_schema_xml", { tree: schemaTree });
 
+      const defaultName = schemaTree.root.name === "%BASE%"
+        ? `${projectName}-schema.xml`
+        : `${schemaTree.root.name}-schema.xml`;
+
       const savePath = await save({
         filters: [{ name: "XML", extensions: ["xml"] }],
-        defaultPath: `${schemaTree.root.name}-schema.xml`,
+        defaultPath: defaultName,
       });
 
       if (savePath) {
@@ -353,6 +409,7 @@ export const VisualSchemaEditor = () => {
       }
     } catch (e) {
       console.error("Failed to save schema:", e);
+      alert(`Failed to save schema: ${e}`);
     } finally {
       setIsSaving(false);
     }
@@ -455,9 +512,26 @@ export const VisualSchemaEditor = () => {
 
           <DragOverlay>
             {activeId ? (
-              <div className="bg-mac-bg-secondary border border-accent rounded-mac px-2 py-1 shadow-lg">
-                Dragging...
-              </div>
+              (() => {
+                const draggedNode = findNode(schemaTree.root, activeId);
+                if (!draggedNode) return null;
+                const isFolder = draggedNode.type === "folder";
+                const displayName = draggedNode.name === "%BASE%"
+                  ? projectName
+                  : draggedNode.name.replace(/%BASE%/g, projectName);
+                return (
+                  <div className="bg-mac-bg-secondary border border-accent rounded-mac px-2 py-1.5 shadow-lg flex items-center gap-2">
+                    {isFolder ? (
+                      <FolderIcon size={16} className="text-system-blue flex-shrink-0" />
+                    ) : (
+                      <FileIcon size={16} className="text-text-muted flex-shrink-0" />
+                    )}
+                    <span className={`font-mono text-mac-sm ${isFolder ? "font-medium text-text-primary" : "text-text-secondary"}`}>
+                      {displayName}
+                    </span>
+                  </div>
+                );
+              })()
             ) : null}
           </DragOverlay>
         </DndContext>

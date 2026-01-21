@@ -11,6 +11,7 @@
     "fs:default",
     "fs:allow-read",
     "fs:allow-write",
+    "fs:allow-write-text-file",
     "fs:allow-exists",
     "fs:allow-mkdir",
     {
