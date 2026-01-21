@@ -1,16 +1,18 @@
 # Structure Creator
 
-A cross-platform desktop application that generates folder and file structures from XML schema definitions or existing folder templates.
+A cross-platform desktop application and CLI tool that generates folder and file structures from XML schema definitions or existing folder templates.
 
 ## Features
 
+- **Desktop GUI & CLI** - Use the graphical application or command-line interface for automation
 - **XML Schema-Based Structure Generation** - Define project structures using XML schemas with nested folders and files
 - **Folder Scanning** - Convert existing folder structures into reusable schemas
 - **Variable Templating** - Use variables like `%PROJECT_NAME%` and `%DATE%` for dynamic customization
 - **File Downloads** - Download files from URLs during structure creation
 - **Template Library** - Save, organize, and reuse templates with favorites and usage tracking
 - **Dry Run Mode** - Preview changes before applying them
-- **Theme Support** - Dark/light mode with customizable accent colors
+- **CI/CD Integration** - Use the CLI for automated project scaffolding in pipelines
+- **Theme Support** (GUI) - Dark/light mode with customizable accent colors
 
 ## Tech Stack
 
@@ -59,6 +61,8 @@ npm run tauri dev
 
 ## Building
 
+### Desktop Application
+
 ```bash
 # Build the frontend
 npm run build
@@ -68,6 +72,16 @@ npm run tauri build
 ```
 
 The built application will be available in `src-tauri/target/release`.
+
+### CLI Tool
+
+```bash
+# Build the CLI tool
+cd src-tauri
+cargo build --bin structure-creator-cli --release --no-default-features
+
+# The binary will be at: src-tauri/target/release/structure-creator-cli
+```
 
 ## Available Scripts
 
@@ -143,6 +157,8 @@ Create project structures using XML:
 
 ## Usage
 
+### Desktop Application (GUI)
+
 1. **Define a Schema**
    - Enter XML schema directly, or
    - Scan an existing folder structure
@@ -162,6 +178,94 @@ Create project structures using XML:
 5. **Save as Template**
    - Save frequently used schemas
    - Mark favorites for quick access
+
+### Command-Line Interface (CLI)
+
+The CLI tool provides powerful automation capabilities for CI/CD pipelines and scripting.
+
+#### Create from Template
+
+```bash
+# Create a structure from a saved template
+structure-creator-cli create --template "React App" --output ./my-app --var PROJECT_NAME=MyProject
+
+# With multiple variables
+structure-creator-cli create \
+  --template "Full Stack App" \
+  --output ./my-app \
+  --var PROJECT_NAME=MyApp \
+  --var AUTHOR="John Doe" \
+  --var VERSION=1.0.0
+```
+
+#### Create from XML Schema File
+
+```bash
+# Create from an XML schema file
+structure-creator-cli create --schema ./schema.xml --output ./my-project --var PROJECT_NAME=MyProject
+
+# With dry-run to preview changes
+structure-creator-cli create --schema ./schema.xml --output ./my-project --var PROJECT_NAME=MyProject --dry-run
+
+# Overwrite existing files
+structure-creator-cli create --schema ./schema.xml --output ./my-project --var PROJECT_NAME=MyProject --overwrite
+```
+
+#### Template Management
+
+```bash
+# List all available templates
+structure-creator-cli template list
+
+# List templates in JSON format
+structure-creator-cli template list --format json
+
+# Show template details
+structure-creator-cli template show "React App"
+
+# Show template as XML
+structure-creator-cli template show "React App" --format xml
+
+# Export template to XML file
+structure-creator-cli template export "React App" --output react-app-schema.xml
+```
+
+#### CLI Options
+
+**Create Command:**
+- `-t, --template <NAME>` - Use a saved template by name or ID
+- `-s, --schema <FILE>` - Use an XML schema file
+- `-o, --output <PATH>` - Output directory (required)
+- `-V, --var <KEY=VALUE>` - Set variables (can be used multiple times)
+- `-d, --dry-run` - Preview without creating files
+- `-f, --overwrite` - Overwrite existing files
+
+**Template List:**
+- `-f, --format <FORMAT>` - Output format: table (default) or json
+
+**Template Show:**
+- `-f, --format <FORMAT>` - Output format: text (default), json, or xml
+
+#### Example: CI/CD Integration
+
+```bash
+# In your CI/CD pipeline script
+#!/bin/bash
+set -e
+
+# Create project structure
+structure-creator-cli create \
+  --template "Microservice" \
+  --output "./services/$SERVICE_NAME" \
+  --var SERVICE_NAME="$SERVICE_NAME" \
+  --var AUTHOR="$CI_COMMIT_AUTHOR" \
+  --var VERSION="$CI_COMMIT_TAG"
+
+# Continue with other build steps...
+cd "./services/$SERVICE_NAME"
+npm install
+npm test
+```
 
 ## Configuration
 

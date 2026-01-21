@@ -308,3 +308,122 @@ impl Database {
         Ok(rows_affected > 0)
     }
 }
+
+// Standalone helper functions for CLI usage
+
+fn get_app_data_dir() -> PathBuf {
+    // Use the same logic as the Tauri app would use
+    let home_dir = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+
+    PathBuf::from(home_dir).join(".structure-creator")
+}
+
+pub fn get_database_connection() -> SqliteResult<Connection> {
+    let app_data_dir = get_app_data_dir();
+    std::fs::create_dir_all(&app_data_dir).ok();
+
+    let db_path = app_data_dir.join("structure-creator.db");
+    let conn = Connection::open(db_path)?;
+
+    // Initialize tables
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS templates (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            schema_xml TEXT NOT NULL,
+            variables TEXT DEFAULT '{}',
+            icon_color TEXT,
+            is_favorite INTEGER DEFAULT 0,
+            use_count INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    // Migration: Add variables column if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE templates ADD COLUMN variables TEXT DEFAULT '{}'",
+        [],
+    );
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    Ok(conn)
+}
+
+pub fn list_templates(conn: &Connection) -> SqliteResult<Vec<Template>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
+         FROM templates
+         ORDER BY is_favorite DESC, use_count DESC, updated_at DESC"
+    )?;
+
+    let templates = stmt.query_map([], |row| {
+        let variables_json: String = row.get(4)?;
+        let variables: HashMap<String, String> = serde_json::from_str(&variables_json).unwrap_or_default();
+        Ok(Template {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            description: row.get(2)?,
+            schema_xml: row.get(3)?,
+            variables,
+            icon_color: row.get(5)?,
+            is_favorite: row.get::<_, i32>(6)? != 0,
+            use_count: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+        })
+    })?;
+
+    templates.collect()
+}
+
+pub fn get_template(conn: &Connection, id: &str) -> SqliteResult<Option<Template>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
+         FROM templates
+         WHERE id = ?"
+    )?;
+
+    let mut rows = stmt.query([id])?;
+
+    if let Some(row) = rows.next()? {
+        let variables_json: String = row.get(4)?;
+        let variables: HashMap<String, String> = serde_json::from_str(&variables_json).unwrap_or_default();
+        Ok(Some(Template {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            description: row.get(2)?,
+            schema_xml: row.get(3)?,
+            variables,
+            icon_color: row.get(5)?,
+            is_favorite: row.get::<_, i32>(6)? != 0,
+            use_count: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn increment_use_count(conn: &Connection, id: &str) -> SqliteResult<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "UPDATE templates SET use_count = use_count + 1, updated_at = ? WHERE id = ?",
+        [&now, id],
+    )?;
+
+    Ok(())
+}
