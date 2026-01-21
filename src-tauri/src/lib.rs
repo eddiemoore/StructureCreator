@@ -6,8 +6,10 @@ use schema::{parse_xml_schema, scan_folder_to_schema, schema_to_xml, SchemaTree}
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Write, Cursor};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     Manager, State, Emitter,
@@ -194,43 +196,91 @@ fn create_node(
                 }
 
                 if let Some(url) = &node.url {
-                    // Download file from URL
-                    match download_file(url) {
-                        Ok(content) => {
-                            // Replace variables in downloaded content
-                            let mut file_content = content;
-                            for (var_name, var_value) in variables {
-                                file_content = file_content.replace(var_name, var_value);
+                    // Check if this is an Office file that needs special processing
+                    if is_office_file(&name) {
+                        // Download as binary and process Office file
+                        match download_file_binary(url) {
+                            Ok(data) => {
+                                match process_office_file(&data, variables, &name) {
+                                    Ok(processed_data) => {
+                                        match fs::write(&current_path, &processed_data) {
+                                            Ok(_) => {
+                                                summary.files_downloaded += 1;
+                                                logs.push(LogEntry {
+                                                    log_type: "success".to_string(),
+                                                    message: format!("Downloaded & processed: {}", name),
+                                                    details: Some(format!("From: {} (variables replaced)", url)),
+                                                });
+                                            }
+                                            Err(e) => {
+                                                summary.errors += 1;
+                                                logs.push(LogEntry {
+                                                    log_type: "error".to_string(),
+                                                    message: format!("Failed to save file: {}", name),
+                                                    details: Some(format!("Error writing to disk: {}", e)),
+                                                });
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        summary.errors += 1;
+                                        logs.push(LogEntry {
+                                            log_type: "error".to_string(),
+                                            message: format!("Failed to process Office file: {}", name),
+                                            details: Some(e),
+                                        });
+                                    }
+                                }
                             }
-                            match fs::write(&current_path, &file_content) {
-                                Ok(_) => {
-                                    summary.files_downloaded += 1;
-                                    logs.push(LogEntry {
-                                        log_type: "success".to_string(),
-                                        message: format!("Downloaded: {}", name),
-                                        details: Some(format!("From: {}", url)),
-                                    });
-                                }
-                                Err(e) => {
-                                    summary.errors += 1;
-                                    logs.push(LogEntry {
-                                        log_type: "error".to_string(),
-                                        message: format!("Failed to save file: {}", name),
-                                        details: Some(format!("Error writing to disk: {}", e)),
-                                    });
-                                }
+                            Err(e) => {
+                                summary.errors += 1;
+                                let error_details = parse_download_error(url, &e);
+                                logs.push(LogEntry {
+                                    log_type: "error".to_string(),
+                                    message: format!("Download failed: {}", name),
+                                    details: Some(error_details),
+                                });
                             }
                         }
-                        Err(e) => {
-                            summary.errors += 1;
-                            // Parse error for better user feedback
-                            let error_details = parse_download_error(url, &e);
-                            logs.push(LogEntry {
-                                log_type: "error".to_string(),
-                                message: format!("Download failed: {}", name),
-                                details: Some(error_details),
-                            });
-                            // Don't create file on download error
+                    } else {
+                        // Download regular text file
+                        match download_file(url) {
+                            Ok(content) => {
+                                // Replace variables in downloaded content
+                                let mut file_content = content;
+                                for (var_name, var_value) in variables {
+                                    file_content = file_content.replace(var_name, var_value);
+                                }
+                                match fs::write(&current_path, &file_content) {
+                                    Ok(_) => {
+                                        summary.files_downloaded += 1;
+                                        logs.push(LogEntry {
+                                            log_type: "success".to_string(),
+                                            message: format!("Downloaded: {}", name),
+                                            details: Some(format!("From: {}", url)),
+                                        });
+                                    }
+                                    Err(e) => {
+                                        summary.errors += 1;
+                                        logs.push(LogEntry {
+                                            log_type: "error".to_string(),
+                                            message: format!("Failed to save file: {}", name),
+                                            details: Some(format!("Error writing to disk: {}", e)),
+                                        });
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                summary.errors += 1;
+                                // Parse error for better user feedback
+                                let error_details = parse_download_error(url, &e);
+                                logs.push(LogEntry {
+                                    log_type: "error".to_string(),
+                                    message: format!("Download failed: {}", name),
+                                    details: Some(error_details),
+                                });
+                                // Don't create file on download error
+                            }
                         }
                     }
                 } else {
@@ -325,6 +375,159 @@ fn download_file(url: &str) -> Result<String, String> {
             Err(format!("Network error: {}", transport))
         }
     }
+}
+
+fn download_file_binary(url: &str) -> Result<Vec<u8>, String> {
+    match ureq::get(url)
+        .timeout(std::time::Duration::from_secs(60))
+        .call()
+    {
+        Ok(response) => {
+            let mut bytes = Vec::new();
+            response
+                .into_reader()
+                .read_to_end(&mut bytes)
+                .map_err(|e| format!("Failed to read response: {}", e))?;
+            Ok(bytes)
+        }
+        Err(ureq::Error::Status(code, _response)) => {
+            let status_text = match code {
+                400 => "Bad Request",
+                401 => "Unauthorized",
+                403 => "Forbidden",
+                404 => "Not Found",
+                405 => "Method Not Allowed",
+                408 => "Request Timeout",
+                429 => "Too Many Requests",
+                500 => "Internal Server Error",
+                502 => "Bad Gateway",
+                503 => "Service Unavailable",
+                504 => "Gateway Timeout",
+                _ => "HTTP Error",
+            };
+            Err(format!("HTTP {} {}", code, status_text))
+        }
+        Err(ureq::Error::Transport(transport)) => {
+            Err(format!("Network error: {}", transport))
+        }
+    }
+}
+
+/// Check if a file is a Microsoft Office format (ZIP-based)
+fn is_office_file(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.ends_with(".docx")
+        || lower.ends_with(".xlsx")
+        || lower.ends_with(".pptx")
+        || lower.ends_with(".odt")
+        || lower.ends_with(".ods")
+        || lower.ends_with(".odp")
+}
+
+/// Get the XML files that contain content for each Office format
+fn get_content_paths(filename: &str) -> Vec<&'static str> {
+    let lower = filename.to_lowercase();
+    if lower.ends_with(".docx") {
+        vec!["word/document.xml", "word/header1.xml", "word/header2.xml", "word/header3.xml",
+             "word/footer1.xml", "word/footer2.xml", "word/footer3.xml"]
+    } else if lower.ends_with(".xlsx") {
+        vec!["xl/sharedStrings.xml", "xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml",
+             "xl/worksheets/sheet3.xml", "xl/worksheets/sheet4.xml", "xl/worksheets/sheet5.xml"]
+    } else if lower.ends_with(".pptx") {
+        vec!["ppt/slides/slide1.xml", "ppt/slides/slide2.xml", "ppt/slides/slide3.xml",
+             "ppt/slides/slide4.xml", "ppt/slides/slide5.xml", "ppt/slides/slide6.xml",
+             "ppt/slides/slide7.xml", "ppt/slides/slide8.xml", "ppt/slides/slide9.xml",
+             "ppt/slides/slide10.xml"]
+    } else if lower.ends_with(".odt") || lower.ends_with(".ods") || lower.ends_with(".odp") {
+        vec!["content.xml", "styles.xml"]
+    } else {
+        vec![]
+    }
+}
+
+/// Process an Office file by replacing variables in its XML content
+fn process_office_file(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    filename: &str,
+) -> Result<Vec<u8>, String> {
+    let cursor = Cursor::new(data);
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| format!("Failed to open Office file as ZIP: {}", e))?;
+
+    let content_paths = get_content_paths(filename);
+    let mut modified_files: HashMap<String, Vec<u8>> = HashMap::new();
+
+    // First pass: read and modify content files
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+        let name = file.name().to_string();
+
+        // Check if this is a content file we should modify
+        let should_modify = content_paths.iter().any(|p| name == *p)
+            || (name.ends_with(".xml") && (
+                name.starts_with("word/")
+                || name.starts_with("xl/worksheets/")
+                || name.starts_with("ppt/slides/")
+                || name == "xl/sharedStrings.xml"
+                || name == "content.xml"
+            ));
+
+        if should_modify {
+            let mut content = String::new();
+            file.read_to_string(&mut content)
+                .map_err(|e| format!("Failed to read XML content: {}", e))?;
+
+            // Replace variables
+            let mut modified = content;
+            for (var_name, var_value) in variables {
+                modified = modified.replace(var_name, var_value);
+            }
+
+            modified_files.insert(name, modified.into_bytes());
+        }
+    }
+
+    // Second pass: create new ZIP with modified content
+    let mut output = Cursor::new(Vec::new());
+    {
+        let mut writer = ZipWriter::new(&mut output);
+        let options = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        // Re-open archive for reading
+        let cursor = Cursor::new(data);
+        let mut archive = ZipArchive::new(cursor)
+            .map_err(|e| format!("Failed to re-open Office file: {}", e))?;
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)
+                .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+            let name = file.name().to_string();
+
+            writer.start_file(&name, options)
+                .map_err(|e| format!("Failed to start ZIP entry: {}", e))?;
+
+            if let Some(modified_content) = modified_files.get(&name) {
+                // Write modified content
+                writer.write_all(modified_content)
+                    .map_err(|e| format!("Failed to write modified content: {}", e))?;
+            } else {
+                // Copy original content
+                let mut content = Vec::new();
+                file.read_to_end(&mut content)
+                    .map_err(|e| format!("Failed to read original content: {}", e))?;
+                writer.write_all(&content)
+                    .map_err(|e| format!("Failed to write original content: {}", e))?;
+            }
+        }
+
+        writer.finish()
+            .map_err(|e| format!("Failed to finalize ZIP: {}", e))?;
+    }
+
+    Ok(output.into_inner())
 }
 
 // Template commands

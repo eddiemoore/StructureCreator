@@ -23,6 +23,7 @@ ureq = "2"
 rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
+zip = "2"
 
 [profile.release]
 panic = "abort"
