@@ -10,6 +10,7 @@ pub struct Template {
     pub name: String,
     pub description: Option<String>,
     pub schema_xml: String,
+    pub variables: HashMap<String, String>,
     pub icon_color: Option<String>,
     pub is_favorite: bool,
     pub use_count: i32,
@@ -22,6 +23,7 @@ pub struct CreateTemplateInput {
     pub name: String,
     pub description: Option<String>,
     pub schema_xml: String,
+    pub variables: HashMap<String, String>,
     pub icon_color: Option<String>,
 }
 
@@ -61,6 +63,7 @@ impl Database {
                 name TEXT NOT NULL,
                 description TEXT,
                 schema_xml TEXT NOT NULL,
+                variables TEXT DEFAULT '{}',
                 icon_color TEXT,
                 is_favorite INTEGER DEFAULT 0,
                 use_count INTEGER DEFAULT 0,
@@ -69,6 +72,12 @@ impl Database {
             )",
             [],
         )?;
+
+        // Migration: Add variables column if it doesn't exist (for existing databases)
+        let _ = conn.execute(
+            "ALTER TABLE templates ADD COLUMN variables TEXT DEFAULT '{}'",
+            [],
+        );
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
@@ -85,22 +94,25 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, icon_color, is_favorite, use_count, created_at, updated_at
+            "SELECT id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
              FROM templates
              ORDER BY is_favorite DESC, use_count DESC, updated_at DESC"
         )?;
 
         let templates = stmt.query_map([], |row| {
+            let variables_json: String = row.get(4)?;
+            let variables: HashMap<String, String> = serde_json::from_str(&variables_json).unwrap_or_default();
             Ok(Template {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 description: row.get(2)?,
                 schema_xml: row.get(3)?,
-                icon_color: row.get(4)?,
-                is_favorite: row.get::<_, i32>(5)? != 0,
-                use_count: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                variables,
+                icon_color: row.get(5)?,
+                is_favorite: row.get::<_, i32>(6)? != 0,
+                use_count: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         })?;
 
@@ -111,7 +123,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, icon_color, is_favorite, use_count, created_at, updated_at
+            "SELECT id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
              FROM templates
              WHERE id = ?"
         )?;
@@ -119,16 +131,19 @@ impl Database {
         let mut rows = stmt.query([id])?;
 
         if let Some(row) = rows.next()? {
+            let variables_json: String = row.get(4)?;
+            let variables: HashMap<String, String> = serde_json::from_str(&variables_json).unwrap_or_default();
             Ok(Some(Template {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 description: row.get(2)?,
                 schema_xml: row.get(3)?,
-                icon_color: row.get(4)?,
-                is_favorite: row.get::<_, i32>(5)? != 0,
-                use_count: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                variables,
+                icon_color: row.get(5)?,
+                is_favorite: row.get::<_, i32>(6)? != 0,
+                use_count: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             }))
         } else {
             Ok(None)
@@ -140,15 +155,17 @@ impl Database {
 
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
+        let variables_json = serde_json::to_string(&input.variables).unwrap_or_else(|_| "{}".to_string());
 
         conn.execute(
-            "INSERT INTO templates (id, name, description, schema_xml, icon_color, is_favorite, use_count, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)",
+            "INSERT INTO templates (id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
             [
                 &id,
                 &input.name,
                 &input.description.clone().unwrap_or_default(),
                 &input.schema_xml,
+                &variables_json,
                 &input.icon_color.clone().unwrap_or_else(|| "#0a84ff".to_string()),
                 &now,
                 &now,
@@ -160,6 +177,7 @@ impl Database {
             name: input.name,
             description: input.description,
             schema_xml: input.schema_xml,
+            variables: input.variables,
             icon_color: input.icon_color,
             is_favorite: false,
             use_count: 0,

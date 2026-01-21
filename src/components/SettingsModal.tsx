@@ -218,7 +218,8 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                     }`}
                     style={{
                       backgroundColor: ACCENT_COLORS[option.value],
-                      ringColor: ACCENT_COLORS[option.value],
+                      // @ts-expect-error Tailwind CSS variable for ring color
+                      "--tw-ring-color": ACCENT_COLORS[option.value],
                     }}
                     title={option.label}
                   />

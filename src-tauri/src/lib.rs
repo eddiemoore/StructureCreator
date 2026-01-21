@@ -350,6 +350,7 @@ fn cmd_create_template(
     name: String,
     description: Option<String>,
     schema_xml: String,
+    variables: HashMap<String, String>,
     icon_color: Option<String>,
 ) -> Result<Template, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
@@ -359,6 +360,7 @@ fn cmd_create_template(
             name,
             description,
             schema_xml,
+            variables,
             icon_color,
         })
         .map_err(|e| e.to_string())

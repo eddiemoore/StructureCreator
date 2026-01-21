@@ -79,6 +79,7 @@ export const LeftPanel = () => {
     updateVariable,
     addVariable,
     removeVariable,
+    setVariables,
     setTemplates,
     setTemplatesLoading,
   } = useAppStore();
@@ -113,10 +114,17 @@ export const LeftPanel = () => {
     if (!schemaContent || !newTemplateName.trim()) return;
 
     try {
+      // Convert variables array to a record/map for storage
+      const variablesMap: Record<string, string> = {};
+      for (const v of variables) {
+        variablesMap[v.name] = v.value;
+      }
+
       await invoke("cmd_create_template", {
         name: newTemplateName.trim(),
         description: newTemplateDescription.trim() || null,
         schemaXml: schemaContent,
+        variables: variablesMap,
         iconColor: null,
       });
       setIsSavingTemplate(false);
@@ -139,6 +147,15 @@ export const LeftPanel = () => {
 
       const tree = await invoke<SchemaTree>("cmd_parse_schema", { content: template.schema_xml });
       setSchemaTree(tree);
+
+      // Load variables from the template
+      if (template.variables && Object.keys(template.variables).length > 0) {
+        const loadedVariables = Object.entries(template.variables).map(([name, value]) => ({
+          name,
+          value,
+        }));
+        setVariables(loadedVariables);
+      }
 
       loadTemplates(); // Refresh to update use count
     } catch (e) {

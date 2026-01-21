@@ -26,6 +26,7 @@ export interface Template {
   name: string;
   description: string | null;
   schema_xml: string;
+  variables: Record<string, string>;
   icon_color: string | null;
   is_favorite: boolean;
   use_count: number;
