@@ -126,10 +126,16 @@ const moveNodeToParent = (
   if (!newRoot) return root;
 
   // Add it to the target parent at the specified index
-  if (targetParentId === null || targetParentId === newRoot.id) {
-    // Moving to root level - for now, we don't support this
-    // Could be enhanced to support multiple root nodes
+  if (targetParentId === null) {
+    // No target parent specified - return without changes
     return newRoot;
+  }
+
+  // Handle moving to root folder
+  if (targetParentId === newRoot.id) {
+    const children = [...(newRoot.children || [])];
+    children.splice(index, 0, nodeToMove);
+    return { ...newRoot, children };
   }
 
   const addAtIndex = (node: SchemaNode): SchemaNode => {
