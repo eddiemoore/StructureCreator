@@ -477,15 +477,13 @@ export const LeftPanel = () => {
                 className="flex-1 min-w-0 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-transparent focus:border-accent transition-colors"
                 placeholder="Enter value..."
               />
-              {variable.name !== "%BASE%" && variable.name !== "%DATE%" && (
-                <button
-                  onClick={() => removeVariable(variable.name)}
-                  className="w-5 h-5 flex items-center justify-center rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-system-red hover:bg-system-red/10 transition-all"
-                  title="Remove variable"
-                >
-                  <XIcon size={12} />
-                </button>
-              )}
+              <button
+                onClick={() => removeVariable(variable.name)}
+                className="w-5 h-5 flex items-center justify-center rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-system-red hover:bg-system-red/10 transition-all"
+                title="Remove variable"
+              >
+                <XIcon size={12} />
+              </button>
             </div>
           ))}
 

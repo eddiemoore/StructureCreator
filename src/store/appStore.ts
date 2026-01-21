@@ -21,7 +21,6 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Variables
   variables: [
-    { name: "%BASE%", value: "my-project" },
     { name: "%DATE%", value: new Date().toISOString().split("T")[0] },
   ],
 
@@ -49,13 +48,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   setOutputPath: (path: string | null) => set({ outputPath: path }),
 
-  setProjectName: (name: string) =>
-    set((state) => ({
-      projectName: name,
-      variables: state.variables.map((v) =>
-        v.name === "%BASE%" ? { ...v, value: name } : v
-      ),
-    })),
+  setProjectName: (name: string) => set({ projectName: name }),
 
   setVariables: (variables: Variable[]) => set({ variables }),
 
