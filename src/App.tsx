@@ -12,23 +12,28 @@ import { DEFAULT_SETTINGS, ACCENT_COLORS } from "./types/schema";
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { settings, setSettings, setOutputPath, setProjectName } = useAppStore();
+  const { settings, setSettings, setOutputPath, setProjectName, createNewSchema } = useAppStore();
 
   // Load settings on mount
   useEffect(() => {
     loadSettings();
   }, []);
 
-  // Listen for menu event to open settings
+  // Listen for menu events
   useEffect(() => {
-    const unlisten = listen("open-settings", () => {
+    const unlistenSettings = listen("open-settings", () => {
       setSettingsOpen(true);
     });
 
+    const unlistenNewSchema = listen("new-schema", () => {
+      createNewSchema();
+    });
+
     return () => {
-      unlisten.then((fn) => fn());
+      unlistenSettings.then((fn) => fn());
+      unlistenNewSchema.then((fn) => fn());
     };
-  }, []);
+  }, [createNewSchema]);
 
   // Apply theme and accent color when settings change
   useEffect(() => {
