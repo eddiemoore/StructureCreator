@@ -5,6 +5,8 @@ use std::io::Read;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaNode {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     #[serde(rename = "type")]
     pub node_type: String,
     pub name: String,
@@ -119,6 +121,7 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
     }
 
     Ok(Some(SchemaNode {
+        id: None,
         node_type: node_type.to_string(),
         name,
         url,
@@ -232,6 +235,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
             let content = read_file_content(&entry_path);
 
             children.push(SchemaNode {
+                id: None,
                 node_type: "file".to_string(),
                 name: entry_name,
                 url: None,
@@ -242,6 +246,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
     }
 
     Ok(SchemaNode {
+        id: None,
         node_type: "folder".to_string(),
         name: name.to_string(),
         url: None,
@@ -426,6 +431,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                     tree_map.entry(current_path.clone())
                         .or_default()
                         .push(SchemaNode {
+                            id: None,
                             node_type: "folder".to_string(),
                             name: part.to_string(),
                             url: None,
@@ -438,6 +444,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
             } else {
                 // This is the actual entry (file or folder)
                 let node = SchemaNode {
+                    id: None,
                     node_type: if is_dir { "folder" } else { "file" }.to_string(),
                     name: part.to_string(),
                     url: None,
@@ -579,6 +586,7 @@ fn build_tree_from_map(
     });
 
     SchemaNode {
+        id: None,
         node_type: "folder".to_string(),
         name: name.to_string(),
         url: None,
