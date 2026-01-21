@@ -382,11 +382,11 @@ export const LeftPanel = () => {
         ) : (
           <button
             onClick={isFolderSource ? handleSelectFolder : handleSelectSchema}
-            className="w-full border-2 border-dashed border-border-default rounded-mac-lg p-6 text-center hover:border-system-blue hover:bg-system-blue/5 transition-all cursor-pointer"
+            className="w-full border-2 border-dashed border-accent rounded-mac-lg p-6 text-center hover:bg-accent/5 transition-all cursor-pointer"
           >
             {isFolderSource ? (
               <>
-                <FolderIcon size={28} className="mx-auto mb-2 text-system-blue opacity-60" />
+                <FolderIcon size={28} className="mx-auto mb-2 text-accent opacity-60" />
                 <div className="text-mac-base text-text-secondary mb-0.5">
                   Select a folder
                 </div>
@@ -396,7 +396,7 @@ export const LeftPanel = () => {
               </>
             ) : (
               <>
-                <UploadIcon size={28} className="mx-auto mb-2 text-system-blue opacity-60" />
+                <UploadIcon size={28} className="mx-auto mb-2 text-accent opacity-60" />
                 <div className="text-mac-base text-text-secondary mb-0.5">
                   Select schema file
                 </div>
@@ -454,7 +454,7 @@ export const LeftPanel = () => {
           <SectionTitle>Variables</SectionTitle>
           <button
             onClick={() => setIsAddingVariable(true)}
-            className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-system-blue hover:bg-system-blue/10 transition-colors"
+            className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
             title="Add variable"
           >
             <PlusIcon size={14} />
@@ -474,7 +474,7 @@ export const LeftPanel = () => {
                 type="text"
                 value={variable.value}
                 onChange={(e) => updateVariable(variable.name, e.target.value)}
-                className="flex-1 min-w-0 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-transparent focus:border-system-blue transition-colors"
+                className="flex-1 min-w-0 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-transparent focus:border-accent transition-colors"
                 placeholder="Enter value..."
               />
               {variable.name !== "%BASE%" && variable.name !== "%DATE%" && (
@@ -491,14 +491,14 @@ export const LeftPanel = () => {
 
           {/* Add Variable Form */}
           {isAddingVariable && (
-            <div className="p-2 bg-card-bg rounded-mac border border-system-blue">
+            <div className="p-2 bg-card-bg rounded-mac border border-accent">
               <div className="flex items-center gap-2 mb-2">
                 <input
                   type="text"
                   value={newVarName}
                   onChange={(e) => setNewVarName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ""))}
                   placeholder="VARIABLE_NAME"
-                  className="flex-1 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-border-default focus:border-system-blue"
+                  className="flex-1 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-border-default focus:border-accent"
                   autoFocus
                 />
               </div>
@@ -508,7 +508,7 @@ export const LeftPanel = () => {
                   value={newVarValue}
                   onChange={(e) => setNewVarValue(e.target.value)}
                   placeholder="Value"
-                  className="flex-1 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-border-default focus:border-system-blue"
+                  className="flex-1 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-border-default focus:border-accent"
                 />
               </div>
               <div className="flex justify-end gap-2">
@@ -532,7 +532,7 @@ export const LeftPanel = () => {
                     }
                   }}
                   disabled={!newVarName.trim()}
-                  className="px-2 py-1 text-mac-xs font-medium text-system-blue hover:bg-system-blue/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2 py-1 text-mac-xs font-medium text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Add
                 </button>
@@ -593,7 +593,7 @@ export const LeftPanel = () => {
               <button
                 onClick={handleSaveAsTemplate}
                 disabled={!newTemplateName.trim()}
-                className="px-2 py-1 text-mac-xs font-medium text-system-blue hover:bg-system-blue/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-mac-xs font-medium text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save
               </button>
