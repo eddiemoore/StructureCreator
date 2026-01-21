@@ -1,4 +1,5 @@
 export interface SchemaNode {
+  id?: string; // Unique ID for tracking during editing
   type: "folder" | "file" | "if" | "else";
   name: string;
   url?: string;
@@ -101,6 +102,12 @@ export interface AppState {
   schemaContent: string | null;
   schemaTree: SchemaTree | null;
 
+  // Schema editing
+  isEditMode: boolean;
+  schemaDirty: boolean;
+  schemaHistory: SchemaTree[];
+  schemaHistoryIndex: number;
+
   // Output settings
   outputPath: string | null;
   projectName: string;
@@ -144,4 +151,16 @@ export interface AppState {
   setDryRun: (dryRun: boolean) => void;
   setOverwrite: (overwrite: boolean) => void;
   reset: () => void;
+
+  // Schema editing actions
+  setEditMode: (enabled: boolean) => void;
+  createNewSchema: () => void;
+  updateSchemaNode: (nodeId: string, updates: Partial<SchemaNode>) => void;
+  addSchemaNode: (parentId: string | null, node: Partial<SchemaNode>) => void;
+  removeSchemaNode: (nodeId: string) => void;
+  moveSchemaNode: (nodeId: string, targetParentId: string | null, index: number) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 }
