@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<folder name="%BASE%">
+  <folder name="src">
+    <if var="USE_TYPESCRIPT">
+      <file name="index.ts" />
+      <file name="app.ts" />
+    </if>
+    <else>
+      <file name="index.js" />
+      <file name="app.js" />
+    </else>
+
+    <folder name="components">
+      <if var="USE_TYPESCRIPT">
+        <file name="Button.tsx" />
+      </if>
+      <else>
+        <file name="Button.jsx" />
+      </else>
+    </folder>
+  </folder>
+
+  <if var="USE_TYPESCRIPT">
+    <file name="tsconfig.json" />
+  </if>
+
+  <file name="package.json" />
+  <file name="README.md" />
+</folder>

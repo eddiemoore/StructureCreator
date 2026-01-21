@@ -17,39 +17,73 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
     node.name === "%BASE%" ? projectName : node.name.replace(/%BASE%/g, projectName);
 
   const isFolder = node.type === "folder";
+  const isFile = node.type === "file";
+  const isIf = node.type === "if";
+  const isElse = node.type === "else";
+  const isConditional = isIf || isElse;
   const hasUrl = !!node.url;
+
+  // For conditional nodes, show the condition info
+  const conditionalLabel = isIf
+    ? `if ${node.condition_var || "?"}`
+    : isElse
+    ? "else"
+    : null;
 
   return (
     <>
-      <div
-        className="flex items-center gap-2 px-2 py-1 rounded-mac hover:bg-mac-bg-hover cursor-default transition-colors"
-        style={{ marginLeft: `${depth * 20}px` }}
-      >
-        {isFolder ? (
-          <FolderIcon size={16} className="text-system-blue flex-shrink-0" />
-        ) : (
-          <FileIcon
-            size={16}
-            className={`flex-shrink-0 ${hasUrl ? "text-system-orange" : "text-text-muted"}`}
-          />
-        )}
-        <span className={`font-mono text-mac-sm ${isFolder ? "font-medium text-text-primary" : "text-text-secondary"}`}>
-          {displayName}
-        </span>
-        {hasUrl && (
-          <span className="ml-auto text-mac-xs text-text-muted truncate max-w-[200px]">
-            {new URL(node.url!).hostname}/...
-          </span>
-        )}
-      </div>
-      {node.children?.map((child, index) => (
-        <TreeItem
-          key={`${child.name}-${index}`}
-          node={child}
-          depth={depth + 1}
-          projectName={projectName}
-        />
-      ))}
+      {isConditional ? (
+        <>
+          <div
+            className="flex items-center gap-2 px-2 py-1 rounded-mac cursor-default"
+            style={{ marginLeft: `${depth * 20}px` }}
+          >
+            <span className="font-mono text-mac-xs font-medium text-system-purple opacity-80">
+              {conditionalLabel}
+            </span>
+          </div>
+          {node.children?.map((child, index) => (
+            <TreeItem
+              key={`${child.name}-${index}`}
+              node={child}
+              depth={depth + 1}
+              projectName={projectName}
+            />
+          ))}
+        </>
+      ) : (
+        <>
+          <div
+            className="flex items-center gap-2 px-2 py-1 rounded-mac hover:bg-mac-bg-hover cursor-default transition-colors"
+            style={{ marginLeft: `${depth * 20}px` }}
+          >
+            {isFolder ? (
+              <FolderIcon size={16} className="text-system-blue flex-shrink-0" />
+            ) : (
+              <FileIcon
+                size={16}
+                className={`flex-shrink-0 ${hasUrl ? "text-system-orange" : "text-text-muted"}`}
+              />
+            )}
+            <span className={`font-mono text-mac-sm ${isFolder ? "font-medium text-text-primary" : "text-text-secondary"}`}>
+              {displayName}
+            </span>
+            {hasUrl && (
+              <span className="ml-auto text-mac-xs text-text-muted truncate max-w-[200px]">
+                {new URL(node.url!).hostname}/...
+              </span>
+            )}
+          </div>
+          {node.children?.map((child, index) => (
+            <TreeItem
+              key={`${child.name}-${index}`}
+              node={child}
+              depth={depth + 1}
+              projectName={projectName}
+            />
+          ))}
+        </>
+      )}
     </>
   );
 };

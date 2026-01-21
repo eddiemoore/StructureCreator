@@ -103,6 +103,20 @@ fn create_structure_from_tree(
     Ok(CreateResult { logs, summary })
 }
 
+/// Evaluate if condition without side effects
+fn evaluate_if_condition(
+    node: &schema::SchemaNode,
+    variables: &HashMap<String, String>,
+) -> bool {
+    if let Some(var_name) = &node.condition_var {
+        variables.get(var_name)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+    } else {
+        false
+    }
+}
+
 fn create_node(
     node: &schema::SchemaNode,
     parent_path: &PathBuf,
@@ -112,6 +126,69 @@ fn create_node(
     logs: &mut Vec<LogEntry>,
     summary: &mut ResultSummary,
 ) -> Result<(), String> {
+    create_node_internal(node, parent_path, variables, dry_run, overwrite, logs, summary, None)
+}
+
+fn create_node_internal(
+    node: &schema::SchemaNode,
+    parent_path: &PathBuf,
+    variables: &HashMap<String, String>,
+    dry_run: bool,
+    overwrite: bool,
+    logs: &mut Vec<LogEntry>,
+    summary: &mut ResultSummary,
+    last_if_result: Option<bool>,
+) -> Result<(), String> {
+    // Handle conditional nodes (if/else)
+    match node.node_type.as_str() {
+        "if" => {
+            // Evaluate condition: check if variable exists and is truthy (non-empty)
+            let condition_met = if let Some(var_name) = &node.condition_var {
+                variables.get(var_name)
+                    .map(|v| !v.is_empty())
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+
+            // Process children if condition is met
+            if condition_met {
+                if let Some(children) = &node.children {
+                    let mut child_last_if = None;
+                    for child in children {
+                        create_node_internal(child, parent_path, variables, dry_run, overwrite, logs, summary, child_last_if)?;
+                        // Track if results for else blocks
+                        if child.node_type == "if" {
+                            child_last_if = Some(evaluate_if_condition(child, variables));
+                        }
+                    }
+                }
+            }
+
+            return Ok(());
+        }
+        "else" => {
+            // Execute else block if previous if was false
+            let should_execute = !last_if_result.unwrap_or(false);
+
+            if should_execute {
+                if let Some(children) = &node.children {
+                    let mut child_last_if = None;
+                    for child in children {
+                        create_node_internal(child, parent_path, variables, dry_run, overwrite, logs, summary, child_last_if)?;
+                        // Track if results for else blocks
+                        if child.node_type == "if" {
+                            child_last_if = Some(evaluate_if_condition(child, variables));
+                        }
+                    }
+                }
+            }
+
+            return Ok(());
+        }
+        _ => {}
+    }
+
     // Replace variables in name
     let mut name = node.name.clone();
     for (var_name, var_value) in variables {
@@ -159,8 +236,13 @@ fn create_node(
 
             // Process children
             if let Some(children) = &node.children {
+                let mut child_last_if = None;
                 for child in children {
-                    create_node(child, &current_path, variables, dry_run, overwrite, logs, summary)?;
+                    create_node_internal(child, &current_path, variables, dry_run, overwrite, logs, summary, child_last_if)?;
+                    // Track if results for else blocks
+                    if child.node_type == "if" {
+                        child_last_if = Some(evaluate_if_condition(child, variables));
+                    }
                 }
             }
         }
