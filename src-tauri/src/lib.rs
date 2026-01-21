@@ -2,7 +2,7 @@ mod database;
 mod schema;
 
 use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput};
-use schema::{parse_xml_schema, scan_folder_to_schema, schema_to_xml, SchemaTree};
+use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -45,6 +45,11 @@ fn cmd_parse_schema(content: String) -> Result<SchemaTree, String> {
 #[tauri::command]
 fn cmd_scan_folder(folder_path: String) -> Result<SchemaTree, String> {
     scan_folder_to_schema(&folder_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_scan_zip(data: Vec<u8>, filename: String) -> Result<SchemaTree, String> {
+    scan_zip_to_schema(&data, &filename).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1755,6 +1760,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             cmd_parse_schema,
             cmd_scan_folder,
+            cmd_scan_zip,
             cmd_export_schema_xml,
             cmd_create_structure,
             cmd_create_structure_from_tree,

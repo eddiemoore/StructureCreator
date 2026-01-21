@@ -1,6 +1,7 @@
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaNode {
@@ -323,6 +324,239 @@ fn escape_xml(s: &str) -> String {
      .replace('>', "&gt;")
      .replace('"', "&quot;")
      .replace('\'', "&apos;")
+}
+
+/// Scan a ZIP file and generate a SchemaTree from its structure
+pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree, Box<dyn std::error::Error>> {
+    use std::collections::HashMap;
+    use std::io::Cursor;
+    use zip::ZipArchive;
+
+    let cursor = Cursor::new(data);
+    let mut archive = ZipArchive::new(cursor)?;
+
+    // Build a tree structure from the ZIP entries
+    // Key: parent path, Value: children nodes
+    let mut tree_map: HashMap<String, Vec<SchemaNode>> = HashMap::new();
+    tree_map.insert(String::new(), Vec::new()); // Root level
+
+    // Collect all entries with their paths
+    let mut entries: Vec<(String, bool, Option<String>)> = Vec::new();
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let name = file.name().to_string();
+
+        // Skip hidden files/folders and common ignore patterns
+        if should_skip_entry(&name) {
+            continue;
+        }
+
+        let is_dir = file.is_dir();
+
+        // Read content for non-directory files
+        let content = if !is_dir {
+            read_zip_file_content(&mut file, &name)
+        } else {
+            None
+        };
+
+        entries.push((name, is_dir, content));
+    }
+
+    // Sort entries so directories come before their contents
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Process entries and build the tree
+    for (path, is_dir, content) in entries {
+        let path = path.trim_end_matches('/');
+        let parts: Vec<&str> = path.split('/').collect();
+
+        if parts.is_empty() {
+            continue;
+        }
+
+        // Ensure parent directories exist in the map
+        let mut current_path = String::new();
+        for (i, part) in parts.iter().enumerate() {
+            if i < parts.len() - 1 {
+                // This is a parent directory
+                let next_path = if current_path.is_empty() {
+                    part.to_string()
+                } else {
+                    format!("{}/{}", current_path, part)
+                };
+
+                if !tree_map.contains_key(&next_path) {
+                    tree_map.insert(next_path.clone(), Vec::new());
+
+                    // Add folder node to parent
+                    tree_map.entry(current_path.clone())
+                        .or_default()
+                        .push(SchemaNode {
+                            node_type: "folder".to_string(),
+                            name: part.to_string(),
+                            url: None,
+                            content: None,
+                            children: None, // Will be filled later
+                        });
+                }
+
+                current_path = next_path;
+            } else {
+                // This is the actual entry (file or folder)
+                let node = SchemaNode {
+                    node_type: if is_dir { "folder" } else { "file" }.to_string(),
+                    name: part.to_string(),
+                    url: None,
+                    content: content.clone(),
+                    children: None,
+                };
+
+                if is_dir {
+                    let dir_path = if current_path.is_empty() {
+                        part.to_string()
+                    } else {
+                        format!("{}/{}", current_path, part)
+                    };
+                    tree_map.entry(dir_path).or_default();
+                }
+
+                tree_map.entry(current_path.clone())
+                    .or_default()
+                    .push(node);
+            }
+        }
+    }
+
+    // Build the final tree structure recursively
+    let root_name = archive_name
+        .trim_end_matches(".zip")
+        .trim_end_matches(".ZIP");
+
+    let root = build_tree_from_map(&tree_map, "", root_name);
+    let stats = calculate_stats(&root);
+
+    Ok(SchemaTree { root, stats })
+}
+
+/// Check if a ZIP entry should be skipped
+fn should_skip_entry(name: &str) -> bool {
+    let parts: Vec<&str> = name.split('/').collect();
+
+    for part in parts {
+        if part.is_empty() {
+            continue;
+        }
+        if part.starts_with('.')
+            || part == "node_modules"
+            || part == "target"
+            || part == "__pycache__"
+            || part == ".git"
+            || part == "dist"
+            || part == "build"
+            || part == "__MACOSX"
+            || part == ".DS_Store"
+            || part == "Thumbs.db"
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Read content from a ZIP file entry if it's a text file
+fn read_zip_file_content<R: Read>(file: &mut R, name: &str) -> Option<String> {
+    // Max file size to read (1MB)
+    const MAX_FILE_SIZE: usize = 1024 * 1024;
+
+    // Get extension
+    let extension = std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase());
+
+    let binary_extensions = [
+        "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp",
+        "mp3", "mp4", "wav", "avi", "mov", "mkv", "webm",
+        "zip", "tar", "gz", "rar", "7z",
+        "exe", "dll", "so", "dylib",
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+        "ttf", "otf", "woff", "woff2", "eot",
+        "db", "sqlite", "sqlite3",
+        "pyc", "class", "o", "obj",
+    ];
+
+    if let Some(ext) = &extension {
+        if binary_extensions.contains(&ext.as_str()) {
+            return None;
+        }
+    }
+
+    // Read content (with size limit)
+    let mut content = Vec::new();
+    let mut limited_reader = file.take(MAX_FILE_SIZE as u64 + 1);
+
+    if limited_reader.read_to_end(&mut content).is_err() {
+        return None;
+    }
+
+    // Skip if file is too large
+    if content.len() > MAX_FILE_SIZE {
+        return None;
+    }
+
+    // Try to convert to UTF-8
+    String::from_utf8(content).ok()
+}
+
+/// Build a SchemaNode tree from the flat map structure
+fn build_tree_from_map(
+    tree_map: &std::collections::HashMap<String, Vec<SchemaNode>>,
+    current_path: &str,
+    name: &str,
+) -> SchemaNode {
+    let children_nodes = tree_map.get(current_path).cloned().unwrap_or_default();
+
+    // Process children, recursively building folders
+    let mut processed_children: Vec<SchemaNode> = Vec::new();
+
+    for mut child in children_nodes {
+        if child.node_type == "folder" {
+            let child_path = if current_path.is_empty() {
+                child.name.clone()
+            } else {
+                format!("{}/{}", current_path, child.name)
+            };
+
+            // Recursively build this folder's children
+            child = build_tree_from_map(tree_map, &child_path, &child.name);
+        }
+        processed_children.push(child);
+    }
+
+    // Sort: folders first, then files, alphabetically within each group
+    processed_children.sort_by(|a, b| {
+        let a_is_dir = a.node_type == "folder";
+        let b_is_dir = b.node_type == "folder";
+        match (a_is_dir, b_is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.cmp(&b.name),
+        }
+    });
+
+    SchemaNode {
+        node_type: "folder".to_string(),
+        name: name.to_string(),
+        url: None,
+        content: None,
+        children: if processed_children.is_empty() {
+            None
+        } else {
+            Some(processed_children)
+        },
+    }
 }
 
 #[cfg(test)]
