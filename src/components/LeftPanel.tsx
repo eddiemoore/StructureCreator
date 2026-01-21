@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, readFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store/appStore";
 import {
@@ -187,20 +187,45 @@ export const LeftPanel = () => {
     try {
       const selected = await open({
         multiple: false,
-        filters: [{ name: "XML", extensions: ["xml"] }],
+        filters: [
+          { name: "Schema Files", extensions: ["xml", "zip"] },
+          { name: "XML", extensions: ["xml"] },
+          { name: "ZIP", extensions: ["zip"] },
+        ],
       });
 
       if (selected) {
         const path = selected as string;
         setSchemaPath(path);
-        const content = await readTextFile(path);
-        setSchemaContent(content);
 
-        try {
-          const tree = await invoke<SchemaTree>("cmd_parse_schema", { content });
-          setSchemaTree(tree);
-        } catch (e) {
-          console.error("Failed to parse schema:", e);
+        const isZip = path.toLowerCase().endsWith(".zip");
+
+        if (isZip) {
+          // Handle ZIP file - read as binary and scan
+          const data = await readFile(path);
+          const filename = path.split("/").pop() || path.split("\\").pop() || "archive.zip";
+          setSchemaContent(null); // ZIP doesn't have text content
+
+          try {
+            const tree = await invoke<SchemaTree>("cmd_scan_zip", {
+              data: Array.from(data),
+              filename,
+            });
+            setSchemaTree(tree);
+          } catch (e) {
+            console.error("Failed to scan ZIP:", e);
+          }
+        } else {
+          // Handle XML file
+          const content = await readTextFile(path);
+          setSchemaContent(content);
+
+          try {
+            const tree = await invoke<SchemaTree>("cmd_parse_schema", { content });
+            setSchemaTree(tree);
+          } catch (e) {
+            console.error("Failed to parse schema:", e);
+          }
         }
       }
     } catch (e) {
@@ -300,7 +325,7 @@ export const LeftPanel = () => {
             }`}
           >
             <FileIcon size={14} />
-            XML File
+            File
           </button>
           <button
             onClick={() => handleSourceTypeChange("folder")}
