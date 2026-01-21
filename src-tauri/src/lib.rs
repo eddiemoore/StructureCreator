@@ -145,9 +145,7 @@ fn evaluate_if_condition(
     variables: &HashMap<String, String>,
 ) -> bool {
     if let Some(var_name) = &node.condition_var {
-        // Variables are stored with % wrapping (e.g., %NAME%), so wrap the var name
-        let lookup_key = format!("%{}%", var_name);
-        variables.get(&lookup_key)
+        variables.get(var_name)
             .map(|v| !v.is_empty())
             .unwrap_or(false)
     } else {
@@ -180,8 +178,14 @@ fn create_node_internal(
     // Handle conditional nodes (if/else)
     match node.node_type.as_str() {
         "if" => {
-            // Evaluate condition using shared helper
-            let condition_met = evaluate_if_condition(node, variables);
+            // Evaluate condition: check if variable exists and is truthy (non-empty)
+            let condition_met = if let Some(var_name) = &node.condition_var {
+                variables.get(var_name)
+                    .map(|v| !v.is_empty())
+                    .unwrap_or(false)
+            } else {
+                false
+            };
 
             // Process children if condition is met
             if condition_met {
