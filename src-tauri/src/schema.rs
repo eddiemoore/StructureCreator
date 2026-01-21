@@ -256,7 +256,7 @@ fn read_file_content(path: &std::path::Path) -> Option<String> {
         .map(|e| e.to_lowercase());
 
     let binary_extensions = [
-        "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp", "svg",
+        "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp",
         "mp3", "mp4", "wav", "avi", "mov", "mkv", "webm",
         "zip", "tar", "gz", "rar", "7z",
         "exe", "dll", "so", "dylib",

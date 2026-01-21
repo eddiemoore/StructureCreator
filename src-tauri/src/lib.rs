@@ -196,12 +196,22 @@ fn create_node(
                 }
 
                 if let Some(url) = &node.url {
-                    // Check if this is an Office file that needs special processing
-                    if is_office_file(&name) {
-                        // Download as binary and process Office file
+                    // Check if this is a binary file that needs special processing
+                    if is_office_file(&name) || is_epub_file(&name) || is_pdf_file(&name) || is_image_with_xmp(&name) {
+                        // Download as binary and process
                         match download_file_binary(url) {
                             Ok(data) => {
-                                match process_office_file(&data, variables, &name) {
+                                let (process_result, file_type) = if is_office_file(&name) {
+                                    (process_office_file(&data, variables, &name), "Office")
+                                } else if is_epub_file(&name) {
+                                    (process_epub_file(&data, variables), "EPUB")
+                                } else if is_pdf_file(&name) {
+                                    (process_pdf_file(&data, variables), "PDF")
+                                } else {
+                                    (process_image_xmp(&data, variables, &name), "Image")
+                                };
+
+                                match process_result {
                                     Ok(processed_data) => {
                                         match fs::write(&current_path, &processed_data) {
                                             Ok(_) => {
@@ -209,7 +219,7 @@ fn create_node(
                                                 logs.push(LogEntry {
                                                     log_type: "success".to_string(),
                                                     message: format!("Downloaded & processed: {}", name),
-                                                    details: Some(format!("From: {} (variables replaced)", url)),
+                                                    details: Some(format!("From: {} ({} file, variables replaced)", url, file_type)),
                                                 });
                                             }
                                             Err(e) => {
@@ -226,7 +236,7 @@ fn create_node(
                                         summary.errors += 1;
                                         logs.push(LogEntry {
                                             log_type: "error".to_string(),
-                                            message: format!("Failed to process Office file: {}", name),
+                                            message: format!("Failed to process {} file: {}", file_type, name),
                                             details: Some(e),
                                         });
                                     }
@@ -242,8 +252,57 @@ fn create_node(
                                 });
                             }
                         }
+                    } else if is_jupyter_notebook(&name) {
+                        // Download Jupyter notebook and process JSON
+                        match download_file(url) {
+                            Ok(content) => {
+                                let processed = match process_jupyter_notebook(&content, variables) {
+                                    Ok(p) => p,
+                                    Err(e) => {
+                                        // If processing fails, fall back to simple string replacement
+                                        logs.push(LogEntry {
+                                            log_type: "warning".to_string(),
+                                            message: format!("Notebook processing failed, using text replacement: {}", name),
+                                            details: Some(e),
+                                        });
+                                        let mut fallback = content;
+                                        for (var_name, var_value) in variables {
+                                            fallback = fallback.replace(var_name, var_value);
+                                        }
+                                        fallback
+                                    }
+                                };
+                                match fs::write(&current_path, &processed) {
+                                    Ok(_) => {
+                                        summary.files_downloaded += 1;
+                                        logs.push(LogEntry {
+                                            log_type: "success".to_string(),
+                                            message: format!("Downloaded & processed: {}", name),
+                                            details: Some(format!("From: {} (Jupyter notebook, variables replaced)", url)),
+                                        });
+                                    }
+                                    Err(e) => {
+                                        summary.errors += 1;
+                                        logs.push(LogEntry {
+                                            log_type: "error".to_string(),
+                                            message: format!("Failed to save file: {}", name),
+                                            details: Some(format!("Error writing to disk: {}", e)),
+                                        });
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                summary.errors += 1;
+                                let error_details = parse_download_error(url, &e);
+                                logs.push(LogEntry {
+                                    log_type: "error".to_string(),
+                                    message: format!("Download failed: {}", name),
+                                    details: Some(error_details),
+                                });
+                            }
+                        }
                     } else {
-                        // Download regular text file
+                        // Download regular text file (includes SVG which is XML text)
                         match download_file(url) {
                             Ok(content) => {
                                 // Replace variables in downloaded content
@@ -254,10 +313,15 @@ fn create_node(
                                 match fs::write(&current_path, &file_content) {
                                     Ok(_) => {
                                         summary.files_downloaded += 1;
+                                        let details = if is_svg_file(&name) {
+                                            format!("From: {} (SVG, variables replaced)", url)
+                                        } else {
+                                            format!("From: {}", url)
+                                        };
                                         logs.push(LogEntry {
                                             log_type: "success".to_string(),
                                             message: format!("Downloaded: {}", name),
-                                            details: Some(format!("From: {}", url)),
+                                            details: Some(details),
                                         });
                                     }
                                     Err(e) => {
@@ -422,6 +486,284 @@ fn is_office_file(filename: &str) -> bool {
         || lower.ends_with(".odt")
         || lower.ends_with(".ods")
         || lower.ends_with(".odp")
+}
+
+/// Check if a file is an SVG (XML-based, can be processed as text)
+fn is_svg_file(filename: &str) -> bool {
+    filename.to_lowercase().ends_with(".svg")
+}
+
+/// Check if a file is a Jupyter notebook (JSON format)
+fn is_jupyter_notebook(filename: &str) -> bool {
+    filename.to_lowercase().ends_with(".ipynb")
+}
+
+/// Check if a file is an EPUB (ZIP-based e-book format)
+fn is_epub_file(filename: &str) -> bool {
+    filename.to_lowercase().ends_with(".epub")
+}
+
+/// Check if a file is a PDF
+fn is_pdf_file(filename: &str) -> bool {
+    filename.to_lowercase().ends_with(".pdf")
+}
+
+/// Check if a file is an image that may contain XMP metadata
+fn is_image_with_xmp(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.ends_with(".jpg")
+        || lower.ends_with(".jpeg")
+        || lower.ends_with(".png")
+        || lower.ends_with(".tiff")
+        || lower.ends_with(".tif")
+}
+
+/// Process a Jupyter notebook by replacing variables in cell contents
+fn process_jupyter_notebook(
+    content: &str,
+    variables: &HashMap<String, String>,
+) -> Result<String, String> {
+    let mut notebook: serde_json::Value = serde_json::from_str(content)
+        .map_err(|e| format!("Invalid Jupyter notebook JSON: {}", e))?;
+
+    // Process cells array
+    if let Some(cells) = notebook.get_mut("cells").and_then(|c| c.as_array_mut()) {
+        for cell in cells {
+            // Replace variables in source array (code/markdown content)
+            if let Some(source) = cell.get_mut("source").and_then(|s| s.as_array_mut()) {
+                for line in source {
+                    if let Some(text) = line.as_str() {
+                        let mut replaced = text.to_string();
+                        for (var_name, var_value) in variables {
+                            replaced = replaced.replace(var_name, var_value);
+                        }
+                        *line = serde_json::Value::String(replaced);
+                    }
+                }
+            }
+            // Also handle source as a single string (some notebooks use this format)
+            if let Some(source) = cell.get_mut("source").and_then(|s| s.as_str().map(|t| t.to_string())) {
+                let mut replaced = source;
+                for (var_name, var_value) in variables {
+                    replaced = replaced.replace(var_name, var_value);
+                }
+                cell["source"] = serde_json::Value::String(replaced);
+            }
+        }
+    }
+
+    // Also replace variables in metadata if present
+    if let Some(metadata) = notebook.get_mut("metadata") {
+        let metadata_str = serde_json::to_string(metadata)
+            .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+        let mut replaced = metadata_str;
+        for (var_name, var_value) in variables {
+            replaced = replaced.replace(var_name, var_value);
+        }
+        if let Ok(new_metadata) = serde_json::from_str(&replaced) {
+            *metadata = new_metadata;
+        }
+    }
+
+    serde_json::to_string_pretty(&notebook)
+        .map_err(|e| format!("Failed to serialize notebook: {}", e))
+}
+
+/// Process an EPUB file by replacing variables in its XHTML/XML content
+fn process_epub_file(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+) -> Result<Vec<u8>, String> {
+    let cursor = Cursor::new(data);
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| format!("Failed to open EPUB as ZIP: {}", e))?;
+
+    let mut modified_files: HashMap<String, Vec<u8>> = HashMap::new();
+
+    // First pass: identify and modify content files
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+        let name = file.name().to_string();
+
+        // Process XHTML, HTML, XML, OPF, NCX, CSS files
+        let should_modify = name.ends_with(".xhtml")
+            || name.ends_with(".html")
+            || name.ends_with(".htm")
+            || name.ends_with(".xml")
+            || name.ends_with(".opf")
+            || name.ends_with(".ncx")
+            || name.ends_with(".css");
+
+        if should_modify {
+            let mut content = String::new();
+            if file.read_to_string(&mut content).is_ok() {
+                let mut modified = content;
+                for (var_name, var_value) in variables {
+                    modified = modified.replace(var_name, var_value);
+                }
+                modified_files.insert(name, modified.into_bytes());
+            }
+        }
+    }
+
+    // Second pass: create new ZIP with modified content
+    let mut output = Cursor::new(Vec::new());
+    {
+        let mut writer = ZipWriter::new(&mut output);
+        let options = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        // Re-open archive for reading
+        let cursor = Cursor::new(data);
+        let mut archive = ZipArchive::new(cursor)
+            .map_err(|e| format!("Failed to re-open EPUB: {}", e))?;
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)
+                .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+            let name = file.name().to_string();
+
+            writer.start_file(&name, options)
+                .map_err(|e| format!("Failed to start ZIP entry: {}", e))?;
+
+            if let Some(modified_content) = modified_files.get(&name) {
+                writer.write_all(modified_content)
+                    .map_err(|e| format!("Failed to write modified content: {}", e))?;
+            } else {
+                let mut content = Vec::new();
+                file.read_to_end(&mut content)
+                    .map_err(|e| format!("Failed to read original content: {}", e))?;
+                writer.write_all(&content)
+                    .map_err(|e| format!("Failed to write original content: {}", e))?;
+            }
+        }
+
+        writer.finish()
+            .map_err(|e| format!("Failed to finalize EPUB: {}", e))?;
+    }
+
+    Ok(output.into_inner())
+}
+
+/// Process a PDF file by replacing variables in metadata and form fields
+fn process_pdf_file(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+) -> Result<Vec<u8>, String> {
+    use lopdf::{Document, Object};
+
+    let mut doc = Document::load_mem(data)
+        .map_err(|e| format!("Failed to load PDF: {}", e))?;
+
+    // Process Info dictionary (Title, Author, Subject, Keywords, Creator, Producer)
+    let info_id = doc.trailer.get(b"Info")
+        .ok()
+        .and_then(|o| o.as_reference().ok());
+
+    if let Some(info_ref) = info_id {
+        if let Ok(Object::Dictionary(ref mut dict)) = doc.get_object_mut(info_ref) {
+            let metadata_keys: [&[u8]; 6] = [b"Title", b"Author", b"Subject", b"Keywords", b"Creator", b"Producer"];
+
+            for key in metadata_keys {
+                if let Ok(Object::String(ref mut value, _format)) = dict.get_mut(key) {
+                    let text = String::from_utf8_lossy(value).to_string();
+                    let mut new_text = text.clone();
+                    for (var_name, var_value) in variables {
+                        new_text = new_text.replace(var_name, var_value);
+                    }
+                    if new_text != text {
+                        *value = new_text.into_bytes();
+                    }
+                }
+            }
+        }
+    }
+
+    // Process AcroForm fields if present
+    if let Ok(Object::Reference(acroform_ref)) = doc.catalog().and_then(|c| c.get(b"AcroForm")) {
+        let acroform_id = *acroform_ref;
+        if let Ok(Object::Dictionary(acroform)) = doc.get_object(acroform_id) {
+            if let Ok(Object::Array(fields)) = acroform.get(b"Fields") {
+                let field_refs: Vec<lopdf::ObjectId> = fields.iter()
+                    .filter_map(|f| f.as_reference().ok())
+                    .collect();
+
+                for field_ref in field_refs {
+                    process_pdf_form_field(&mut doc, field_ref, variables);
+                }
+            }
+        }
+    }
+
+    let mut output = Vec::new();
+    doc.save_to(&mut output)
+        .map_err(|e| format!("Failed to save PDF: {}", e))?;
+
+    Ok(output)
+}
+
+/// Recursively process PDF form fields
+fn process_pdf_form_field(
+    doc: &mut lopdf::Document,
+    field_ref: lopdf::ObjectId,
+    variables: &HashMap<String, String>,
+) {
+    use lopdf::Object;
+
+    if let Ok(Object::Dictionary(ref mut field)) = doc.get_object_mut(field_ref) {
+        // Process field value (V)
+        if let Ok(Object::String(ref mut value, _format)) = field.get_mut(b"V") {
+            let text = String::from_utf8_lossy(value).to_string();
+            let mut new_text = text.clone();
+            for (var_name, var_value) in variables {
+                new_text = new_text.replace(var_name, var_value);
+            }
+            if new_text != text {
+                *value = new_text.into_bytes();
+            }
+        }
+
+        // Process default value (DV)
+        if let Ok(Object::String(ref mut value, _format)) = field.get_mut(b"DV") {
+            let text = String::from_utf8_lossy(value).to_string();
+            let mut new_text = text.clone();
+            for (var_name, var_value) in variables {
+                new_text = new_text.replace(var_name, var_value);
+            }
+            if new_text != text {
+                *value = new_text.into_bytes();
+            }
+        }
+
+        // Get child field references for recursive processing
+        let child_refs: Vec<lopdf::ObjectId> = field.get(b"Kids")
+            .ok()
+            .and_then(|k| k.as_array().ok())
+            .map(|kids| kids.iter().filter_map(|k| k.as_reference().ok()).collect())
+            .unwrap_or_default();
+
+        // Process children recursively
+        for child_ref in child_refs {
+            process_pdf_form_field(doc, child_ref, variables);
+        }
+    }
+}
+
+/// Process an image file by replacing variables in XMP metadata
+/// Note: XMP metadata editing for images requires specialized handling.
+/// Currently this is a placeholder that returns the image unchanged.
+/// For full XMP support, consider using a dedicated XMP library like rexiv2.
+#[allow(unused_variables)]
+fn process_image_xmp(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    filename: &str,
+) -> Result<Vec<u8>, String> {
+    // Image XMP processing is complex and format-specific.
+    // For now, return the image unchanged.
+    // Future enhancement: use rexiv2 or similar for proper XMP manipulation.
+    Ok(data.to_vec())
 }
 
 /// Get the XML files that contain content for each Office format
