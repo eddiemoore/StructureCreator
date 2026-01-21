@@ -25,6 +25,14 @@ uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
 zip = "2"
 lopdf = "0.34"
+# Audio metadata
+id3 = "1"
+metaflac = "0.2"
+# Archive processing
+tar = "0.4"
+flate2 = "1.0"
+# SQLite temp file handling
+tempfile = "3"
 
 [profile.release]
 panic = "abort"

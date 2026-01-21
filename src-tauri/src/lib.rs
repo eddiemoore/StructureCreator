@@ -197,7 +197,9 @@ fn create_node(
 
                 if let Some(url) = &node.url {
                     // Check if this is a binary file that needs special processing
-                    if is_office_file(&name) || is_epub_file(&name) || is_pdf_file(&name) || is_image_with_xmp(&name) {
+                    if is_office_file(&name) || is_epub_file(&name) || is_pdf_file(&name)
+                       || is_image_with_xmp(&name) || is_audio_with_metadata(&name)
+                       || is_sqlite_database(&name) || is_processable_archive(&name) {
                         // Download as binary and process
                         match download_file_binary(url) {
                             Ok(data) => {
@@ -207,6 +209,12 @@ fn create_node(
                                     (process_epub_file(&data, variables), "EPUB")
                                 } else if is_pdf_file(&name) {
                                     (process_pdf_file(&data, variables), "PDF")
+                                } else if is_audio_with_metadata(&name) {
+                                    (process_audio_metadata(&data, variables, &name), "Audio")
+                                } else if is_sqlite_database(&name) {
+                                    (process_sqlite_database(&data, variables), "SQLite")
+                                } else if is_processable_archive(&name) {
+                                    (process_archive(&data, variables, &name, 0), "Archive")
                                 } else {
                                     (process_image_xmp(&data, variables, &name), "Image")
                                 };
@@ -518,6 +526,79 @@ fn is_image_with_xmp(filename: &str) -> bool {
         || lower.ends_with(".tif")
 }
 
+/// Check if a file is an audio file with editable metadata
+fn is_audio_with_metadata(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.ends_with(".mp3")
+        || lower.ends_with(".flac")
+}
+
+/// Check if a file is a SQLite database
+fn is_sqlite_database(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.ends_with(".db")
+        || lower.ends_with(".sqlite")
+        || lower.ends_with(".sqlite3")
+}
+
+/// Check if a file is a processable archive
+fn is_processable_archive(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.ends_with(".zip")
+        || lower.ends_with(".tar")
+        || lower.ends_with(".tar.gz")
+        || lower.ends_with(".tgz")
+}
+
+/// Archive type enum
+#[derive(Debug, Clone, Copy)]
+enum ArchiveType {
+    Zip,
+    Tar,
+    TarGz,
+}
+
+/// Get archive type from filename
+fn get_archive_type(filename: &str) -> Option<ArchiveType> {
+    let lower = filename.to_lowercase();
+    if lower.ends_with(".zip") {
+        Some(ArchiveType::Zip)
+    } else if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+        Some(ArchiveType::TarGz)
+    } else if lower.ends_with(".tar") {
+        Some(ArchiveType::Tar)
+    } else {
+        None
+    }
+}
+
+/// Check if a file is likely text-based (for archive processing)
+fn is_text_like_file(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.ends_with(".txt")
+        || lower.ends_with(".md")
+        || lower.ends_with(".json")
+        || lower.ends_with(".xml")
+        || lower.ends_with(".html")
+        || lower.ends_with(".htm")
+        || lower.ends_with(".css")
+        || lower.ends_with(".js")
+        || lower.ends_with(".ts")
+        || lower.ends_with(".py")
+        || lower.ends_with(".rs")
+        || lower.ends_with(".yaml")
+        || lower.ends_with(".yml")
+        || lower.ends_with(".toml")
+        || lower.ends_with(".ini")
+        || lower.ends_with(".cfg")
+        || lower.ends_with(".conf")
+        || lower.ends_with(".sh")
+        || lower.ends_with(".bat")
+        || lower.ends_with(".ps1")
+        || lower.ends_with(".svg")
+        || lower.ends_with(".csv")
+}
+
 /// Process a Jupyter notebook by replacing variables in cell contents
 fn process_jupyter_notebook(
     content: &str,
@@ -751,18 +832,633 @@ fn process_pdf_form_field(
 }
 
 /// Process an image file by replacing variables in XMP metadata
-/// Note: XMP metadata editing for images requires specialized handling.
-/// Currently this is a placeholder that returns the image unchanged.
-/// For full XMP support, consider using a dedicated XMP library like rexiv2.
-#[allow(unused_variables)]
 fn process_image_xmp(
     data: &[u8],
     variables: &HashMap<String, String>,
     filename: &str,
 ) -> Result<Vec<u8>, String> {
-    // Image XMP processing is complex and format-specific.
-    // For now, return the image unchanged.
-    // Future enhancement: use rexiv2 or similar for proper XMP manipulation.
+    let lower = filename.to_lowercase();
+
+    if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        process_jpeg_xmp(data, variables)
+    } else if lower.ends_with(".png") {
+        process_png_xmp(data, variables)
+    } else {
+        // TIFF and other formats: return unchanged for now
+        Ok(data.to_vec())
+    }
+}
+
+/// Process JPEG XMP metadata
+/// XMP in JPEG is stored in APP1 segment with "http://ns.adobe.com/xap/1.0/" marker
+fn process_jpeg_xmp(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+) -> Result<Vec<u8>, String> {
+    // XMP marker in JPEG APP1 segment
+    let xmp_marker = b"http://ns.adobe.com/xap/1.0/\0";
+
+    // Find XMP segment
+    if let Some(pos) = find_subsequence(data, xmp_marker) {
+        let xmp_start = pos + xmp_marker.len();
+
+        // Find the end of the APP1 segment (look for next segment marker 0xFF followed by non-0x00)
+        // This is a simplified approach - for full robustness would need to parse JPEG structure
+        if let Some(xmp_end) = find_xmp_end(&data[xmp_start..]) {
+            let xmp_data = &data[xmp_start..xmp_start + xmp_end];
+            let xmp_str = String::from_utf8_lossy(xmp_data);
+            let mut modified_xmp = xmp_str.to_string();
+
+            let mut changed = false;
+            for (var_name, var_value) in variables {
+                let new_xmp = modified_xmp.replace(var_name, var_value);
+                if new_xmp != modified_xmp {
+                    changed = true;
+                    modified_xmp = new_xmp;
+                }
+            }
+
+            if changed {
+                // Reconstruct the file with modified XMP
+                let mut output = Vec::new();
+                output.extend_from_slice(&data[..xmp_start]);
+                output.extend_from_slice(modified_xmp.as_bytes());
+                output.extend_from_slice(&data[xmp_start + xmp_end..]);
+                return Ok(output);
+            }
+        }
+    }
+
+    Ok(data.to_vec())
+}
+
+/// Find subsequence in byte slice
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|window| window == needle)
+}
+
+/// Find the end of XMP data (simplified - looks for closing tag)
+fn find_xmp_end(data: &[u8]) -> Option<usize> {
+    let end_marker = b"</x:xmpmeta>";
+    if let Some(pos) = find_subsequence(data, end_marker) {
+        return Some(pos + end_marker.len());
+    }
+    // Alternative ending
+    let alt_marker = b"<?xpacket end";
+    if let Some(pos) = find_subsequence(data, alt_marker) {
+        // Find the closing ?>
+        if let Some(close) = find_subsequence(&data[pos..], b"?>") {
+            return Some(pos + close + 2);
+        }
+    }
+    None
+}
+
+/// Process PNG XMP metadata (stored in iTXt chunk with "XML:com.adobe.xmp" keyword)
+fn process_png_xmp(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+) -> Result<Vec<u8>, String> {
+    // PNG XMP is stored in iTXt chunk - for simplicity, do raw search and replace
+    // Full implementation would parse PNG chunks properly
+    let xmp_keyword = b"XML:com.adobe.xmp";
+
+    if let Some(pos) = find_subsequence(data, xmp_keyword) {
+        // XMP content follows the keyword
+        if let Some(xmp_start_offset) = find_subsequence(&data[pos..], b"<x:xmpmeta") {
+            let xmp_start = pos + xmp_start_offset;
+            if let Some(xmp_len) = find_xmp_end(&data[xmp_start..]) {
+                let xmp_data = &data[xmp_start..xmp_start + xmp_len];
+                let xmp_str = String::from_utf8_lossy(xmp_data);
+                let mut modified_xmp = xmp_str.to_string();
+
+                let mut changed = false;
+                for (var_name, var_value) in variables {
+                    let new_xmp = modified_xmp.replace(var_name, var_value);
+                    if new_xmp != modified_xmp {
+                        changed = true;
+                        modified_xmp = new_xmp;
+                    }
+                }
+
+                if changed {
+                    let mut output = Vec::new();
+                    output.extend_from_slice(&data[..xmp_start]);
+                    output.extend_from_slice(modified_xmp.as_bytes());
+                    output.extend_from_slice(&data[xmp_start + xmp_len..]);
+                    return Ok(output);
+                }
+            }
+        }
+    }
+
+    Ok(data.to_vec())
+}
+
+/// Process an audio file by replacing variables in metadata tags
+fn process_audio_metadata(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    filename: &str,
+) -> Result<Vec<u8>, String> {
+    let lower = filename.to_lowercase();
+
+    if lower.ends_with(".mp3") {
+        process_mp3_id3(data, variables)
+    } else if lower.ends_with(".flac") {
+        process_flac_vorbis(data, variables)
+    } else {
+        Ok(data.to_vec())
+    }
+}
+
+/// Process MP3 ID3v2 tags
+fn process_mp3_id3(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+) -> Result<Vec<u8>, String> {
+    use id3::{Tag, TagLike, Version};
+
+    // Try to read existing tag, or create a new one
+    let mut tag = Tag::read_from2(Cursor::new(data))
+        .unwrap_or_else(|_| Tag::new());
+
+    let mut modified = false;
+
+    // Process common text frames
+    // TIT2 = Title, TPE1 = Artist, TALB = Album, TCON = Genre, TYER = Year
+    let frame_ids = ["TIT2", "TPE1", "TALB", "TCON", "TYER", "COMM"];
+
+    for frame_id in frame_ids {
+        if let Some(text) = tag.get(frame_id).and_then(|f| f.content().text()) {
+            let original = text.to_string();
+            let mut new_text = original.clone();
+            for (var_name, var_value) in variables {
+                new_text = new_text.replace(var_name, var_value);
+            }
+            if new_text != original {
+                tag.set_text(frame_id, new_text);
+                modified = true;
+            }
+        }
+    }
+
+    if !modified {
+        return Ok(data.to_vec());
+    }
+
+    // Write modified tag back to the file data
+    // ID3 tags are prepended to the MP3 data
+    let mut output = Vec::new();
+    tag.write_to(&mut output, Version::Id3v24)
+        .map_err(|e| format!("Failed to write ID3 tag: {}", e))?;
+
+    // Find where the audio data starts in the original file (skip existing ID3 tag)
+    let audio_start = find_mp3_audio_start(data);
+    output.extend_from_slice(&data[audio_start..]);
+
+    Ok(output)
+}
+
+/// Find where the actual MP3 audio data starts (after any ID3v2 tag)
+fn find_mp3_audio_start(data: &[u8]) -> usize {
+    // Check for ID3v2 header
+    if data.len() >= 10 && &data[0..3] == b"ID3" {
+        // ID3v2 size is stored in bytes 6-9 as syncsafe integers
+        let size = ((data[6] as usize & 0x7F) << 21)
+            | ((data[7] as usize & 0x7F) << 14)
+            | ((data[8] as usize & 0x7F) << 7)
+            | (data[9] as usize & 0x7F);
+        return 10 + size; // 10-byte header + tag size
+    }
+    0
+}
+
+/// Process FLAC Vorbis comments
+fn process_flac_vorbis(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+) -> Result<Vec<u8>, String> {
+    use metaflac::Tag;
+
+    let mut tag = Tag::read_from(&mut Cursor::new(data))
+        .map_err(|e| format!("Failed to read FLAC tag: {}", e))?;
+
+    let mut modified = false;
+
+    // vorbis_comments_mut() returns &mut VorbisComment directly
+    let vorbis = tag.vorbis_comments_mut();
+
+    // Get all keys to iterate over
+    let keys: Vec<String> = vorbis.comments.keys().cloned().collect();
+
+    for key in keys {
+        if let Some(values) = vorbis.comments.get_mut(&key) {
+            for value in values.iter_mut() {
+                let original = value.clone();
+                for (var_name, var_value) in variables {
+                    *value = value.replace(var_name, var_value);
+                }
+                if *value != original {
+                    modified = true;
+                }
+            }
+        }
+    }
+
+    if !modified {
+        return Ok(data.to_vec());
+    }
+
+    let mut output = Vec::new();
+    tag.write_to(&mut output)
+        .map_err(|e| format!("Failed to write FLAC tag: {}", e))?;
+
+    Ok(output)
+}
+
+/// Process a SQLite database by replacing variables in text columns
+fn process_sqlite_database(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+) -> Result<Vec<u8>, String> {
+    use rusqlite::{Connection, OpenFlags};
+    use std::io::Read as IoRead;
+    use tempfile::NamedTempFile;
+
+    // Write data to temp file (SQLite needs file access)
+    let mut temp_file = NamedTempFile::new()
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    std::io::Write::write_all(&mut temp_file, data)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    let conn = Connection::open_with_flags(
+        temp_file.path(),
+        OpenFlags::SQLITE_OPEN_READ_WRITE,
+    ).map_err(|e| format!("Failed to open SQLite database: {}", e))?;
+
+    // Check for _variables config table
+    let has_config = conn.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='_variables'")
+        .and_then(|mut stmt| stmt.exists([]))
+        .unwrap_or(false);
+
+    if has_config {
+        process_sqlite_with_config(&conn, variables)?;
+    } else {
+        // Fallback: scan all text columns for variable patterns
+        process_sqlite_scan_all(&conn, variables)?;
+    }
+
+    drop(conn);
+
+    // Read back the modified database
+    let mut output = Vec::new();
+    std::fs::File::open(temp_file.path())
+        .and_then(|mut f| f.read_to_end(&mut output))
+        .map_err(|e| format!("Failed to read modified database: {}", e))?;
+
+    Ok(output)
+}
+
+/// Process SQLite with explicit _variables config table
+fn process_sqlite_with_config(
+    conn: &rusqlite::Connection,
+    variables: &HashMap<String, String>,
+) -> Result<(), String> {
+    let mut config_stmt = conn.prepare(
+        "SELECT table_name, column_name FROM _variables WHERE enabled = 1"
+    ).map_err(|e| format!("Failed to query config: {}", e))?;
+
+    let configs: Vec<(String, String)> = config_stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| format!("Config query failed: {}", e))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    for (table, column) in configs {
+        // Validate table and column names to prevent SQL injection
+        if !is_valid_sql_identifier(&table) || !is_valid_sql_identifier(&column) {
+            continue;
+        }
+
+        for (var_name, var_value) in variables {
+            let sql = format!(
+                "UPDATE \"{}\" SET \"{}\" = REPLACE(\"{}\", ?, ?) WHERE \"{}\" LIKE ?",
+                table, column, column, column
+            );
+            let pattern = format!("%{}%", var_name);
+            let _ = conn.execute(&sql, [var_name, var_value, &pattern]);
+        }
+    }
+
+    Ok(())
+}
+
+/// Process SQLite by scanning all TEXT columns
+fn process_sqlite_scan_all(
+    conn: &rusqlite::Connection,
+    variables: &HashMap<String, String>,
+) -> Result<(), String> {
+    // Get all tables
+    let mut tables_stmt = conn.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_variables'"
+    ).map_err(|e| e.to_string())?;
+
+    let tables: Vec<String> = tables_stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    for table in tables {
+        if !is_valid_sql_identifier(&table) {
+            continue;
+        }
+
+        // Get TEXT columns for this table
+        let pragma_sql = format!("PRAGMA table_info(\"{}\")", table);
+        let mut cols_stmt = conn.prepare(&pragma_sql).map_err(|e| e.to_string())?;
+
+        let text_columns: Vec<String> = cols_stmt
+            .query_map([], |row| {
+                let col_type: String = row.get(2)?;
+                let col_name: String = row.get(1)?;
+                Ok((col_name, col_type))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .filter(|(_, t)| {
+                let upper = t.to_uppercase();
+                upper.contains("TEXT") || upper.contains("VARCHAR") || upper.contains("CHAR")
+            })
+            .map(|(n, _)| n)
+            .collect();
+
+        for column in text_columns {
+            if !is_valid_sql_identifier(&column) {
+                continue;
+            }
+
+            for (var_name, var_value) in variables {
+                let sql = format!(
+                    "UPDATE \"{}\" SET \"{}\" = REPLACE(\"{}\", ?, ?) WHERE \"{}\" LIKE ?",
+                    table, column, column, column
+                );
+                let pattern = format!("%{}%", var_name);
+                let _ = conn.execute(&sql, [var_name, var_value, &pattern]);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate SQL identifier to prevent injection
+fn is_valid_sql_identifier(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// Process an archive by recursively processing its contents
+fn process_archive(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    filename: &str,
+    depth: usize,
+) -> Result<Vec<u8>, String> {
+    // Prevent infinite recursion from nested archives
+    const MAX_DEPTH: usize = 3;
+    if depth > MAX_DEPTH {
+        return Ok(data.to_vec());
+    }
+
+    match get_archive_type(filename) {
+        Some(ArchiveType::Zip) => process_zip_archive(data, variables, depth),
+        Some(ArchiveType::TarGz) => process_tar_gz_archive(data, variables, depth),
+        Some(ArchiveType::Tar) => process_tar_archive(data, variables, depth),
+        None => Ok(data.to_vec()),
+    }
+}
+
+/// Process a ZIP archive recursively
+fn process_zip_archive(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    depth: usize,
+) -> Result<Vec<u8>, String> {
+    let cursor = Cursor::new(data);
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| format!("Failed to open ZIP: {}", e))?;
+
+    let mut modified_files: HashMap<String, Vec<u8>> = HashMap::new();
+
+    // First pass: process each file
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+        let name = file.name().to_string();
+
+        if file.is_dir() {
+            continue;
+        }
+
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)
+            .map_err(|e| format!("Failed to read entry content: {}", e))?;
+
+        // Process the file through the appropriate handler
+        let processed = process_file_content(&content, variables, &name, depth)?;
+
+        if processed != content {
+            modified_files.insert(name, processed);
+        }
+    }
+
+    // Second pass: create new archive with modifications
+    let mut output = Cursor::new(Vec::new());
+    {
+        let mut writer = ZipWriter::new(&mut output);
+        let options = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        let cursor = Cursor::new(data);
+        let mut archive = ZipArchive::new(cursor)
+            .map_err(|e| format!("Failed to re-open ZIP: {}", e))?;
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)
+                .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+            let name = file.name().to_string();
+
+            if file.is_dir() {
+                writer.add_directory(&name, options)
+                    .map_err(|e| format!("Failed to add directory: {}", e))?;
+            } else {
+                writer.start_file(&name, options)
+                    .map_err(|e| format!("Failed to start file: {}", e))?;
+
+                if let Some(modified) = modified_files.get(&name) {
+                    writer.write_all(modified)
+                        .map_err(|e| format!("Failed to write modified: {}", e))?;
+                } else {
+                    let mut content = Vec::new();
+                    file.read_to_end(&mut content)
+                        .map_err(|e| format!("Failed to read original: {}", e))?;
+                    writer.write_all(&content)
+                        .map_err(|e| format!("Failed to write original: {}", e))?;
+                }
+            }
+        }
+
+        writer.finish()
+            .map_err(|e| format!("Failed to finalize ZIP: {}", e))?;
+    }
+
+    Ok(output.into_inner())
+}
+
+/// Process a TAR.GZ archive
+fn process_tar_gz_archive(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    depth: usize,
+) -> Result<Vec<u8>, String> {
+    use flate2::read::GzDecoder;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+
+    // Decompress
+    let decoder = GzDecoder::new(Cursor::new(data));
+    let mut decompressed = Vec::new();
+    std::io::BufReader::new(decoder).read_to_end(&mut decompressed)
+        .map_err(|e| format!("Failed to decompress gzip: {}", e))?;
+
+    // Process tar
+    let processed_tar = process_tar_archive(&decompressed, variables, depth)?;
+
+    // Recompress
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(&processed_tar)
+        .map_err(|e| format!("Failed to compress: {}", e))?;
+
+    encoder.finish()
+        .map_err(|e| format!("Failed to finish compression: {}", e))
+}
+
+/// Process a TAR archive
+fn process_tar_archive(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    depth: usize,
+) -> Result<Vec<u8>, String> {
+    use tar::{Archive, Builder, Header};
+
+    let mut archive = Archive::new(Cursor::new(data));
+    let mut output = Vec::new();
+
+    // Collect all entries first (since we can't iterate and build simultaneously)
+    let mut entries_data: Vec<(String, Vec<u8>, u32, bool)> = Vec::new();
+
+    for entry_result in archive.entries().map_err(|e| format!("Failed to read tar: {}", e))? {
+        let mut entry = entry_result.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let path = entry.path().map_err(|e| e.to_string())?.to_path_buf();
+        let path_str = path.to_string_lossy().to_string();
+        let mode = entry.header().mode().unwrap_or(0o644);
+        let is_dir = entry.header().entry_type().is_dir();
+
+        let mut content = Vec::new();
+        if !is_dir {
+            entry.read_to_end(&mut content)
+                .map_err(|e| format!("Failed to read entry: {}", e))?;
+        }
+
+        entries_data.push((path_str, content, mode, is_dir));
+    }
+
+    // Now build the new archive
+    {
+        let mut builder = Builder::new(&mut output);
+
+        for (path_str, content, mode, is_dir) in entries_data {
+            if is_dir {
+                let mut header = Header::new_gnu();
+                header.set_path(&path_str).map_err(|e| e.to_string())?;
+                header.set_size(0);
+                header.set_entry_type(tar::EntryType::Directory);
+                header.set_mode(mode);
+                header.set_cksum();
+
+                builder.append(&header, std::io::empty())
+                    .map_err(|e| format!("Failed to append dir: {}", e))?;
+            } else {
+                let processed = process_file_content(&content, variables, &path_str, depth)?;
+
+                let mut header = Header::new_gnu();
+                header.set_path(&path_str).map_err(|e| e.to_string())?;
+                header.set_size(processed.len() as u64);
+                header.set_mode(mode);
+                header.set_cksum();
+
+                builder.append(&header, Cursor::new(processed))
+                    .map_err(|e| format!("Failed to append: {}", e))?;
+            }
+        }
+
+        builder.finish().map_err(|e| format!("Failed to finish tar: {}", e))?;
+    }
+
+    Ok(output)
+}
+
+/// Route file content through the appropriate processor (for archive processing)
+fn process_file_content(
+    data: &[u8],
+    variables: &HashMap<String, String>,
+    filename: &str,
+    depth: usize,
+) -> Result<Vec<u8>, String> {
+    // Nested archives - recursive processing
+    if is_processable_archive(filename) {
+        return process_archive(data, variables, filename, depth + 1);
+    }
+
+    // Binary file types with variable support
+    if is_office_file(filename) {
+        return process_office_file(data, variables, filename);
+    }
+    if is_epub_file(filename) {
+        return process_epub_file(data, variables);
+    }
+    if is_pdf_file(filename) {
+        return process_pdf_file(data, variables);
+    }
+    if is_image_with_xmp(filename) {
+        return process_image_xmp(data, variables, filename);
+    }
+    if is_audio_with_metadata(filename) {
+        return process_audio_metadata(data, variables, filename);
+    }
+    if is_sqlite_database(filename) {
+        return process_sqlite_database(data, variables);
+    }
+    if is_jupyter_notebook(filename) {
+        if let Ok(text) = String::from_utf8(data.to_vec()) {
+            return process_jupyter_notebook(&text, variables)
+                .map(|s| s.into_bytes());
+        }
+    }
+
+    // Text files - simple string replacement
+    if is_text_like_file(filename) {
+        if let Ok(text) = String::from_utf8(data.to_vec()) {
+            let mut processed = text;
+            for (var_name, var_value) in variables {
+                processed = processed.replace(var_name, var_value);
+            }
+            return Ok(processed.into_bytes());
+        }
+    }
+
+    // Unknown binary files - return unchanged
     Ok(data.to_vec())
 }
 
