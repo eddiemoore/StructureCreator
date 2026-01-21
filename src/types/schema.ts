@@ -1,10 +1,11 @@
 export interface SchemaNode {
-  type: "folder" | "file";
+  type: "folder" | "file" | "if" | "else";
   name: string;
   url?: string;
   content?: string;
   children?: SchemaNode[];
   attributes?: Record<string, string>;
+  condition_var?: string;
 }
 
 export interface SchemaTree {

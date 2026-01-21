@@ -14,6 +14,8 @@ pub struct SchemaNode {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<SchemaNode>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition_var: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,11 +89,14 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
     let node_type = match tag_name {
         "folder" => "folder",
         "file" => "file",
+        "if" => "if",
+        "else" => "else",
         _ => return Ok(None),
     };
 
     let mut name = String::new();
     let mut url: Option<String> = None;
+    let mut condition_var: Option<String> = None;
 
     for attr in e.attributes() {
         let attr = attr?;
@@ -101,12 +106,16 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         match key {
             "name" => name = value.to_string(),
             "url" => url = Some(value.to_string()),
+            "var" => condition_var = Some(value.to_string()),
             _ => {}
         }
     }
 
-    if name.is_empty() {
-        return Ok(None);
+    // For if/else nodes, name is not required and defaults to empty string
+    if node_type == "folder" || node_type == "file" {
+        if name.is_empty() {
+            return Ok(None);
+        }
     }
 
     Ok(Some(SchemaNode {
@@ -115,6 +124,7 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         url,
         content: None,
         children: None,
+        condition_var,
     }))
 }
 
@@ -138,6 +148,8 @@ fn count_nodes(node: &SchemaNode, stats: &mut SchemaStats) {
                 stats.downloads += 1;
             }
         }
+        // if/else are control structures, not counted
+        "if" | "else" => {}
         _ => {}
     }
 
@@ -312,6 +324,26 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
                     indent_str, escape_xml(&node.name), escape_xml(url)));
             } else {
                 xml.push_str(&format!("{}<file name=\"{}\" />\n", indent_str, escape_xml(&node.name)));
+            }
+        }
+        "if" => {
+            if let Some(children) = &node.children {
+                if let Some(var) = &node.condition_var {
+                    xml.push_str(&format!("{}<if var=\"{}\">\n", indent_str, escape_xml(var)));
+                    for child in children {
+                        node_to_xml(child, xml, indent + 1);
+                    }
+                    xml.push_str(&format!("{}</if>\n", indent_str));
+                }
+            }
+        }
+        "else" => {
+            if let Some(children) = &node.children {
+                xml.push_str(&format!("{}<else>\n", indent_str));
+                for child in children {
+                    node_to_xml(child, xml, indent + 1);
+                }
+                xml.push_str(&format!("{}</else>\n", indent_str));
             }
         }
         _ => {}
