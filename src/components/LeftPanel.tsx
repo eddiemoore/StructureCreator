@@ -398,7 +398,7 @@ export const LeftPanel = () => {
               <>
                 <UploadIcon size={28} className="mx-auto mb-2 text-system-blue opacity-60" />
                 <div className="text-mac-base text-text-secondary mb-0.5">
-                  Select XML schema
+                  Select schema file
                 </div>
                 <div className="text-mac-xs text-text-muted">
                   Click to browse
