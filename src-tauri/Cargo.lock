@@ -3649,6 +3649,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tempfile",
  "ureq",
+ "url",
  "uuid",
  "zip",
 ]

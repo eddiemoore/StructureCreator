@@ -13,7 +13,10 @@ import {
   StarIcon,
   TrashIcon,
   SaveIcon,
+  ImportIcon,
+  ExportIcon,
 } from "./Icons";
+import { ImportExportModal } from "./ImportExportModal";
 import type { SchemaTree, Template } from "../types/schema";
 import type { ReactNode } from "react";
 
@@ -92,6 +95,8 @@ export const LeftPanel = () => {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
+  const [importExportMode, setImportExportMode] = useState<"import" | "export" | "bulk-export" | null>(null);
+  const [exportTemplateId, setExportTemplateId] = useState<string | undefined>();
 
   // Load templates on mount
   useEffect(() => {
@@ -181,6 +186,12 @@ export const LeftPanel = () => {
     } catch (e) {
       console.error("Failed to delete template:", e);
     }
+  };
+
+  const handleExportTemplate = (e: React.MouseEvent, templateId: string) => {
+    e.stopPropagation();
+    setExportTemplateId(templateId);
+    setImportExportMode("export");
   };
 
   const handleSelectSchema = async () => {
@@ -547,15 +558,33 @@ export const LeftPanel = () => {
       <div className="p-4 flex-1 overflow-auto mac-scroll flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <SectionTitle>Templates</SectionTitle>
-          {schemaContent && (
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => setIsSavingTemplate(true)}
-              className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-system-blue hover:bg-system-blue/10 transition-colors"
-              title="Save as template"
+              onClick={() => setImportExportMode("import")}
+              className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+              title="Import templates"
             >
-              <SaveIcon size={14} />
+              <ImportIcon size={14} />
             </button>
-          )}
+            {templates.length > 0 && (
+              <button
+                onClick={() => setImportExportMode("bulk-export")}
+                className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                title="Export templates"
+              >
+                <ExportIcon size={14} />
+              </button>
+            )}
+            {schemaContent && (
+              <button
+                onClick={() => setIsSavingTemplate(true)}
+                className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-system-blue hover:bg-system-blue/10 transition-colors"
+                title="Save as template"
+              >
+                <SaveIcon size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Save Template Form */}
@@ -647,6 +676,13 @@ export const LeftPanel = () => {
                     <StarIcon size={14} filled={template.is_favorite} />
                   </button>
                   <button
+                    onClick={(e) => handleExportTemplate(e, template.id)}
+                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                    title="Export template"
+                  >
+                    <ExportIcon size={14} />
+                  </button>
+                  <button
                     onClick={(e) => handleDeleteTemplate(e, template.id)}
                     className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors"
                     title="Delete template"
@@ -659,6 +695,19 @@ export const LeftPanel = () => {
           )}
         </div>
       </div>
+
+      {/* Import/Export Modal */}
+      <ImportExportModal
+        isOpen={importExportMode !== null}
+        onClose={() => {
+          setImportExportMode(null);
+          setExportTemplateId(undefined);
+        }}
+        mode={importExportMode || "import"}
+        templates={templates}
+        selectedTemplateId={exportTemplateId}
+        onComplete={loadTemplates}
+      />
     </aside>
   );
 };
