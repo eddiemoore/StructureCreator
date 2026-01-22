@@ -103,6 +103,16 @@ fn create_structure_from_tree(
     Ok(CreateResult { logs, summary })
 }
 
+/// Check if a string value is "truthy"
+/// Empty strings and common falsy values ("false", "0", "no") are considered false
+fn is_truthy(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    // Check for common falsy string values (case-insensitive)
+    !matches!(value.to_lowercase().as_str(), "false" | "0" | "no" | "off" | "disabled")
+}
+
 /// Evaluate if condition without side effects
 fn evaluate_if_condition(
     node: &schema::SchemaNode,
@@ -112,7 +122,7 @@ fn evaluate_if_condition(
         // Variables are stored with % wrapping (e.g., %NAME%), so wrap the var name
         let lookup_key = format!("%{}%", var_name);
         variables.get(&lookup_key)
-            .map(|v| !v.is_empty())
+            .map(|v| is_truthy(v))
             .unwrap_or(false)
     } else {
         false

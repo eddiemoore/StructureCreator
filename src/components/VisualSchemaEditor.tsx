@@ -136,10 +136,19 @@ const EditableTreeItem = ({
     setIsEditingCondition(false);
   };
 
-  const handleConditionKeyDown = (e: React.KeyboardEvent) => {
+  const handleConditionKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     e.stopPropagation();
     if (e.key === "Enter") {
-      handleConditionSave();
+      // Don't preventDefault - let browser handle datalist selection first
+      // Use requestAnimationFrame to read value after browser updates it
+      requestAnimationFrame(() => {
+        const finalValue = conditionInputRef.current?.value.trim() || "";
+        if (finalValue !== (node.condition_var || "")) {
+          onUpdate(node.id!, { condition_var: finalValue || undefined });
+        }
+        setConditionValue(finalValue);
+        setIsEditingCondition(false);
+      });
     } else if (e.key === "Escape") {
       setIsEditingCondition(false);
       setConditionValue(node.condition_var || "");
@@ -264,12 +273,6 @@ const EditableTreeItem = ({
                   </span>
                 )
               )}
-              {/* Variable suggestions datalist */}
-              <datalist id="variable-suggestions">
-                {variables.map((v) => (
-                  <option key={v} value={v.replace(/%/g, "")} />
-                ))}
-              </datalist>
             </div>
           ) : isEditing ? (
             <input
@@ -728,6 +731,13 @@ export const VisualSchemaEditor = () => {
           </DragOverlay>
         </DndContext>
       </div>
+
+      {/* Global datalist for variable suggestions - rendered once */}
+      <datalist id="variable-suggestions">
+        {variableNames.map((v) => (
+          <option key={v} value={v.replace(/%/g, "")} />
+        ))}
+      </datalist>
     </div>
   );
 };
