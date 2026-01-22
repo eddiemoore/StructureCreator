@@ -30,10 +30,18 @@ pub struct SchemaStats {
     pub downloads: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SchemaHooks {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub post_create: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaTree {
     pub root: SchemaNode,
     pub stats: SchemaStats,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hooks: Option<SchemaHooks>,
 }
 
 pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::error::Error>> {
@@ -42,15 +50,41 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
 
     let mut stack: Vec<SchemaNode> = Vec::new();
     let mut root: Option<SchemaNode> = None;
+    let mut hooks: Option<SchemaHooks> = None;
+    let mut in_hooks = false;
+    let mut current_hook_text = String::new();
 
     loop {
         match reader.read_event() {
             Ok(Event::Start(ref e)) => {
-                if let Some(node) = parse_element(e)? {
+                let name_bytes = e.name();
+                let tag_name = std::str::from_utf8(name_bytes.as_ref())?;
+
+                if tag_name == "hooks" {
+                    in_hooks = true;
+                    if hooks.is_none() {
+                        hooks = Some(SchemaHooks::default());
+                    }
+                } else if in_hooks && tag_name == "post-create" {
+                    current_hook_text.clear();
+                } else if let Some(node) = parse_element(e)? {
                     stack.push(node);
                 }
             }
+            Ok(Event::Text(ref e)) => {
+                if in_hooks {
+                    current_hook_text.push_str(&e.unescape()?.into_owned());
+                }
+            }
             Ok(Event::Empty(ref e)) => {
+                let name_bytes = e.name();
+                let tag_name = std::str::from_utf8(name_bytes.as_ref())?;
+
+                // Skip hooks-related empty tags
+                if tag_name == "hooks" || (in_hooks && tag_name == "post-create") {
+                    continue;
+                }
+
                 if let Some(node) = parse_element(e)? {
                     // Self-closing tag - add to parent
                     if let Some(parent) = stack.last_mut() {
@@ -63,8 +97,21 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
                     }
                 }
             }
-            Ok(Event::End(_)) => {
-                if let Some(node) = stack.pop() {
+            Ok(Event::End(ref e)) => {
+                let name_bytes = e.name();
+                let tag_name = std::str::from_utf8(name_bytes.as_ref())?;
+
+                if tag_name == "hooks" {
+                    in_hooks = false;
+                } else if in_hooks && tag_name == "post-create" {
+                    let cmd = current_hook_text.trim().to_string();
+                    if !cmd.is_empty() {
+                        if let Some(ref mut h) = hooks {
+                            h.post_create.push(cmd);
+                        }
+                    }
+                    current_hook_text.clear();
+                } else if let Some(node) = stack.pop() {
                     if let Some(parent) = stack.last_mut() {
                         if parent.children.is_none() {
                             parent.children = Some(Vec::new());
@@ -84,7 +131,7 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
     let root = root.ok_or("No root element found")?;
     let stats = calculate_stats(&root);
 
-    Ok(SchemaTree { root, stats })
+    Ok(SchemaTree { root, stats, hooks })
 }
 
 fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::error::Error>> {
@@ -187,7 +234,7 @@ pub fn scan_folder_to_schema(folder_path: &str) -> Result<SchemaTree, Box<dyn st
     let root = scan_directory(path, &folder_name)?;
     let stats = calculate_stats(&root);
 
-    Ok(SchemaTree { root, stats })
+    Ok(SchemaTree { root, stats, hooks: None })
 }
 
 fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<dyn std::error::Error>> {
@@ -306,6 +353,18 @@ fn read_file_content(path: &std::path::Path) -> Option<String> {
 pub fn schema_to_xml(tree: &SchemaTree) -> String {
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     node_to_xml(&tree.root, &mut xml, 0);
+
+    // Add hooks if present
+    if let Some(ref hooks) = tree.hooks {
+        if !hooks.post_create.is_empty() {
+            xml.push_str("<hooks>\n");
+            for cmd in &hooks.post_create {
+                xml.push_str(&format!("  <post-create>{}</post-create>\n", escape_xml(cmd)));
+            }
+            xml.push_str("</hooks>\n");
+        }
+    }
+
     xml
 }
 
@@ -484,7 +543,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
     let root = build_tree_from_map(&tree_map, "", root_name);
     let stats = calculate_stats(&root);
 
-    Ok(SchemaTree { root, stats })
+    Ok(SchemaTree { root, stats, hooks: None })
 }
 
 /// Check if a ZIP entry should be skipped
@@ -625,5 +684,123 @@ mod tests {
         assert_eq!(tree.root.name, "test");
         assert_eq!(tree.stats.folders, 2);
         assert_eq!(tree.stats.files, 1);
+    }
+
+    #[test]
+    fn test_parse_schema_with_hooks() {
+        let xml = r#"
+            <folder name="my-project">
+                <file name="package.json" />
+            </folder>
+            <hooks>
+                <post-create>npm install</post-create>
+                <post-create>git init</post-create>
+            </hooks>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert_eq!(tree.root.name, "my-project");
+        assert!(tree.hooks.is_some());
+        let hooks = tree.hooks.unwrap();
+        assert_eq!(hooks.post_create.len(), 2);
+        assert_eq!(hooks.post_create[0], "npm install");
+        assert_eq!(hooks.post_create[1], "git init");
+    }
+
+    #[test]
+    fn test_parse_schema_without_hooks() {
+        let xml = r#"
+            <folder name="test">
+                <file name="readme.txt" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert!(tree.hooks.is_none());
+    }
+
+    #[test]
+    fn test_parse_schema_with_empty_hooks() {
+        let xml = r#"
+            <folder name="test">
+                <file name="readme.txt" />
+            </folder>
+            <hooks>
+            </hooks>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        // hooks should exist but be empty
+        assert!(tree.hooks.is_some());
+        assert!(tree.hooks.unwrap().post_create.is_empty());
+    }
+
+    #[test]
+    fn test_schema_to_xml_with_hooks() {
+        let tree = SchemaTree {
+            root: SchemaNode {
+                id: None,
+                node_type: "folder".to_string(),
+                name: "test".to_string(),
+                url: None,
+                content: None,
+                children: None,
+                condition_var: None,
+            },
+            stats: SchemaStats {
+                folders: 1,
+                files: 0,
+                downloads: 0,
+            },
+            hooks: Some(SchemaHooks {
+                post_create: vec!["npm install".to_string(), "git init".to_string()],
+            }),
+        };
+
+        let xml = schema_to_xml(&tree);
+        assert!(xml.contains("<hooks>"));
+        assert!(xml.contains("<post-create>npm install</post-create>"));
+        assert!(xml.contains("<post-create>git init</post-create>"));
+        assert!(xml.contains("</hooks>"));
+    }
+
+    #[test]
+    fn test_schema_to_xml_without_hooks() {
+        let tree = SchemaTree {
+            root: SchemaNode {
+                id: None,
+                node_type: "folder".to_string(),
+                name: "test".to_string(),
+                url: None,
+                content: None,
+                children: None,
+                condition_var: None,
+            },
+            stats: SchemaStats {
+                folders: 1,
+                files: 0,
+                downloads: 0,
+            },
+            hooks: None,
+        };
+
+        let xml = schema_to_xml(&tree);
+        assert!(!xml.contains("<hooks>"));
+    }
+
+    #[test]
+    fn test_parse_hooks_with_special_characters() {
+        let xml = r#"
+            <folder name="test" />
+            <hooks>
+                <post-create>echo "Hello &amp; World"</post-create>
+            </hooks>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert!(tree.hooks.is_some());
+        let hooks = tree.hooks.unwrap();
+        assert_eq!(hooks.post_create.len(), 1);
+        assert_eq!(hooks.post_create[0], "echo \"Hello & World\"");
     }
 }

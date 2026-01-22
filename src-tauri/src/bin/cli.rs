@@ -553,11 +553,21 @@ fn print_result(result: &CreateResult, json_output: bool, quiet: bool) -> CliRes
         // Print summary to stderr
         eprintln!();
         let s = &result.summary;
-        if s.errors > 0 {
-            eprintln!(
-                "Completed with errors: {} folders, {} files ({} downloaded), {} errors, {} skipped",
-                s.folders_created, s.files_created, s.files_downloaded, s.errors, s.skipped
-            );
+        if s.errors > 0 || s.hooks_failed > 0 {
+            let mut summary_parts = vec![
+                format!("{} folders", s.folders_created),
+                format!("{} files ({} downloaded)", s.files_created, s.files_downloaded),
+            ];
+            if s.errors > 0 {
+                summary_parts.push(format!("{} errors", s.errors));
+            }
+            if s.skipped > 0 {
+                summary_parts.push(format!("{} skipped", s.skipped));
+            }
+            if s.hooks_executed > 0 || s.hooks_failed > 0 {
+                summary_parts.push(format!("{} hooks ({} failed)", s.hooks_executed + s.hooks_failed, s.hooks_failed));
+            }
+            eprintln!("Completed with errors: {}", summary_parts.join(", "));
         } else {
             eprintln!(
                 "Done! Created {} folders, {} files ({} downloaded)",
@@ -566,10 +576,13 @@ fn print_result(result: &CreateResult, json_output: bool, quiet: bool) -> CliRes
             if s.skipped > 0 {
                 eprintln!("  ({} files skipped - already exist)", s.skipped);
             }
+            if s.hooks_executed > 0 {
+                eprintln!("  ({} hooks executed successfully)", s.hooks_executed);
+            }
         }
     }
 
-    if result.summary.errors > 0 {
+    if result.summary.errors > 0 || result.summary.hooks_failed > 0 {
         CliResult::Error("Structure creation completed with errors".to_string())
     } else {
         CliResult::Success
