@@ -105,6 +105,13 @@ impl Database {
             [],
         );
 
+        // Migration: Add unique index on name (case-insensitive) for existing databases
+        // This prevents race conditions when generating unique names
+        let _ = conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_name_lower ON templates (LOWER(name))",
+            [],
+        );
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -320,5 +327,202 @@ impl Database {
         let rows_affected = conn.execute("DELETE FROM settings WHERE key = ?", [key])?;
 
         Ok(rows_affected > 0)
+    }
+
+    /// Check if a template with the given name exists (case-insensitive)
+    /// Uses COUNT query for efficiency instead of fetching the full row
+    pub fn template_exists_by_name(&self, name: &str) -> SqliteResult<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM templates WHERE LOWER(name) = LOWER(?1)",
+            rusqlite::params![name],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// Generate a unique name for a template by adding a suffix if needed.
+    ///
+    /// The database has a UNIQUE constraint on LOWER(name) which prevents duplicates.
+    /// This function finds an available name; any remaining race conditions are
+    /// caught by the constraint at insert time.
+    pub fn generate_unique_template_name(&self, base_name: &str) -> Result<String, String> {
+        if !self.template_exists_by_name(base_name).map_err(|e| e.to_string())? {
+            return Ok(base_name.to_string());
+        }
+
+        for counter in 2..=100 {
+            let new_name = format!("{} ({})", base_name, counter);
+            if !self.template_exists_by_name(&new_name).map_err(|e| e.to_string())? {
+                return Ok(new_name);
+            }
+        }
+
+        Err("Could not generate unique template name after 100 attempts".to_string())
+    }
+
+    /// Delete a template by name (case-insensitive) and return the deleted template
+    pub fn delete_template_by_name(&self, name: &str) -> SqliteResult<Option<Template>> {
+        // First get the template to return it
+        let template = self.get_template_by_name(name)?;
+        if let Some(ref t) = template {
+            self.delete_template(&t.id)?;
+        }
+        Ok(template)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    fn create_test_db() -> (Database, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let db = Database::new(temp_dir.path().to_path_buf()).unwrap();
+        (db, temp_dir)
+    }
+
+    fn create_test_template_input(name: &str) -> CreateTemplateInput {
+        CreateTemplateInput {
+            name: name.to_string(),
+            description: Some("Test description".to_string()),
+            schema_xml: "<folder name=\"test\"/>".to_string(),
+            variables: HashMap::new(),
+            icon_color: Some("#ff0000".to_string()),
+            is_favorite: false,
+        }
+    }
+
+    mod template_exists_by_name_tests {
+        use super::*;
+
+        #[test]
+        fn returns_false_for_nonexistent_template() {
+            let (db, _dir) = create_test_db();
+            assert!(!db.template_exists_by_name("Nonexistent").unwrap());
+        }
+
+        #[test]
+        fn returns_true_for_existing_template() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("My Template")).unwrap();
+            assert!(db.template_exists_by_name("My Template").unwrap());
+        }
+
+        #[test]
+        fn is_case_insensitive() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("My Template")).unwrap();
+            assert!(db.template_exists_by_name("my template").unwrap());
+            assert!(db.template_exists_by_name("MY TEMPLATE").unwrap());
+            assert!(db.template_exists_by_name("My TEMPLATE").unwrap());
+        }
+    }
+
+    mod generate_unique_template_name_tests {
+        use super::*;
+
+        #[test]
+        fn returns_original_name_if_not_taken() {
+            let (db, _dir) = create_test_db();
+            let result = db.generate_unique_template_name("New Template").unwrap();
+            assert_eq!(result, "New Template");
+        }
+
+        #[test]
+        fn adds_suffix_if_name_taken() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("My Template")).unwrap();
+
+            let result = db.generate_unique_template_name("My Template").unwrap();
+            assert_eq!(result, "My Template (2)");
+        }
+
+        #[test]
+        fn increments_suffix_for_multiple_duplicates() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("My Template")).unwrap();
+            db.create_template(create_test_template_input("My Template (2)")).unwrap();
+            db.create_template(create_test_template_input("My Template (3)")).unwrap();
+
+            let result = db.generate_unique_template_name("My Template").unwrap();
+            assert_eq!(result, "My Template (4)");
+        }
+
+        #[test]
+        fn handles_gaps_in_suffixes() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("My Template")).unwrap();
+            db.create_template(create_test_template_input("My Template (3)")).unwrap();
+            // Note: (2) is not taken
+
+            let result = db.generate_unique_template_name("My Template").unwrap();
+            assert_eq!(result, "My Template (2)");
+        }
+    }
+
+    mod delete_template_by_name_tests {
+        use super::*;
+
+        #[test]
+        fn deletes_existing_template() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("To Delete")).unwrap();
+            assert!(db.template_exists_by_name("To Delete").unwrap());
+
+            let deleted = db.delete_template_by_name("To Delete").unwrap();
+            assert!(deleted.is_some());
+            assert_eq!(deleted.unwrap().name, "To Delete");
+            assert!(!db.template_exists_by_name("To Delete").unwrap());
+        }
+
+        #[test]
+        fn returns_none_for_nonexistent_template() {
+            let (db, _dir) = create_test_db();
+            let result = db.delete_template_by_name("Nonexistent").unwrap();
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn is_case_insensitive() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("My Template")).unwrap();
+
+            let deleted = db.delete_template_by_name("my template").unwrap();
+            assert!(deleted.is_some());
+            assert!(!db.template_exists_by_name("My Template").unwrap());
+        }
+    }
+
+    mod get_template_by_name_tests {
+        use super::*;
+
+        #[test]
+        fn returns_template_when_found() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("Find Me")).unwrap();
+
+            let result = db.get_template_by_name("Find Me").unwrap();
+            assert!(result.is_some());
+            assert_eq!(result.unwrap().name, "Find Me");
+        }
+
+        #[test]
+        fn returns_none_when_not_found() {
+            let (db, _dir) = create_test_db();
+            let result = db.get_template_by_name("Not Found").unwrap();
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn is_case_insensitive() {
+            let (db, _dir) = create_test_db();
+            db.create_template(create_test_template_input("CamelCase")).unwrap();
+
+            assert!(db.get_template_by_name("camelcase").unwrap().is_some());
+            assert!(db.get_template_by_name("CAMELCASE").unwrap().is_some());
+        }
     }
 }

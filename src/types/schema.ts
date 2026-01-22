@@ -41,6 +41,30 @@ export interface Template {
   updated_at: string;
 }
 
+export interface TemplateExport {
+  name: string;
+  description: string | null;
+  schema_xml: string;
+  variables?: Record<string, string>;
+  icon_color: string | null;
+}
+
+export interface TemplateExportFile {
+  version: string;
+  type: "template" | "template_bundle";
+  exported_at: string;
+  template?: TemplateExport;
+  templates?: TemplateExport[];
+}
+
+export interface ImportResult {
+  imported: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+export type DuplicateStrategy = "skip" | "replace" | "rename";
+
 export type ThemeMode = "light" | "dark" | "system";
 
 export type AccentColor = "blue" | "purple" | "green" | "orange" | "pink";
