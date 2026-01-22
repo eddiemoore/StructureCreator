@@ -241,6 +241,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
                 url: None,
                 content,
                 children: None,
+                condition_var: None,
             });
         }
     }
@@ -252,6 +253,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
         url: None,
         content: None,
         children: if children.is_empty() { None } else { Some(children) },
+        condition_var: None,
     })
 }
 
@@ -437,6 +439,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                             url: None,
                             content: None,
                             children: None, // Will be filled later
+                            condition_var: None,
                         });
                 }
 
@@ -450,6 +453,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                     url: None,
                     content: content.clone(),
                     children: None,
+                    condition_var: None,
                 };
 
                 if is_dir {
@@ -596,6 +600,7 @@ fn build_tree_from_map(
         } else {
             Some(processed_children)
         },
+        condition_var: None,
     }
 }
 
