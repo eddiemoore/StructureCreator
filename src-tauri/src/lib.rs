@@ -132,7 +132,12 @@ pub fn create_structure_from_tree(
         if !hooks.post_create.is_empty() {
             // Determine the working directory for hooks
             // Use the root folder path if it was created, otherwise use output_path
-            let hook_working_dir = base_path.join(&tree.root.name);
+            // Apply variable substitution to root name (same as in create_node)
+            let mut substituted_root_name = tree.root.name.clone();
+            for (var_name, var_value) in variables {
+                substituted_root_name = substituted_root_name.replace(var_name, var_value);
+            }
+            let hook_working_dir = base_path.join(&substituted_root_name);
             let working_dir = if hook_working_dir.exists() {
                 hook_working_dir
             } else {
