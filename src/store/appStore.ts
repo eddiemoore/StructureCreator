@@ -55,6 +55,18 @@ const findNode = (node: SchemaNode, nodeId: string): SchemaNode | null => {
   return null;
 };
 
+// Helper: Find parent of a node
+const findParent = (root: SchemaNode, nodeId: string): SchemaNode | null => {
+  if (root.children) {
+    for (const child of root.children) {
+      if (child.id === nodeId) return root;
+      const found = findParent(child, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
 // Helper: Update node by ID (immutable)
 const updateNodeById = (node: SchemaNode, nodeId: string, updates: Partial<SchemaNode>): SchemaNode => {
   if (node.id === nodeId) {
@@ -80,6 +92,89 @@ const removeNodeById = (node: SchemaNode, nodeId: string): SchemaNode | null => 
     return { ...node, children: filteredChildren };
   }
   return node;
+};
+
+// Helper: Remove multiple nodes by IDs (immutable)
+const removeNodesById = (node: SchemaNode, nodeIds: string[]): SchemaNode | null => {
+  if (node.children) {
+    const filteredChildren = node.children
+      .filter((child) => !nodeIds.includes(child.id!))
+      .map((child) => removeNodesById(child, nodeIds))
+      .filter((child): child is SchemaNode => child !== null);
+
+    return { ...node, children: filteredChildren };
+  }
+  return node;
+};
+
+// Helper: Get if/else group - returns the if node and all immediately following else siblings
+const getIfElseGroup = (root: SchemaNode, ifNodeId: string): SchemaNode[] => {
+  const parent = findParent(root, ifNodeId);
+  if (!parent || !parent.children) return [];
+
+  const ifIndex = parent.children.findIndex((c) => c.id === ifNodeId);
+  if (ifIndex === -1) return [];
+
+  const ifNode = parent.children[ifIndex];
+  if (ifNode.type !== "if") return [ifNode]; // Not an if node, return just itself
+
+  const group: SchemaNode[] = [ifNode];
+
+  // Collect all immediately following else siblings
+  for (let i = ifIndex + 1; i < parent.children.length; i++) {
+    const sibling = parent.children[i];
+    if (sibling.type === "else") {
+      group.push(sibling);
+    } else {
+      break; // Stop at first non-else sibling
+    }
+  }
+
+  return group;
+};
+
+// Helper: Move if/else group to new parent (immutable)
+const moveIfElseGroupToParent = (
+  root: SchemaNode,
+  ifNodeId: string,
+  targetParentId: string | null,
+  index: number
+): SchemaNode | null => {
+  // Get the if/else group
+  const group = getIfElseGroup(root, ifNodeId);
+  if (group.length === 0) return root;
+
+  const nodeIds = group.map((n) => n.id!);
+
+  // Remove all nodes in the group from their current location
+  let newRoot = removeNodesById(root, nodeIds);
+  if (!newRoot) return root;
+
+  // Add all nodes to the target parent at the specified index
+  if (targetParentId === null) {
+    return newRoot;
+  }
+
+  // Handle moving to root folder
+  if (targetParentId === newRoot.id) {
+    const children = [...(newRoot.children || [])];
+    children.splice(index, 0, ...group);
+    return { ...newRoot, children };
+  }
+
+  const addAtIndex = (node: SchemaNode): SchemaNode => {
+    if (node.id === targetParentId) {
+      const children = [...(node.children || [])];
+      children.splice(index, 0, ...group);
+      return { ...node, children };
+    }
+    if (node.children) {
+      return { ...node, children: node.children.map(addAtIndex) };
+    }
+    return node;
+  };
+
+  return addAtIndex(newRoot);
 };
 
 // Helper: Add node to parent (immutable)
@@ -442,6 +537,37 @@ export const useAppStore = create<AppState>((set, get) => ({
       schemaHistoryIndex: history.length - 1,
       schemaDirty: true,
     });
+  },
+
+  moveIfElseGroup: (ifNodeId: string, targetParentId: string | null, index: number) => {
+    const state = get();
+    if (!state.schemaTree) return;
+
+    const newRoot = moveIfElseGroupToParent(state.schemaTree.root, ifNodeId, targetParentId, index);
+    if (!newRoot) return;
+
+    const newTree: SchemaTree = {
+      root: newRoot,
+      stats: calculateStats(newRoot),
+    };
+
+    // Add to history
+    const history = state.schemaHistory.slice(0, state.schemaHistoryIndex + 1);
+    history.push(newTree);
+
+    set({
+      schemaTree: newTree,
+      schemaHistory: history,
+      schemaHistoryIndex: history.length - 1,
+      schemaDirty: true,
+    });
+  },
+
+  getIfElseGroupIds: (ifNodeId: string) => {
+    const state = get();
+    if (!state.schemaTree) return [];
+    const group = getIfElseGroup(state.schemaTree.root, ifNodeId);
+    return group.map((n) => n.id!);
   },
 
   undo: () => {

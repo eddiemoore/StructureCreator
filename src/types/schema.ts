@@ -159,6 +159,8 @@ export interface AppState {
   addSchemaNode: (parentId: string | null, node: Partial<SchemaNode>) => void;
   removeSchemaNode: (nodeId: string) => void;
   moveSchemaNode: (nodeId: string, targetParentId: string | null, index: number) => void;
+  moveIfElseGroup: (ifNodeId: string, targetParentId: string | null, index: number) => void;
+  getIfElseGroupIds: (ifNodeId: string) => string[];
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
