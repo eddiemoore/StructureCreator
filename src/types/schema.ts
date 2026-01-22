@@ -1,11 +1,12 @@
 export interface SchemaNode {
   id?: string; // Unique ID for tracking during editing
-  type: "folder" | "file";
+  type: "folder" | "file" | "if" | "else";
   name: string;
   url?: string;
   content?: string;
   children?: SchemaNode[];
   attributes?: Record<string, string>;
+  condition_var?: string;
 }
 
 export interface SchemaTree {
@@ -158,6 +159,8 @@ export interface AppState {
   addSchemaNode: (parentId: string | null, node: Partial<SchemaNode>) => void;
   removeSchemaNode: (nodeId: string) => void;
   moveSchemaNode: (nodeId: string, targetParentId: string | null, index: number) => void;
+  moveIfElseGroup: (ifNodeId: string, targetParentId: string | null, index: number) => void;
+  getIfElseGroupIds: (ifNodeId: string) => string[];
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;

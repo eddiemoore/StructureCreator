@@ -103,6 +103,57 @@ fn create_structure_from_tree(
     Ok(CreateResult { logs, summary })
 }
 
+/// Check if a string value is "truthy"
+/// Empty strings and common falsy values ("false", "0", "no") are considered false
+fn is_truthy(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    // Check for common falsy string values (case-insensitive)
+    !matches!(value.to_lowercase().as_str(), "false" | "0" | "no" | "off" | "disabled")
+}
+
+/// Evaluate if condition without side effects
+fn evaluate_if_condition(
+    node: &schema::SchemaNode,
+    variables: &HashMap<String, String>,
+) -> bool {
+    if let Some(var_name) = &node.condition_var {
+        // Variables are stored with % wrapping (e.g., %NAME%), so wrap the var name
+        let lookup_key = format!("%{}%", var_name);
+        variables.get(&lookup_key)
+            .map(|v| is_truthy(v))
+            .unwrap_or(false)
+    } else {
+        false
+    }
+}
+
+/// Process a list of child nodes, tracking if/else state between siblings
+fn process_children(
+    children: &[schema::SchemaNode],
+    parent_path: &PathBuf,
+    variables: &HashMap<String, String>,
+    dry_run: bool,
+    overwrite: bool,
+    logs: &mut Vec<LogEntry>,
+    summary: &mut ResultSummary,
+) -> Result<(), String> {
+    let mut child_last_if = None;
+    for child in children {
+        create_node_internal(child, parent_path, variables, dry_run, overwrite, logs, summary, child_last_if)?;
+        // Track if results for else blocks
+        // Only if nodes followed immediately by else nodes form a valid if/else chain
+        // Any other node type (folder, file) breaks the chain
+        match child.node_type.as_str() {
+            "if" => child_last_if = Some(evaluate_if_condition(child, variables)),
+            "else" => child_last_if = None, // Break chain - only one else per if
+            _ => child_last_if = None, // Non-conditional nodes break the if/else chain
+        }
+    }
+    Ok(())
+}
+
 fn create_node(
     node: &schema::SchemaNode,
     parent_path: &PathBuf,
@@ -112,6 +163,61 @@ fn create_node(
     logs: &mut Vec<LogEntry>,
     summary: &mut ResultSummary,
 ) -> Result<(), String> {
+    create_node_internal(node, parent_path, variables, dry_run, overwrite, logs, summary, None)
+}
+
+fn create_node_internal(
+    node: &schema::SchemaNode,
+    parent_path: &PathBuf,
+    variables: &HashMap<String, String>,
+    dry_run: bool,
+    overwrite: bool,
+    logs: &mut Vec<LogEntry>,
+    summary: &mut ResultSummary,
+    last_if_result: Option<bool>,
+) -> Result<(), String> {
+    // Handle conditional nodes (if/else)
+    match node.node_type.as_str() {
+        "if" => {
+            // Evaluate condition using shared helper
+            let condition_met = evaluate_if_condition(node, variables);
+
+            // Process children if condition is met
+            if condition_met {
+                if let Some(children) = &node.children {
+                    process_children(children, parent_path, variables, dry_run, overwrite, logs, summary)?;
+                }
+            }
+
+            return Ok(());
+        }
+        "else" => {
+            // Execute else block only if there was a preceding if that evaluated to false
+            // If there's no preceding if (None), skip this orphaned else block
+            let should_execute = match last_if_result {
+                Some(previous_if_was_true) => !previous_if_was_true,
+                None => {
+                    // Log warning for orphaned else block
+                    logs.push(LogEntry {
+                        log_type: "warning".to_string(),
+                        message: "Skipped orphaned else block (no preceding if)".to_string(),
+                        details: Some("Else blocks must immediately follow an if block".to_string()),
+                    });
+                    false
+                }
+            };
+
+            if should_execute {
+                if let Some(children) = &node.children {
+                    process_children(children, parent_path, variables, dry_run, overwrite, logs, summary)?;
+                }
+            }
+
+            return Ok(());
+        }
+        _ => {}
+    }
+
     // Replace variables in name
     let mut name = node.name.clone();
     for (var_name, var_value) in variables {
@@ -159,9 +265,7 @@ fn create_node(
 
             // Process children
             if let Some(children) = &node.children {
-                for child in children {
-                    create_node(child, &current_path, variables, dry_run, overwrite, logs, summary)?;
-                }
+                process_children(children, &current_path, variables, dry_run, overwrite, logs, summary)?;
             }
         }
         "file" => {

@@ -3,6 +3,9 @@ use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 
+/// Default condition variable name for if blocks without an explicit var attribute
+const DEFAULT_CONDITION_VAR: &str = "CONDITION";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaNode {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -16,6 +19,8 @@ pub struct SchemaNode {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<SchemaNode>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition_var: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,11 +94,14 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
     let node_type = match tag_name {
         "folder" => "folder",
         "file" => "file",
+        "if" => "if",
+        "else" => "else",
         _ => return Ok(None),
     };
 
     let mut name = String::new();
     let mut url: Option<String> = None;
+    let mut condition_var: Option<String> = None;
 
     for attr in e.attributes() {
         let attr = attr?;
@@ -103,12 +111,16 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         match key {
             "name" => name = value.to_string(),
             "url" => url = Some(value.to_string()),
+            "var" => condition_var = Some(value.to_string()),
             _ => {}
         }
     }
 
-    if name.is_empty() {
-        return Ok(None);
+    // For if/else nodes, name is not required and defaults to empty string
+    if node_type == "folder" || node_type == "file" {
+        if name.is_empty() {
+            return Ok(None);
+        }
     }
 
     Ok(Some(SchemaNode {
@@ -118,6 +130,7 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         url,
         content: None,
         children: None,
+        condition_var,
     }))
 }
 
@@ -141,6 +154,8 @@ fn count_nodes(node: &SchemaNode, stats: &mut SchemaStats) {
                 stats.downloads += 1;
             }
         }
+        // if/else are control structures, not counted
+        "if" | "else" => {}
         _ => {}
     }
 
@@ -229,6 +244,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
                 url: None,
                 content,
                 children: None,
+                condition_var: None,
             });
         }
     }
@@ -240,6 +256,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
         url: None,
         content: None,
         children: if children.is_empty() { None } else { Some(children) },
+        condition_var: None,
     })
 }
 
@@ -318,6 +335,27 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
             } else {
                 xml.push_str(&format!("{}<file name=\"{}\" />\n", indent_str, escape_xml(&node.name)));
             }
+        }
+        "if" => {
+            // Use condition_var or default to prevent data loss
+            let var = node.condition_var.as_deref().unwrap_or(DEFAULT_CONDITION_VAR);
+            xml.push_str(&format!("{}<if var=\"{}\">\n", indent_str, escape_xml(var)));
+            if let Some(children) = &node.children {
+                for child in children {
+                    node_to_xml(child, xml, indent + 1);
+                }
+            }
+            xml.push_str(&format!("{}</if>\n", indent_str));
+        }
+        "else" => {
+            // Always export else blocks, even if empty, to preserve structure
+            xml.push_str(&format!("{}<else>\n", indent_str));
+            if let Some(children) = &node.children {
+                for child in children {
+                    node_to_xml(child, xml, indent + 1);
+                }
+            }
+            xml.push_str(&format!("{}</else>\n", indent_str));
         }
         _ => {}
     }
@@ -405,6 +443,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                             url: None,
                             content: None,
                             children: None, // Will be filled later
+                            condition_var: None,
                         });
                 }
 
@@ -418,6 +457,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                     url: None,
                     content: content.clone(),
                     children: None,
+                    condition_var: None,
                 };
 
                 if is_dir {
@@ -564,6 +604,7 @@ fn build_tree_from_map(
         } else {
             Some(processed_children)
         },
+        condition_var: None,
     }
 }
 

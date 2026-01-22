@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
+import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
 const initialProgress: CreationProgress = {
   current: 0,
@@ -32,27 +33,16 @@ const calculateStats = (node: SchemaNode): { folders: number; files: number; dow
   const traverse = (n: SchemaNode) => {
     if (n.type === "folder") {
       folders++;
-    } else {
+    } else if (n.type === "file") {
       files++;
       if (n.url) downloads++;
     }
+    // if/else are control structures, not counted in stats
     n.children?.forEach(traverse);
   };
 
   traverse(node);
   return { folders, files, downloads };
-};
-
-// Helper: Find node by ID
-const findNode = (node: SchemaNode, nodeId: string): SchemaNode | null => {
-  if (node.id === nodeId) return node;
-  if (node.children) {
-    for (const child of node.children) {
-      const found = findNode(child, nodeId);
-      if (found) return found;
-    }
-  }
-  return null;
 };
 
 // Helper: Update node by ID (immutable)
@@ -77,7 +67,8 @@ const removeNodeById = (node: SchemaNode, nodeId: string): SchemaNode | null => 
       .map((child) => removeNodeById(child, nodeId))
       .filter((child): child is SchemaNode => child !== null);
 
-    return { ...node, children: filteredChildren };
+    // Use undefined instead of empty array for consistency
+    return { ...node, children: filteredChildren.length > 0 ? filteredChildren : undefined };
   }
   return node;
 };
@@ -126,13 +117,8 @@ const moveNodeToParent = (
   if (!newRoot) return root;
 
   // Add it to the target parent at the specified index
-  if (targetParentId === null) {
-    // No target parent specified - return without changes
-    return newRoot;
-  }
-
-  // Handle moving to root folder
-  if (targetParentId === newRoot.id) {
+  // Handle null or root as target - add to root's children
+  if (targetParentId === null || targetParentId === newRoot.id) {
     const children = [...(newRoot.children || [])];
     children.splice(index, 0, nodeToMove);
     return { ...newRoot, children };
@@ -366,6 +352,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       content: node.content,
       children: node.children,
       attributes: node.attributes,
+      condition_var: node.condition_var,
     };
 
     let newRoot: SchemaNode;
@@ -400,7 +387,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Don't allow removing the root node
     if (state.schemaTree.root.id === nodeId) return;
 
-    const newRoot = removeNodeById(state.schemaTree.root, nodeId);
+    const nodeToRemove = findNode(state.schemaTree.root, nodeId);
+    if (!nodeToRemove) return;
+
+    let newRoot: SchemaNode | null;
+
+    // If removing an if node, also remove its following else siblings
+    if (nodeToRemove.type === "if") {
+      const group = getIfElseGroup(state.schemaTree.root, nodeId);
+      const idsToRemove = group.map((n) => n.id!);
+      newRoot = removeNodesById(state.schemaTree.root, idsToRemove);
+    } else {
+      newRoot = removeNodeById(state.schemaTree.root, nodeId);
+    }
+
     if (!newRoot) return;
 
     const newTree: SchemaTree = {
@@ -424,6 +424,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     if (!state.schemaTree) return;
 
+    // Validate target is a valid container
+    if (targetParentId !== null) {
+      const targetNode = findNode(state.schemaTree.root, targetParentId);
+      if (!targetNode || !canHaveChildren(targetNode.type)) return;
+    }
+
+    // Prevent moving a node into itself or its descendants
+    const nodeToMove = findNode(state.schemaTree.root, nodeId);
+    if (nodeToMove && targetParentId && isDescendant(nodeToMove, targetParentId)) return;
+
     const newRoot = moveNodeToParent(state.schemaTree.root, nodeId, targetParentId, index);
     if (!newRoot) return;
 
@@ -442,6 +452,54 @@ export const useAppStore = create<AppState>((set, get) => ({
       schemaHistoryIndex: history.length - 1,
       schemaDirty: true,
     });
+  },
+
+  moveIfElseGroup: (ifNodeId: string, targetParentId: string | null, index: number) => {
+    const state = get();
+    if (!state.schemaTree) return;
+
+    // Validate target is a valid container
+    if (targetParentId !== null) {
+      const targetNode = findNode(state.schemaTree.root, targetParentId);
+      if (!targetNode || !canHaveChildren(targetNode.type)) return;
+    }
+
+    // Prevent moving the group into any of its own nodes (if or else blocks)
+    if (targetParentId) {
+      const group = getIfElseGroup(state.schemaTree.root, ifNodeId);
+      for (const node of group) {
+        if (isDescendant(node, targetParentId)) return;
+      }
+    }
+
+    const newRoot = moveIfElseGroupToParent(state.schemaTree.root, ifNodeId, targetParentId, index);
+    if (!newRoot) return;
+
+    const newTree: SchemaTree = {
+      root: newRoot,
+      stats: calculateStats(newRoot),
+    };
+
+    // Add to history
+    const history = state.schemaHistory.slice(0, state.schemaHistoryIndex + 1);
+    history.push(newTree);
+
+    set({
+      schemaTree: newTree,
+      schemaHistory: history,
+      schemaHistoryIndex: history.length - 1,
+      schemaDirty: true,
+    });
+  },
+
+  // NOTE: This function should only be called from event handlers, not during render.
+  // Calling it during render would cause recalculation on every render cycle.
+  // Use pre-computed values (like dragGroupCount) for render-time access.
+  getIfElseGroupIds: (ifNodeId: string) => {
+    const state = get();
+    if (!state.schemaTree) return [];
+    const group = getIfElseGroup(state.schemaTree.root, ifNodeId);
+    return group.map((n) => n.id!);
   },
 
   undo: () => {
