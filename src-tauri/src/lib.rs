@@ -1,15 +1,18 @@
-mod database;
-mod schema;
+pub mod database;
+pub mod schema;
 
-use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput};
-use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree};
+pub use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput};
+pub use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree, SchemaNode, SchemaStats};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write, Cursor};
 use std::path::PathBuf;
-use std::sync::Mutex;
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
+
+#[cfg(feature = "tauri-app")]
+use std::sync::Mutex;
+#[cfg(feature = "tauri-app")]
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     Manager, State, Emitter,
@@ -22,13 +25,13 @@ pub struct LogEntry {
     pub details: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateResult {
     pub logs: Vec<LogEntry>,
     pub summary: ResultSummary,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultSummary {
     pub folders_created: usize,
     pub files_created: usize,
@@ -37,26 +40,31 @@ pub struct ResultSummary {
     pub skipped: usize,
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_parse_schema(content: String) -> Result<SchemaTree, String> {
     parse_xml_schema(&content).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_scan_folder(folder_path: String) -> Result<SchemaTree, String> {
     scan_folder_to_schema(&folder_path).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_scan_zip(data: Vec<u8>, filename: String) -> Result<SchemaTree, String> {
     scan_zip_to_schema(&data, &filename).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_export_schema_xml(tree: SchemaTree) -> String {
     schema_to_xml(&tree)
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_create_structure(
     content: String,
@@ -69,6 +77,7 @@ fn cmd_create_structure(
     create_structure_from_tree(&tree, &output_path, &variables, dry_run, overwrite)
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_create_structure_from_tree(
     tree: SchemaTree,
@@ -80,7 +89,7 @@ fn cmd_create_structure_from_tree(
     create_structure_from_tree(&tree, &output_path, &variables, dry_run, overwrite)
 }
 
-fn create_structure_from_tree(
+pub fn create_structure_from_tree(
     tree: &SchemaTree,
     output_path: &str,
     variables: &HashMap<String, String>,
@@ -1677,23 +1686,27 @@ fn process_office_file(
     Ok(output.into_inner())
 }
 
-// Template commands
+// Template commands (Tauri-specific)
+#[cfg(feature = "tauri-app")]
 pub struct AppState {
     pub db: Database,
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_list_templates(state: State<Mutex<AppState>>) -> Result<Vec<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.list_templates().map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_get_template(state: State<Mutex<AppState>>, id: String) -> Result<Option<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.get_template(&id).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_create_template(
     state: State<Mutex<AppState>>,
@@ -1712,10 +1725,12 @@ fn cmd_create_template(
             schema_xml,
             variables,
             icon_color,
+            is_favorite: false,
         })
         .map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_update_template(
     state: State<Mutex<AppState>>,
@@ -1738,18 +1753,21 @@ fn cmd_update_template(
         .map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_delete_template(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.delete_template(&id).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_toggle_favorite(state: State<Mutex<AppState>>, id: String) -> Result<Option<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.toggle_favorite(&id).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_use_template(state: State<Mutex<AppState>>, id: String) -> Result<Option<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
@@ -1758,18 +1776,21 @@ fn cmd_use_template(state: State<Mutex<AppState>>, id: String) -> Result<Option<
 }
 
 // Settings commands
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_get_settings(state: State<Mutex<AppState>>) -> Result<std::collections::HashMap<String, String>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.get_all_settings().map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_set_setting(state: State<Mutex<AppState>>, key: String, value: String) -> Result<(), String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.set_setting(&key, &value).map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "tauri-app")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
