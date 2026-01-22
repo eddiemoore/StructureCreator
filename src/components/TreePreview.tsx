@@ -20,7 +20,6 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
     node.name === "%BASE%" ? projectName : node.name.replace(/%BASE%/g, projectName);
 
   const isFolder = node.type === "folder";
-  const isFile = node.type === "file";
   const isIf = node.type === "if";
   const isElse = node.type === "else";
   const isConditional = isIf || isElse;
