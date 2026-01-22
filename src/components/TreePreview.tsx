@@ -5,9 +5,21 @@ import {
   DownloadIcon,
   CodeIcon,
   GridIcon,
+  BranchIcon,
+  GitMergeIcon,
 } from "./Icons";
 import type { SchemaNode } from "../types/schema";
 import { VisualSchemaEditor } from "./VisualSchemaEditor";
+import { INDENT_PX } from "../utils/schemaTree";
+
+/** Safely extract hostname from URL, returning null if URL is malformed */
+const getUrlHostname = (url: string): string | null => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+};
 
 interface TreeItemProps {
   node: SchemaNode;
@@ -27,10 +39,20 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
 
   // For conditional nodes, show the condition info
   const conditionalLabel = isIf
-    ? `if ${node.condition_var || "?"}`
+    ? `if %${node.condition_var || "?"}%`
     : isElse
     ? "else"
     : null;
+
+  // Render children (shared between conditional and non-conditional nodes)
+  const childrenElements = node.children?.map((child, index) => (
+    <TreeItem
+      key={child.id ?? `${child.name}-${index}`}
+      node={child}
+      depth={depth + 1}
+      projectName={projectName}
+    />
+  ));
 
   return (
     <>
@@ -38,26 +60,24 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
         <>
           <div
             className="flex items-center gap-2 px-2 py-1 rounded-mac cursor-default"
-            style={{ marginLeft: `${depth * 20}px` }}
+            style={{ marginLeft: `${depth * INDENT_PX}px` }}
           >
-            <span className="font-mono text-mac-xs font-medium text-system-purple opacity-80">
+            {isIf ? (
+              <BranchIcon size={16} className="text-system-orange flex-shrink-0" />
+            ) : (
+              <GitMergeIcon size={16} className="text-system-purple flex-shrink-0" />
+            )}
+            <span className={`font-mono text-mac-sm font-medium ${isIf ? "text-system-orange" : "text-system-purple"}`}>
               {conditionalLabel}
             </span>
           </div>
-          {node.children?.map((child, index) => (
-            <TreeItem
-              key={`${child.name}-${index}`}
-              node={child}
-              depth={depth + 1}
-              projectName={projectName}
-            />
-          ))}
+          {childrenElements}
         </>
       ) : (
         <>
           <div
             className="flex items-center gap-2 px-2 py-1 rounded-mac hover:bg-mac-bg-hover cursor-default transition-colors"
-            style={{ marginLeft: `${depth * 20}px` }}
+            style={{ marginLeft: `${depth * INDENT_PX}px` }}
           >
             {isFolder ? (
               <FolderIcon size={16} className="text-system-blue flex-shrink-0" />
@@ -72,18 +92,11 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
             </span>
             {hasUrl && (
               <span className="ml-auto text-mac-xs text-text-muted truncate max-w-[200px]">
-                {new URL(node.url!).hostname}/...
+                {getUrlHostname(node.url!) ?? `${node.url!.slice(0, 30)}${node.url!.length > 30 ? "..." : ""}`}
               </span>
             )}
           </div>
-          {node.children?.map((child, index) => (
-            <TreeItem
-              key={`${child.name}-${index}`}
-              node={child}
-              depth={depth + 1}
-              projectName={projectName}
-            />
-          ))}
+          {childrenElements}
         </>
       )}
     </>

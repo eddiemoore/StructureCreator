@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
@@ -22,32 +22,21 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { FolderIcon, FileIcon, PlusIcon, TrashIcon, SaveIcon, BranchIcon, GitMergeIcon } from "./Icons";
 import type { SchemaNode } from "../types/schema";
+import { findNode, findParent, canHaveChildren, INDENT_PX } from "../utils/schemaTree";
+
+/** Default condition variable name for new if blocks */
+const DEFAULT_CONDITION_VAR = "CONDITION";
+
+/** Sanitize condition variable: strip %, allow only alphanumeric and underscore, limit length */
+const sanitizeConditionVar = (value: string): string => {
+  return value
+    .trim()
+    .replace(/%/g, "") // Strip % signs if user accidentally includes them
+    .replace(/[^a-zA-Z0-9_]/g, "") // Only allow alphanumeric and underscore
+    .slice(0, 50); // Max 50 characters
+};
 
 type NodeType = "folder" | "file" | "if" | "else";
-
-// Helper: Find node by ID
-const findNode = (node: SchemaNode, nodeId: string): SchemaNode | null => {
-  if (node.id === nodeId) return node;
-  if (node.children) {
-    for (const child of node.children) {
-      const found = findNode(child, nodeId);
-      if (found) return found;
-    }
-  }
-  return null;
-};
-
-// Helper: Find parent of a node
-const findParent = (root: SchemaNode, nodeId: string): SchemaNode | null => {
-  if (root.children) {
-    for (const child of root.children) {
-      if (child.id === nodeId) return root;
-      const found = findParent(child, nodeId);
-      if (found) return found;
-    }
-  }
-  return null;
-};
 
 interface EditableTreeItemProps {
   node: SchemaNode;
@@ -56,7 +45,7 @@ interface EditableTreeItemProps {
   onRemove: (nodeId: string) => void;
   onAdd: (parentId: string, type: NodeType, conditionVar?: string) => void;
   projectName: string;
-  variables: string[];
+  datalistId: string;
 }
 
 const EditableTreeItem = ({
@@ -66,7 +55,7 @@ const EditableTreeItem = ({
   onRemove,
   onAdd,
   projectName,
-  variables,
+  datalistId,
 }: EditableTreeItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.name);
@@ -75,11 +64,26 @@ const EditableTreeItem = ({
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
   const [isExpanded, setIsExpanded] = useState(true);
+  const [sanitizationMessage, setSanitizationMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const conditionInputRef = useRef<HTMLInputElement>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-  // Disable dragging for else nodes - they move with their parent if block
-  const isElseNode = node.type === "else";
+  // Cleanup animation frame on unmount
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  // Compute node type flags early since useSortable needs isElse
+  const isFolder = node.type === "folder";
+  const isIf = node.type === "if";
+  const isElse = node.type === "else";
+  const isConditional = isIf || isElse;
+  const isContainer = isFolder || isConditional;
 
   const {
     attributes,
@@ -90,7 +94,7 @@ const EditableTreeItem = ({
     isDragging,
   } = useSortable({
     id: node.id!,
-    disabled: isElseNode,
+    disabled: isElse, // Else nodes move with their parent if block
   });
 
   const style = {
@@ -120,20 +124,31 @@ const EditableTreeItem = ({
     setEditValue(node.name);
   };
 
-  const handleConditionDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const startConditionEditing = () => {
     if (node.type === "if") {
       setIsEditingCondition(true);
       setConditionValue(node.condition_var || "");
     }
   };
 
+  const handleConditionDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startConditionEditing();
+  };
+
   const handleConditionSave = () => {
-    const trimmedValue = conditionValue.trim();
-    if (trimmedValue !== (node.condition_var || "")) {
-      onUpdate(node.id!, { condition_var: trimmedValue || undefined });
+    // Cancel any pending RAF from Enter key to prevent double-save race condition
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
+    const sanitizedValue = sanitizeConditionVar(conditionValue);
+    if (sanitizedValue !== (node.condition_var || "")) {
+      onUpdate(node.id!, { condition_var: sanitizedValue || undefined });
+    }
+    setConditionValue(sanitizedValue);
     setIsEditingCondition(false);
+    setSanitizationMessage("");
   };
 
   const handleConditionKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -141,17 +156,21 @@ const EditableTreeItem = ({
     if (e.key === "Enter") {
       // Don't preventDefault - let browser handle datalist selection first
       // Use requestAnimationFrame to read value after browser updates it
-      requestAnimationFrame(() => {
-        const finalValue = conditionInputRef.current?.value.trim() || "";
-        if (finalValue !== (node.condition_var || "")) {
-          onUpdate(node.id!, { condition_var: finalValue || undefined });
+      // Store ID so it can be cancelled on unmount
+      animationFrameRef.current = requestAnimationFrame(() => {
+        animationFrameRef.current = null;
+        const sanitizedValue = sanitizeConditionVar(conditionInputRef.current?.value || "");
+        if (sanitizedValue !== (node.condition_var || "")) {
+          onUpdate(node.id!, { condition_var: sanitizedValue || undefined });
         }
-        setConditionValue(finalValue);
+        setConditionValue(sanitizedValue);
         setIsEditingCondition(false);
+        setSanitizationMessage("");
       });
     } else if (e.key === "Escape") {
       setIsEditingCondition(false);
       setConditionValue(node.condition_var || "");
+      setSanitizationMessage("");
     }
   };
 
@@ -174,8 +193,31 @@ const EditableTreeItem = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    // Clamp position to keep menu visible within viewport
+    // Estimated menu dimensions: 160px wide, 250px tall (max)
+    const menuWidth = 160;
+    const menuHeight = 250;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 8);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 8);
+    setContextMenuPos({ x: Math.max(8, x), y: Math.max(8, y) });
     setShowContextMenu(true);
+  };
+
+  const handleKeyboardContextMenu = (e: React.KeyboardEvent) => {
+    // Open context menu on Shift+F10, ContextMenu key, or Apps key
+    // Note: keyCode is deprecated but included for legacy browser compatibility
+    const isContextMenuKey = e.key === "ContextMenu" || e.code === "ContextMenu" || e.keyCode === 93;
+    if ((e.shiftKey && e.key === "F10") || isContextMenuKey) {
+      e.preventDefault();
+      // Position menu near the element, clamped to viewport
+      const rect = e.currentTarget.getBoundingClientRect();
+      const menuWidth = 160;
+      const menuHeight = 250;
+      const x = Math.min(rect.left + 20, window.innerWidth - menuWidth - 8);
+      const y = Math.min(rect.top + 20, window.innerHeight - menuHeight - 8);
+      setContextMenuPos({ x: Math.max(8, x), y: Math.max(8, y) });
+      setShowContextMenu(true);
+    }
   };
 
   useEffect(() => {
@@ -191,38 +233,41 @@ const EditableTreeItem = ({
       ? projectName
       : node.name.replace(/%BASE%/g, projectName);
 
-  const isFolder = node.type === "folder";
-  const isIf = node.type === "if";
-  const isElse = node.type === "else";
-  const isConditional = isIf || isElse;
-  const canHaveChildren = isFolder || isConditional;
   const hasChildren = node.children && node.children.length > 0;
+
+  // Check if adding an else block would be valid (last child must be if or else)
+  const lastChild = node.children?.[node.children.length - 1];
+  // Only allow adding else immediately after an if block (not after another else)
+  const canAddElse = lastChild?.type === "if";
 
   return (
     <>
       <div
         ref={setNodeRef}
         style={style}
-        className={`relative ${isConditional ? "conditional-group" : ""}`}
+        className="relative"
         onContextMenu={handleContextMenu}
+        onKeyDown={handleKeyboardContextMenu}
       >
         <div
           className={`flex items-center gap-2 px-2 py-1.5 rounded-mac hover:bg-mac-bg-hover transition-colors group ${
             isConditional
-              ? `border-l-2 ${isIf ? "border-system-orange" : "border-system-purple"} ${isElseNode ? "cursor-default" : "cursor-pointer"}`
+              ? `border-l-2 ${isIf ? "border-system-orange" : "border-system-purple"} ${isElse ? "cursor-default" : "cursor-pointer"}`
               : "cursor-pointer"
           }`}
-          style={{ marginLeft: `${depth * 20}px` }}
+          style={{ marginLeft: `${depth * INDENT_PX}px` }}
           {...attributes}
-          {...(isElseNode ? {} : listeners)}
+          {...(isElse ? {} : listeners)}
         >
           {/* Expand/collapse arrow for nodes that can have children */}
-          {canHaveChildren && hasChildren && (
+          {isContainer && hasChildren && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setIsExpanded(!isExpanded);
               }}
+              aria-label={isExpanded ? "Collapse" : "Expand"}
+              aria-expanded={isExpanded}
               className="w-4 h-4 flex items-center justify-center text-text-muted hover:text-text-primary"
             >
               <span className={`transform transition-transform ${isExpanded ? "rotate-90" : ""}`}>
@@ -230,7 +275,7 @@ const EditableTreeItem = ({
               </span>
             </button>
           )}
-          {(!canHaveChildren || !hasChildren) && <div className="w-4" />}
+          {(!isContainer || !hasChildren) && <div className="w-4" />}
 
           {/* Icon */}
           {isFolder ? (
@@ -252,22 +297,62 @@ const EditableTreeItem = ({
               </span>
               {isIf && (
                 isEditingCondition ? (
-                  <input
-                    ref={conditionInputRef}
-                    type="text"
-                    value={conditionValue}
-                    onChange={(e) => setConditionValue(e.target.value)}
-                    onBlur={handleConditionSave}
-                    onKeyDown={handleConditionKeyDown}
-                    placeholder="VARIABLE"
-                    list="variable-suggestions"
-                    className="flex-1 bg-mac-bg border border-accent rounded px-1 py-0.5 text-mac-sm font-mono outline-none max-w-[150px]"
-                  />
+                  <>
+                    <input
+                      ref={conditionInputRef}
+                      type="text"
+                      value={conditionValue}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const sanitized = sanitizeConditionVar(raw);
+                        setConditionValue(sanitized);
+                        // Notify if characters were removed
+                        if (raw.length > sanitized.length) {
+                          setSanitizationMessage("Invalid characters removed. Only letters, numbers, and underscores are allowed.");
+                        } else {
+                          setSanitizationMessage("");
+                        }
+                      }}
+                      onBlur={handleConditionSave}
+                      onKeyDown={handleConditionKeyDown}
+                      placeholder="VARIABLE"
+                      list={datalistId}
+                      aria-describedby={sanitizationMessage ? `sanitization-feedback-${node.id}` : undefined}
+                      className={`flex-1 bg-mac-bg border rounded px-1 py-0.5 text-mac-sm font-mono outline-none max-w-[150px] ${
+                        sanitizationMessage ? "border-system-red" : "border-accent"
+                      }`}
+                      title={sanitizationMessage || undefined}
+                    />
+                    {/* Visible feedback when characters are sanitized */}
+                    {sanitizationMessage && (
+                      <span className="text-system-red text-mac-xs" title={sanitizationMessage}>
+                        ⚠
+                      </span>
+                    )}
+                    {/* Screen reader announcement for sanitization */}
+                    <span
+                      id={`sanitization-feedback-${node.id}`}
+                      role="status"
+                      aria-live="polite"
+                      className="sr-only"
+                    >
+                      {sanitizationMessage}
+                    </span>
+                  </>
                 ) : (
                   <span
-                    className="text-text-secondary cursor-pointer hover:text-text-primary px-1 py-0.5 rounded hover:bg-mac-bg-hover"
+                    className="text-text-secondary cursor-pointer hover:text-text-primary px-1 py-0.5 rounded hover:bg-mac-bg-hover focus:outline-none focus:ring-1 focus:ring-accent"
                     onDoubleClick={handleConditionDoubleClick}
-                    title="Double-click to edit condition variable"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        startConditionEditing();
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Edit condition variable: ${node.condition_var || "not set"}`}
+                    title="Press Enter or double-click to edit condition variable"
                   >
                     %{node.condition_var || "?"}%
                   </span>
@@ -297,7 +382,7 @@ const EditableTreeItem = ({
 
           {/* Action buttons (visible on hover) */}
           <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
-            {canHaveChildren && (
+            {isContainer && (
               <>
                 <button
                   onClick={(e) => {
@@ -365,7 +450,7 @@ const EditableTreeItem = ({
               </button>
             )}
             {/* Add children - for folders and conditionals */}
-            {canHaveChildren && (
+            {isContainer && (
               <>
                 <div className="border-t border-border-muted my-1" />
                 <button
@@ -389,7 +474,7 @@ const EditableTreeItem = ({
                 <div className="border-t border-border-muted my-1" />
                 <button
                   onClick={() => {
-                    onAdd(node.id!, "if", "CONDITION");
+                    onAdd(node.id!, "if", DEFAULT_CONDITION_VAR);
                     setShowContextMenu(false);
                   }}
                   className="w-full text-left px-3 py-1.5 hover:bg-mac-bg-hover text-mac-sm text-system-orange"
@@ -401,7 +486,13 @@ const EditableTreeItem = ({
                     onAdd(node.id!, "else");
                     setShowContextMenu(false);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-mac-bg-hover text-mac-sm text-system-purple"
+                  disabled={!canAddElse}
+                  title={canAddElse ? undefined : "Add an If block first"}
+                  className={`w-full text-left px-3 py-1.5 text-mac-sm ${
+                    canAddElse
+                      ? "hover:bg-mac-bg-hover text-system-purple"
+                      : "text-text-muted cursor-not-allowed opacity-50"
+                  }`}
                 >
                   Add Else Block
                 </button>
@@ -422,7 +513,7 @@ const EditableTreeItem = ({
       </div>
 
       {/* Children */}
-      {canHaveChildren && isExpanded && node.children && (
+      {isContainer && isExpanded && node.children && (
         <SortableContext
           items={node.children.map((c) => c.id!)}
           strategy={verticalListSortingStrategy}
@@ -436,7 +527,7 @@ const EditableTreeItem = ({
               onRemove={onRemove}
               onAdd={onAdd}
               projectName={projectName}
-              variables={variables}
+              datalistId={datalistId}
             />
           ))}
         </SortableContext>
@@ -467,7 +558,11 @@ export const VisualSchemaEditor = () => {
   // Extract variable names for suggestions
   const variableNames = variables.map((v) => v.name);
 
+  // Unique ID for datalist to avoid conflicts if component is mounted multiple times
+  const datalistId = useId();
+
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragGroupCount, setDragGroupCount] = useState(0); // Cached count of if/else group being dragged
   const [isSaving, setIsSaving] = useState(false);
 
   const sensors = useSensors(
@@ -480,7 +575,19 @@ export const VisualSchemaEditor = () => {
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    const id = event.active.id as string;
+    setActiveId(id);
+
+    // Pre-compute the if/else group count to avoid calling getIfElseGroupIds during render
+    if (schemaTree) {
+      const node = findNode(schemaTree.root, id);
+      if (node?.type === "if") {
+        const groupIds = getIfElseGroupIds(id);
+        setDragGroupCount(groupIds.length);
+      } else {
+        setDragGroupCount(0);
+      }
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -507,8 +614,7 @@ export const VisualSchemaEditor = () => {
       let targetParentId: string;
       let targetIndex: number;
 
-      const canHaveChildrenTypes = ["folder", "if", "else"];
-      if (canHaveChildrenTypes.includes(overNode.type)) {
+      if (canHaveChildren(overNode.type)) {
         // Dropping onto a container node: add as first child
         targetParentId = overId;
         targetIndex = 0;
@@ -533,14 +639,17 @@ export const VisualSchemaEditor = () => {
     }
 
     setActiveId(null);
+    setDragGroupCount(0);
   };
 
   const handleAdd = (parentId: string, type: NodeType, conditionVar?: string) => {
     if (type === "if") {
+      // Sanitize conditionVar to ensure valid format
+      const sanitized = conditionVar ? sanitizeConditionVar(conditionVar) : "";
       addSchemaNode(parentId, {
         type,
         name: "",
-        condition_var: conditionVar || "CONDITION",
+        condition_var: sanitized || DEFAULT_CONDITION_VAR,
       });
     } else if (type === "else") {
       addSchemaNode(parentId, {
@@ -675,7 +784,7 @@ export const VisualSchemaEditor = () => {
               onRemove={removeSchemaNode}
               onAdd={handleAdd}
               projectName={projectName}
-              variables={variableNames}
+              datalistId={datalistId}
             />
           </SortableContext>
 
@@ -688,9 +797,8 @@ export const VisualSchemaEditor = () => {
                 const isIf = draggedNode.type === "if";
                 const isElse = draggedNode.type === "else";
 
-                // Get the if/else group if dragging an if node
-                const groupIds = isIf ? getIfElseGroupIds(activeId) : [];
-                const groupCount = groupIds.length;
+                // Use cached group count (computed in handleDragStart)
+                const groupCount = dragGroupCount;
 
                 const displayName = isIf
                   ? `if %${draggedNode.condition_var || "?"}%`
@@ -733,7 +841,7 @@ export const VisualSchemaEditor = () => {
       </div>
 
       {/* Global datalist for variable suggestions - rendered once */}
-      <datalist id="variable-suggestions">
+      <datalist id={datalistId}>
         {variableNames.map((v) => (
           <option key={v} value={v.replace(/%/g, "")} />
         ))}

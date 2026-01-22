@@ -3,6 +3,9 @@ use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 
+/// Default condition variable name for if blocks without an explicit var attribute
+const DEFAULT_CONDITION_VAR: &str = "CONDITION";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaNode {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -334,24 +337,25 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
             }
         }
         "if" => {
+            // Use condition_var or default to prevent data loss
+            let var = node.condition_var.as_deref().unwrap_or(DEFAULT_CONDITION_VAR);
+            xml.push_str(&format!("{}<if var=\"{}\">\n", indent_str, escape_xml(var)));
             if let Some(children) = &node.children {
-                if let Some(var) = &node.condition_var {
-                    xml.push_str(&format!("{}<if var=\"{}\">\n", indent_str, escape_xml(var)));
-                    for child in children {
-                        node_to_xml(child, xml, indent + 1);
-                    }
-                    xml.push_str(&format!("{}</if>\n", indent_str));
-                }
-            }
-        }
-        "else" => {
-            if let Some(children) = &node.children {
-                xml.push_str(&format!("{}<else>\n", indent_str));
                 for child in children {
                     node_to_xml(child, xml, indent + 1);
                 }
-                xml.push_str(&format!("{}</else>\n", indent_str));
             }
+            xml.push_str(&format!("{}</if>\n", indent_str));
+        }
+        "else" => {
+            // Always export else blocks, even if empty, to preserve structure
+            xml.push_str(&format!("{}<else>\n", indent_str));
+            if let Some(children) = &node.children {
+                for child in children {
+                    node_to_xml(child, xml, indent + 1);
+                }
+            }
+            xml.push_str(&format!("{}</else>\n", indent_str));
         }
         _ => {}
     }
