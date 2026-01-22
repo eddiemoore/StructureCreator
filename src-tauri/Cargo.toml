@@ -4,6 +4,7 @@ version = "1.0.0"
 description = "A Tauri app to create folder structures from XML schemas"
 authors = ["Structure Creator"]
 edition = "2021"
+default-run = "structure-creator-app"
 
 [lib]
 name = "structure_creator_lib"
@@ -17,9 +18,12 @@ tauri-app = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-fs", "dep
 tauri-build = { version = "2", features = [], optional = true }
 
 [[bin]]
+name = "structure-creator-app"
+path = "src/main.rs"
+
+[[bin]]
 name = "structure-creator"
 path = "src/bin/cli.rs"
-required-features = []
 
 [dependencies]
 tauri = { version = "2", features = [], optional = true }
