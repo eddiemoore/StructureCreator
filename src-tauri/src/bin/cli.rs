@@ -1120,3 +1120,328 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== parse_variable tests ====================
+
+    #[test]
+    fn test_parse_variable_simple() {
+        let result = parse_variable("NAME=value").unwrap();
+        assert_eq!(result, ("%NAME%".to_string(), "value".to_string()));
+    }
+
+    #[test]
+    fn test_parse_variable_wrapped() {
+        let result = parse_variable("%NAME%=value").unwrap();
+        assert_eq!(result, ("%NAME%".to_string(), "value".to_string()));
+    }
+
+    #[test]
+    fn test_parse_variable_empty_name() {
+        let result = parse_variable("=value");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty"));
+    }
+
+    #[test]
+    fn test_parse_variable_no_equals() {
+        let result = parse_variable("NAME");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Expected NAME=value"));
+    }
+
+    #[test]
+    fn test_parse_variable_empty_value() {
+        let result = parse_variable("NAME=").unwrap();
+        assert_eq!(result, ("%NAME%".to_string(), "".to_string()));
+    }
+
+    #[test]
+    fn test_parse_variable_value_with_equals() {
+        let result = parse_variable("NAME=a=b=c").unwrap();
+        assert_eq!(result, ("%NAME%".to_string(), "a=b=c".to_string()));
+    }
+
+    #[test]
+    fn test_parse_variable_invalid_chars() {
+        let result = parse_variable("NA-ME=value");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("letters, numbers, and underscores"));
+    }
+
+    #[test]
+    fn test_parse_variable_with_underscore() {
+        let result = parse_variable("MY_VAR=value").unwrap();
+        assert_eq!(result, ("%MY_VAR%".to_string(), "value".to_string()));
+    }
+
+    #[test]
+    fn test_parse_variable_wrapped_empty_inner() {
+        let result = parse_variable("%%=value");
+        assert!(result.is_err());
+    }
+
+    // ==================== is_valid_variable_name tests ====================
+
+    #[test]
+    fn test_valid_variable_name_alphanumeric() {
+        assert!(is_valid_variable_name("NAME123"));
+    }
+
+    #[test]
+    fn test_valid_variable_name_underscore() {
+        assert!(is_valid_variable_name("MY_VAR"));
+    }
+
+    #[test]
+    fn test_valid_variable_name_empty() {
+        assert!(!is_valid_variable_name(""));
+    }
+
+    #[test]
+    fn test_valid_variable_name_special_chars() {
+        assert!(!is_valid_variable_name("MY-VAR"));
+        assert!(!is_valid_variable_name("MY.VAR"));
+        assert!(!is_valid_variable_name("MY VAR"));
+    }
+
+    #[test]
+    fn test_valid_variable_name_numbers_only() {
+        assert!(is_valid_variable_name("123"));
+    }
+
+    // ==================== truncate_str tests ====================
+
+    #[test]
+    fn test_truncate_str_short() {
+        assert_eq!(truncate_str("abc", 10), "abc");
+    }
+
+    #[test]
+    fn test_truncate_str_exact() {
+        assert_eq!(truncate_str("abcde", 5), "abcde");
+    }
+
+    #[test]
+    fn test_truncate_str_long() {
+        assert_eq!(truncate_str("abcdefgh", 5), "ab...");
+    }
+
+    #[test]
+    fn test_truncate_str_unicode() {
+        assert_eq!(truncate_str("日本語テスト", 4), "日...");
+    }
+
+    #[test]
+    fn test_truncate_str_tiny_max() {
+        assert_eq!(truncate_str("abc", 2), "ab");
+    }
+
+    #[test]
+    fn test_truncate_str_empty() {
+        assert_eq!(truncate_str("", 5), "");
+    }
+
+    #[test]
+    fn test_truncate_str_max_three() {
+        assert_eq!(truncate_str("abcdef", 3), "abc");
+    }
+
+    // ==================== pad_to_width tests ====================
+
+    #[test]
+    fn test_pad_to_width_short() {
+        assert_eq!(pad_to_width("abc", 6), "abc   ");
+    }
+
+    #[test]
+    fn test_pad_to_width_exact() {
+        assert_eq!(pad_to_width("abcdef", 6), "abcdef");
+    }
+
+    #[test]
+    fn test_pad_to_width_long() {
+        assert_eq!(pad_to_width("abcdefgh", 6), "abcdefgh");
+    }
+
+    #[test]
+    fn test_pad_to_width_unicode() {
+        assert_eq!(pad_to_width("日本", 4), "日本  ");
+    }
+
+    #[test]
+    fn test_pad_to_width_empty() {
+        assert_eq!(pad_to_width("", 3), "   ");
+    }
+
+    // ==================== validate_icon_color tests ====================
+
+    #[test]
+    fn test_validate_color_rgb() {
+        assert!(validate_icon_color("#fff").is_ok());
+        assert!(validate_icon_color("#FFF").is_ok());
+        assert!(validate_icon_color("#a1b").is_ok());
+    }
+
+    #[test]
+    fn test_validate_color_rrggbb() {
+        assert!(validate_icon_color("#ff0000").is_ok());
+        assert!(validate_icon_color("#FF0000").is_ok());
+        assert!(validate_icon_color("#a1b2c3").is_ok());
+    }
+
+    #[test]
+    fn test_validate_color_no_hash() {
+        let result = validate_icon_color("ff0000");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("start with '#'"));
+    }
+
+    #[test]
+    fn test_validate_color_invalid_length() {
+        assert!(validate_icon_color("#ffff").is_err());
+        assert!(validate_icon_color("#ff").is_err());
+        assert!(validate_icon_color("#fffffff").is_err());
+    }
+
+    #[test]
+    fn test_validate_color_invalid_chars() {
+        let result = validate_icon_color("#gggggg");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("hexadecimal"));
+    }
+
+    // ==================== validate_template_name tests ====================
+
+    #[test]
+    fn test_validate_name_valid() {
+        assert!(validate_template_name("My Template").is_ok());
+        assert!(validate_template_name("React App v2").is_ok());
+        assert!(validate_template_name("test").is_ok());
+    }
+
+    #[test]
+    fn test_validate_name_empty() {
+        let result = validate_template_name("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_name_too_long() {
+        let long_name = "a".repeat(257);
+        let result = validate_template_name(&long_name);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too long"));
+    }
+
+    #[test]
+    fn test_validate_name_path_separator_forward() {
+        let result = validate_template_name("foo/bar");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("path separators"));
+    }
+
+    #[test]
+    fn test_validate_name_path_separator_back() {
+        let result = validate_template_name("foo\\bar");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("path separators"));
+    }
+
+    #[test]
+    fn test_validate_name_dot_dot() {
+        let result = validate_template_name("foo..bar");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("'..'"));
+    }
+
+    #[test]
+    fn test_validate_name_control_char() {
+        let result = validate_template_name("foo\x00bar");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("control characters"));
+    }
+
+    #[test]
+    fn test_validate_name_leading_space() {
+        let result = validate_template_name(" foo");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("whitespace"));
+    }
+
+    #[test]
+    fn test_validate_name_trailing_space() {
+        let result = validate_template_name("foo ");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("whitespace"));
+    }
+
+    // ==================== extract_schema_variables tests ====================
+
+    #[test]
+    fn test_extract_vars_single() {
+        let vars = extract_schema_variables("Hello %NAME%!");
+        assert_eq!(vars.len(), 1);
+        assert!(vars.contains("%NAME%"));
+    }
+
+    #[test]
+    fn test_extract_vars_multiple() {
+        let vars = extract_schema_variables("%A% and %B% and %C%");
+        assert_eq!(vars.len(), 3);
+        assert!(vars.contains("%A%"));
+        assert!(vars.contains("%B%"));
+        assert!(vars.contains("%C%"));
+    }
+
+    #[test]
+    fn test_extract_vars_duplicate() {
+        let vars = extract_schema_variables("%A% %A% %A%");
+        assert_eq!(vars.len(), 1);
+        assert!(vars.contains("%A%"));
+    }
+
+    #[test]
+    fn test_extract_vars_empty_percent() {
+        let vars = extract_schema_variables("100%% complete");
+        assert_eq!(vars.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_vars_unclosed() {
+        let vars = extract_schema_variables("Hello %NAME");
+        assert_eq!(vars.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_vars_with_underscore() {
+        let vars = extract_schema_variables("%MY_VAR%");
+        assert_eq!(vars.len(), 1);
+        assert!(vars.contains("%MY_VAR%"));
+    }
+
+    #[test]
+    fn test_extract_vars_with_numbers() {
+        let vars = extract_schema_variables("%VAR1% %VAR2%");
+        assert_eq!(vars.len(), 2);
+        assert!(vars.contains("%VAR1%"));
+        assert!(vars.contains("%VAR2%"));
+    }
+
+    #[test]
+    fn test_extract_vars_none() {
+        let vars = extract_schema_variables("No variables here");
+        assert_eq!(vars.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_vars_invalid_chars_breaks() {
+        // %VAR-NAME% should not match because of the hyphen
+        let vars = extract_schema_variables("%VAR-NAME%");
+        assert_eq!(vars.len(), 0);
+    }
+}
