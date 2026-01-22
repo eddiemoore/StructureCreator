@@ -9,6 +9,10 @@ export interface SchemaNode {
   condition_var?: string;
 }
 
+export interface SchemaHooks {
+  post_create: string[];
+}
+
 export interface SchemaTree {
   root: SchemaNode;
   stats: {
@@ -16,6 +20,7 @@ export interface SchemaTree {
     files: number;
     downloads: number;
   };
+  hooks?: SchemaHooks;
 }
 
 export interface Variable {
@@ -82,11 +87,22 @@ export interface ResultSummary {
   files_downloaded: number;
   errors: number;
   skipped: number;
+  hooks_executed: number;
+  hooks_failed: number;
+}
+
+export interface HookResult {
+  command: string;
+  success: boolean;
+  exit_code: number | null;
+  stdout: string | null;
+  stderr: string | null;
 }
 
 export interface CreateResult {
   logs: BackendLogEntry[];
   summary: ResultSummary;
+  hook_results: HookResult[];
 }
 
 export interface CreationProgress {

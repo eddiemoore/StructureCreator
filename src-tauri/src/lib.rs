@@ -2,7 +2,7 @@ pub mod database;
 pub mod schema;
 
 pub use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput};
-pub use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree, SchemaNode, SchemaStats};
+pub use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree, SchemaNode, SchemaStats, SchemaHooks};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -29,6 +29,17 @@ pub struct LogEntry {
 pub struct CreateResult {
     pub logs: Vec<LogEntry>,
     pub summary: ResultSummary,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hook_results: Vec<HookResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HookResult {
+    pub command: String,
+    pub success: bool,
+    pub exit_code: Option<i32>,
+    pub stdout: Option<String>,
+    pub stderr: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +49,10 @@ pub struct ResultSummary {
     pub files_downloaded: usize,
     pub errors: usize,
     pub skipped: usize,
+    #[serde(default)]
+    pub hooks_executed: usize,
+    #[serde(default)]
+    pub hooks_failed: usize,
 }
 
 #[cfg(feature = "tauri-app")]
@@ -104,12 +119,115 @@ pub fn create_structure_from_tree(
         files_downloaded: 0,
         errors: 0,
         skipped: 0,
+        hooks_executed: 0,
+        hooks_failed: 0,
     };
+    let mut hook_results: Vec<HookResult> = Vec::new();
 
     // Create structure recursively
     create_node(&tree.root, &base_path, variables, dry_run, overwrite, &mut logs, &mut summary)?;
 
-    Ok(CreateResult { logs, summary })
+    // Execute post-create hooks if present and not in dry-run mode
+    if let Some(ref hooks) = tree.hooks {
+        if !hooks.post_create.is_empty() {
+            // Determine the working directory for hooks
+            // Use the root folder path if it was created, otherwise use output_path
+            let hook_working_dir = base_path.join(&tree.root.name);
+            let working_dir = if hook_working_dir.exists() {
+                hook_working_dir
+            } else {
+                base_path.clone()
+            };
+
+            for cmd in &hooks.post_create {
+                // Replace variables in command
+                let mut resolved_cmd = cmd.clone();
+                for (var_name, var_value) in variables {
+                    resolved_cmd = resolved_cmd.replace(var_name, var_value);
+                }
+
+                if dry_run {
+                    logs.push(LogEntry {
+                        log_type: "info".to_string(),
+                        message: format!("Would run hook: {}", resolved_cmd),
+                        details: Some(format!("Working directory: {}", working_dir.display())),
+                    });
+                } else {
+                    logs.push(LogEntry {
+                        log_type: "info".to_string(),
+                        message: format!("Running hook: {}", resolved_cmd),
+                        details: Some(format!("Working directory: {}", working_dir.display())),
+                    });
+
+                    let result = execute_hook(&resolved_cmd, &working_dir);
+
+                    if result.success {
+                        summary.hooks_executed += 1;
+                        logs.push(LogEntry {
+                            log_type: "success".to_string(),
+                            message: format!("Hook completed: {}", resolved_cmd),
+                            details: result.stdout.clone(),
+                        });
+                    } else {
+                        summary.hooks_failed += 1;
+                        logs.push(LogEntry {
+                            log_type: "error".to_string(),
+                            message: format!("Hook failed: {}", resolved_cmd),
+                            details: result.stderr.clone().or_else(|| {
+                                Some(format!("Exit code: {:?}", result.exit_code))
+                            }),
+                        });
+                    }
+
+                    hook_results.push(result);
+                }
+            }
+        }
+    }
+
+    Ok(CreateResult { logs, summary, hook_results })
+}
+
+/// Execute a hook command in the specified working directory
+fn execute_hook(command: &str, working_dir: &PathBuf) -> HookResult {
+    use std::process::Command;
+
+    // Use shell to execute the command for proper parsing
+    #[cfg(target_os = "windows")]
+    let result = Command::new("cmd")
+        .args(["/C", command])
+        .current_dir(working_dir)
+        .output();
+
+    #[cfg(not(target_os = "windows"))]
+    let result = Command::new("sh")
+        .args(["-c", command])
+        .current_dir(working_dir)
+        .output();
+
+    match result {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let exit_code = output.status.code();
+            let success = output.status.success();
+
+            HookResult {
+                command: command.to_string(),
+                success,
+                exit_code,
+                stdout: if stdout.is_empty() { None } else { Some(stdout) },
+                stderr: if stderr.is_empty() { None } else { Some(stderr) },
+            }
+        }
+        Err(e) => HookResult {
+            command: command.to_string(),
+            success: false,
+            exit_code: None,
+            stdout: None,
+            stderr: Some(format!("Failed to execute command: {}", e)),
+        },
+    }
 }
 
 /// Check if a string value is "truthy"

@@ -113,15 +113,27 @@ export const RightPanel = () => {
 
       setSummary(result.summary);
 
-      if (result.summary.errors > 0) {
+      const hasErrors = result.summary.errors > 0 || result.summary.hooks_failed > 0;
+      if (hasErrors) {
         setProgress({ status: "error" });
+        const errorParts = [];
+        if (result.summary.errors > 0) {
+          errorParts.push(`${result.summary.errors} error(s)`);
+        }
+        if (result.summary.hooks_failed > 0) {
+          errorParts.push(`${result.summary.hooks_failed} hook(s) failed`);
+        }
         addLog({
           type: "warning",
-          message: `Completed with ${result.summary.errors} error(s)`,
+          message: `Completed with ${errorParts.join(" and ")}`,
         });
       } else {
         setProgress({ status: "completed" });
-        addLog({ type: "success", message: "Structure created successfully!" });
+        const successParts = ["Structure created successfully!"];
+        if (result.summary.hooks_executed > 0) {
+          successParts.push(`${result.summary.hooks_executed} hook(s) executed.`);
+        }
+        addLog({ type: "success", message: successParts.join(" ") });
       }
     } catch (e) {
       console.error("Failed to create structure:", e);
@@ -164,7 +176,7 @@ export const RightPanel = () => {
       {/* Summary Card */}
       {summary && (
         <div className="px-4 py-3 border-b border-border-muted">
-          <div className="grid grid-cols-3 gap-2 text-center">
+          <div className={`grid gap-2 text-center ${(summary.hooks_executed > 0 || summary.hooks_failed > 0) ? "grid-cols-4" : "grid-cols-3"}`}>
             <div className="p-2 bg-card-bg rounded-mac border border-border-muted">
               <div className="text-mac-lg font-semibold text-system-green">
                 {summary.folders_created + summary.files_created + summary.files_downloaded}
@@ -181,6 +193,14 @@ export const RightPanel = () => {
               </div>
               <div className="text-mac-xs text-text-muted">Errors</div>
             </div>
+            {(summary.hooks_executed > 0 || summary.hooks_failed > 0) && (
+              <div className="p-2 bg-card-bg rounded-mac border border-border-muted">
+                <div className={`text-mac-lg font-semibold ${summary.hooks_failed > 0 ? "text-system-red" : "text-system-blue"}`}>
+                  {summary.hooks_executed}/{summary.hooks_executed + summary.hooks_failed}
+                </div>
+                <div className="text-mac-xs text-text-muted">Hooks</div>
+              </div>
+            )}
           </div>
         </div>
       )}
