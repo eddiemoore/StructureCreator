@@ -180,16 +180,8 @@ fn create_node_internal(
     // Handle conditional nodes (if/else)
     match node.node_type.as_str() {
         "if" => {
-            // Evaluate condition: check if variable exists and is truthy (non-empty)
-            // Variables are stored with % wrapping (e.g., %NAME%), so wrap the var name
-            let condition_met = if let Some(var_name) = &node.condition_var {
-                let lookup_key = format!("%{}%", var_name);
-                variables.get(&lookup_key)
-                    .map(|v| !v.is_empty())
-                    .unwrap_or(false)
-            } else {
-                false
-            };
+            // Evaluate condition using shared helper
+            let condition_met = evaluate_if_condition(node, variables);
 
             // Process children if condition is met
             if condition_met {
