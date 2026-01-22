@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result as SqliteResult};
+use rusqlite::{Connection, Result as SqliteResult, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,6 +18,30 @@ pub struct Template {
     pub updated_at: String,
 }
 
+/// Helper function to construct a Template from a database row.
+/// Expects columns in order: id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
+fn row_to_template(row: &Row) -> rusqlite::Result<Template> {
+    let variables_json: String = row.get(4)?;
+    let variables: HashMap<String, String> = serde_json::from_str(&variables_json)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            4,
+            rusqlite::types::Type::Text,
+            Box::new(e),
+        ))?;
+    Ok(Template {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        description: row.get(2)?,
+        schema_xml: row.get(3)?,
+        variables,
+        icon_color: row.get(5)?,
+        is_favorite: row.get::<_, i32>(6)? != 0,
+        use_count: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+    })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTemplateInput {
     pub name: String,
@@ -25,6 +49,8 @@ pub struct CreateTemplateInput {
     pub schema_xml: String,
     pub variables: HashMap<String, String>,
     pub icon_color: Option<String>,
+    #[serde(default)]
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,26 +122,10 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
              FROM templates
-             ORDER BY is_favorite DESC, use_count DESC, updated_at DESC"
+             ORDER BY is_favorite DESC, use_count DESC, updated_at DESC",
         )?;
 
-        let templates = stmt.query_map([], |row| {
-            let variables_json: String = row.get(4)?;
-            let variables: HashMap<String, String> = serde_json::from_str(&variables_json).unwrap_or_default();
-            Ok(Template {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                schema_xml: row.get(3)?,
-                variables,
-                icon_color: row.get(5)?,
-                is_favorite: row.get::<_, i32>(6)? != 0,
-                use_count: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
-            })
-        })?;
-
+        let templates = stmt.query_map([], row_to_template)?;
         templates.collect()
     }
 
@@ -125,28 +135,30 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
              FROM templates
-             WHERE id = ?"
+             WHERE id = ?",
         )?;
 
         let mut rows = stmt.query([id])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(row_to_template(row)?)),
+            None => Ok(None),
+        }
+    }
 
-        if let Some(row) = rows.next()? {
-            let variables_json: String = row.get(4)?;
-            let variables: HashMap<String, String> = serde_json::from_str(&variables_json).unwrap_or_default();
-            Ok(Some(Template {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                schema_xml: row.get(3)?,
-                variables,
-                icon_color: row.get(5)?,
-                is_favorite: row.get::<_, i32>(6)? != 0,
-                use_count: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
-            }))
-        } else {
-            Ok(None)
+    /// Find a template by name (case-insensitive match).
+    pub fn get_template_by_name(&self, name: &str) -> SqliteResult<Option<Template>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at
+             FROM templates
+             WHERE LOWER(name) = LOWER(?)",
+        )?;
+
+        let mut rows = stmt.query([name])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(row_to_template(row)?)),
+            None => Ok(None),
         }
     }
 
@@ -156,17 +168,19 @@ impl Database {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
         let variables_json = serde_json::to_string(&input.variables).unwrap_or_else(|_| "{}".to_string());
+        let is_favorite_int = if input.is_favorite { 1 } else { 0 };
 
         conn.execute(
             "INSERT INTO templates (id, name, description, schema_xml, variables, icon_color, is_favorite, use_count, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
-            [
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+            rusqlite::params![
                 &id,
                 &input.name,
                 &input.description.clone().unwrap_or_default(),
                 &input.schema_xml,
                 &variables_json,
                 &input.icon_color.clone().unwrap_or_else(|| "#0a84ff".to_string()),
+                is_favorite_int,
                 &now,
                 &now,
             ],
@@ -179,7 +193,7 @@ impl Database {
             schema_xml: input.schema_xml,
             variables: input.variables,
             icon_color: input.icon_color,
-            is_favorite: false,
+            is_favorite: input.is_favorite,
             use_count: 0,
             created_at: now.clone(),
             updated_at: now,
