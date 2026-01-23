@@ -18,7 +18,7 @@ import {
   ExportIcon,
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
-import type { SchemaTree, Template, ValidationRule } from "../types/schema";
+import type { SchemaTree, Template, ValidationRule, ParseWithInheritanceResult } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import type { ReactNode } from "react";
 
@@ -122,6 +122,7 @@ export const LeftPanel = () => {
     setVariables,
     setTemplates,
     setTemplatesLoading,
+    addLog,
   } = useAppStore();
 
   // State declarations
@@ -149,6 +150,17 @@ export const LeftPanel = () => {
   // Click-away and Escape handlers for popovers
   useClickAwayEscape(validationPopoverRef, editingValidation !== null, closeValidationPopover);
   useClickAwayEscape(transformHelpRef, showTransformHelp, closeTransformHelp);
+
+  // Helper to log inheritance resolution info
+  const logInheritanceResolved = useCallback((baseTemplates: string[]) => {
+    if (baseTemplates.length > 0) {
+      addLog({
+        type: "info",
+        message: "Template inheritance resolved",
+        details: `Extended: ${baseTemplates.join(" → ")}`,
+      });
+    }
+  }, [addLog]);
 
   // Load templates on mount
   useEffect(() => {
@@ -207,22 +219,43 @@ export const LeftPanel = () => {
       setSchemaPath(`template:${template.name}`);
       setSchemaContent(template.schema_xml);
 
-      const tree = await invoke<SchemaTree>("cmd_parse_schema", { content: template.schema_xml });
-      setSchemaTree(tree);
+      // Use inheritance-aware parsing to resolve any base templates
+      const result = await invoke<ParseWithInheritanceResult>(
+        "cmd_parse_schema_with_inheritance",
+        { content: template.schema_xml }
+      );
+      setSchemaTree(result.tree);
 
-      // Load variables from the template (with validation rules if present)
-      if (template.variables && Object.keys(template.variables).length > 0) {
-        const loadedVariables = Object.entries(template.variables).map(([name, value]) => ({
+      // Log info about inheritance if base templates were resolved
+      logInheritanceResolved(result.baseTemplates);
+
+      // Merge inherited variables with template's own variables
+      // Template's own variables take precedence over inherited ones
+      const mergedVariables = { ...result.mergedVariables, ...template.variables };
+
+      // Merge validation rules: inherited rules first, then template's own rules override
+      const mergedValidation = {
+        ...result.mergedVariableValidation,
+        ...template.variable_validation,
+      };
+
+      if (Object.keys(mergedVariables).length > 0) {
+        const loadedVariables = Object.entries(mergedVariables).map(([name, value]) => ({
           name,
           value,
-          validation: template.variable_validation?.[name],
+          validation: mergedValidation[name],
         }));
         setVariables(loadedVariables);
       }
 
       loadTemplates(); // Refresh to update use count
-    } catch (e) {
-      console.error("Failed to load template:", e);
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addLog({
+        type: "error",
+        message: "Failed to load template",
+        details: errorMessage,
+      });
     }
   };
 
@@ -281,8 +314,13 @@ export const LeftPanel = () => {
               filename,
             });
             setSchemaTree(tree);
-          } catch (e) {
-            console.error("Failed to scan ZIP:", e);
+          } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            addLog({
+              type: "error",
+              message: "Failed to scan ZIP file",
+              details: errorMessage,
+            });
           }
         } else {
           // Handle XML file
@@ -290,15 +328,43 @@ export const LeftPanel = () => {
           setSchemaContent(content);
 
           try {
-            const tree = await invoke<SchemaTree>("cmd_parse_schema", { content });
-            setSchemaTree(tree);
-          } catch (e) {
-            console.error("Failed to parse schema:", e);
+            // Use inheritance-aware parsing to resolve any extends attributes
+            const result = await invoke<ParseWithInheritanceResult>(
+              "cmd_parse_schema_with_inheritance",
+              { content }
+            );
+            setSchemaTree(result.tree);
+
+            // Log info about inheritance if base templates were resolved
+            logInheritanceResolved(result.baseTemplates);
+
+            // If there are inherited variables/validation, set them
+            // (matches template loading behavior - new schema replaces previous variables)
+            if (Object.keys(result.mergedVariables).length > 0) {
+              const loadedVariables = Object.entries(result.mergedVariables).map(([name, value]) => ({
+                name,
+                value,
+                validation: result.mergedVariableValidation[name],
+              }));
+              setVariables(loadedVariables);
+            }
+          } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            addLog({
+              type: "error",
+              message: "Failed to parse schema",
+              details: errorMessage,
+            });
           }
         }
       }
-    } catch (e) {
-      console.error("Failed to select schema:", e);
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addLog({
+        type: "error",
+        message: "Failed to open file dialog",
+        details: errorMessage,
+      });
     }
   };
 
@@ -317,8 +383,13 @@ export const LeftPanel = () => {
         try {
           const tree = await invoke<SchemaTree>("cmd_scan_folder", { folderPath: path });
           setSchemaTree(tree);
-        } catch (e) {
-          console.error("Failed to scan folder:", e);
+        } catch (e: unknown) {
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          addLog({
+            type: "error",
+            message: "Failed to scan folder",
+            details: errorMessage,
+          });
         }
       }
     } catch (e) {
