@@ -86,3 +86,79 @@ Demonstrates variable transformations for case conversion, pluralization, and da
 - `UTILITY_NAME`: `format date`
 - `MODEL_NAME`: `category`
 - `DATE`: `today` (or a date like `2024-01-15`)
+
+### inheritance-schema.xml
+
+Demonstrates template inheritance using the `extends` attribute. Templates can extend other saved templates to reduce duplication:
+
+```xml
+<template extends="base-react-app">
+  <folder name="features">
+    <file name="feature.ts" />
+  </folder>
+</template>
+```
+
+**How it works:**
+
+1. Create and save a base template (e.g., "base-react-app") with common structure
+2. Create a new template that uses `<template extends="base-react-app">`
+3. Add only the additional folders/files specific to this variant
+4. When loaded, the base template's content is merged with the extension
+
+**Features:**
+
+- **Multiple inheritance**: Extend multiple templates with comma separation: `extends="base1, base2"`
+- **Variable inheritance**: Variables from base templates are inherited (child values override base)
+- **Validation inheritance**: Validation rules are inherited and merged (later templates override earlier)
+- **Hooks inheritance**: Post-create hooks from base templates run first, then child hooks
+- **Nested inheritance**: Base templates can themselves extend other templates
+
+**Multiple inheritance merge order:**
+
+When extending multiple templates (`extends="base1, base2"`), they are merged left-to-right:
+- `base1` is resolved first, then `base2`'s children are appended
+- Variables from `base2` override variables from `base1`
+- Validation rules from `base2` completely replace rules from `base1` for the same variable
+
+**Diamond inheritance note:**
+
+If template C extends both A and B, and both A and B extend D, then D's content will appear **twice** in the final result (once via A, once via B). This is by design - use single inheritance chains if you need to avoid duplication.
+
+**Example base template** (save as "base-react-app"):
+
+```xml
+<folder name="%PROJECT%">
+  <file name="package.json" />
+  <file name="README.md" />
+  <folder name="src">
+    <file name="index.tsx" />
+    <file name="App.tsx" />
+  </folder>
+</folder>
+```
+
+**Extending template:**
+
+```xml
+<template extends="base-react-app">
+  <folder name="tests">
+    <file name="App.test.tsx" />
+  </folder>
+  <file name=".gitignore" />
+</template>
+```
+
+**Result after merge:**
+
+```
+%PROJECT%/
+├── package.json      (from base)
+├── README.md         (from base)
+├── src/              (from base)
+│   ├── index.tsx
+│   └── App.tsx
+├── tests/            (from extension)
+│   └── App.test.tsx
+└── .gitignore        (from extension)
+```

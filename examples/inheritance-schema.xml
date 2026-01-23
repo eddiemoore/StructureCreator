@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Template Inheritance Example
+
+  This template extends a base template called "base-react-app".
+  To use this example:
+  1. First, create a template named "base-react-app" with the content below
+  2. Then load this file to see the merged result
+
+  Base template content (save as "base-react-app"):
+
+  <folder name="%PROJECT%">
+    <file name="package.json" />
+    <file name="README.md" />
+    <folder name="src">
+      <file name="index.tsx" />
+      <file name="App.tsx" />
+    </folder>
+    <folder name="public">
+      <file name="index.html" />
+    </folder>
+  </folder>
+-->
+
+<template extends="base-react-app">
+  <!-- These folders/files will be appended to the base template's root.
+       Note: Folders are APPENDED, not merged. This "src" folder below creates
+       a second "src" entry in the tree (it does not merge with the base's "src").
+       The structure creator will create both, effectively combining their contents. -->
+
+  <folder name="src">
+    <folder name="components">
+      <file name="Button.tsx" />
+      <file name="Header.tsx" />
+    </folder>
+
+    <folder name="hooks">
+      <file name="useAuth.ts" />
+    </folder>
+  </folder>
+
+  <folder name="tests">
+    <file name="App.test.tsx" />
+  </folder>
+
+  <file name=".gitignore" />
+</template>

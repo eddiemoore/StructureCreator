@@ -58,6 +58,21 @@ export interface SchemaTree {
   hooks?: SchemaHooks;
 }
 
+/**
+ * Result of parsing a schema with template inheritance resolved.
+ * Returned by cmd_parse_schema_with_inheritance.
+ */
+export interface ParseWithInheritanceResult {
+  /** The fully resolved schema tree with inherited content merged */
+  tree: SchemaTree;
+  /** Variables merged from all base templates (child values override base) */
+  mergedVariables: Record<string, string>;
+  /** Validation rules merged from all base templates (child rules override base) */
+  mergedVariableValidation: Record<string, ValidationRule>;
+  /** List of base template names that were extended (in resolution order) */
+  baseTemplates: string[];
+}
+
 export interface ValidationRule {
   pattern?: string;
   minLength?: number;
