@@ -222,6 +222,8 @@ struct TemplateExport {
     icon_color: Option<String>,
     #[serde(default)]
     is_favorite: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    tags: Vec<String>,
 }
 
 /// CLI execution result
@@ -849,6 +851,7 @@ fn cmd_templates_export(name: &str, output: &std::path::Path, overwrite: bool, q
         variable_validation: template.variable_validation,
         icon_color: template.icon_color,
         is_favorite: template.is_favorite,
+        tags: template.tags,
     };
 
     let content = match serde_json::to_string_pretty(&export) {
@@ -968,6 +971,7 @@ fn cmd_templates_import(path: &std::path::Path, force: bool, quiet: bool) -> Cli
         variable_validation: export.variable_validation,
         icon_color: export.icon_color,
         is_favorite: export.is_favorite,
+        tags: export.tags,
     };
 
     let template = match db.create_template(input) {

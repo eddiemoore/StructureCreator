@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, readFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../store/appStore";
+import { useAppStore, getFilteredTemplates } from "../store/appStore";
 import { useClickAwayEscape } from "../hooks";
 import {
   CheckIcon,
   XIcon,
   FolderIcon,
+  FileIcon,
   UploadIcon,
+  DownloadIcon,
   LayersIcon,
   PlusIcon,
   StarIcon,
@@ -16,87 +18,28 @@ import {
   SaveIcon,
   ImportIcon,
   ExportIcon,
+  SearchIcon,
+  TagIcon,
+  SettingsIcon,
+  ChevronDownIcon,
+  ArrowUpIcon,
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
-import type { SchemaTree, Template, ValidationRule, ParseWithInheritanceResult } from "../types/schema";
+import { TagInput } from "./TagInput";
+import type { SchemaTree, Template, ValidationRule, ParseWithInheritanceResult, TemplateSortField } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import type { ReactNode } from "react";
 
 type SchemaSourceType = "xml" | "folder";
 
+// Constants for UI limits (moved to module scope for performance)
+const MAX_VISIBLE_FILTER_TAGS = 8;
+const MAX_VISIBLE_TEMPLATE_TAGS = 3;
+/** Duration to display tag operation errors before auto-dismissing (ms) */
+const TAG_ERROR_DISPLAY_MS = 3000;
+
 const SectionTitle = ({ children }: { children: ReactNode }) => (
   <div className="text-mac-xs font-medium text-text-muted mb-2">{children}</div>
-);
-
-const FileIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="16" y1="13" x2="8" y2="13" />
-    <line x1="16" y1="17" x2="8" y2="17" />
-    <polyline points="10 9 9 9 8 9" />
-  </svg>
-);
-
-const DownloadIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-);
-
-const SettingsIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
-);
-
-const ChevronDownIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
 );
 
 export const LeftPanel = () => {
@@ -110,6 +53,10 @@ export const LeftPanel = () => {
     validationErrors,
     templates,
     templatesLoading,
+    templateSearchQuery,
+    templateSelectedTags,
+    templateSortBy,
+    templateSortOrder,
     setSchemaPath,
     setSchemaContent,
     setSchemaTree,
@@ -122,6 +69,11 @@ export const LeftPanel = () => {
     setVariables,
     setTemplates,
     setTemplatesLoading,
+    setTemplateSearchQuery,
+    toggleTemplateTag,
+    setTemplateSelectedTags,
+    setTemplateSortBy,
+    setTemplateSortOrder,
     addLog,
   } = useAppStore();
 
@@ -136,20 +88,43 @@ export const LeftPanel = () => {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
+  const [newTemplateTags, setNewTemplateTags] = useState<string[]>([]);
   const [importExportMode, setImportExportMode] = useState<"import" | "export" | "bulk-export" | null>(null);
   const [exportTemplateId, setExportTemplateId] = useState<string | undefined>();
+  const [editingTagsTemplateId, setEditingTagsTemplateId] = useState<string | null>(null);
+  const [editingTags, setEditingTags] = useState<string[]>([]);
+  const [showAllFilterTags, setShowAllFilterTags] = useState(false);
+  const [tagOperationError, setTagOperationError] = useState<string | null>(null);
+  const [isUpdatingTags, setIsUpdatingTags] = useState(false);
+
+  // Debounced search query for better performance
+  const deferredSearchQuery = useDeferredValue(templateSearchQuery);
 
   // Refs for click-away detection
   const validationPopoverRef = useRef<HTMLDivElement>(null);
   const transformHelpRef = useRef<HTMLDivElement>(null);
+  const tagEditingRef = useRef<HTMLDivElement>(null);
+  // Ref for error timeout cleanup
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup error timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Stable callbacks for click-away hooks
   const closeValidationPopover = useCallback(() => setEditingValidation(null), []);
   const closeTransformHelp = useCallback(() => setShowTransformHelp(false), []);
+  const closeTagEditing = useCallback(() => setEditingTagsTemplateId(null), []);
 
   // Click-away and Escape handlers for popovers
   useClickAwayEscape(validationPopoverRef, editingValidation !== null, closeValidationPopover);
   useClickAwayEscape(transformHelpRef, showTransformHelp, closeTransformHelp);
+  useClickAwayEscape(tagEditingRef, editingTagsTemplateId !== null, closeTagEditing);
 
   // Helper to log inheritance resolution info
   const logInheritanceResolved = useCallback((baseTemplates: string[]) => {
@@ -162,10 +137,62 @@ export const LeftPanel = () => {
     }
   }, [addLog]);
 
-  // Load templates on mount
+  // Load templates on mount (tags are derived from templates)
   useEffect(() => {
     loadTemplates();
   }, []);
+
+  // Sync editingTags with current template data to prevent stale state
+  useEffect(() => {
+    if (editingTagsTemplateId) {
+      const currentTemplate = templates.find((t) => t.id === editingTagsTemplateId);
+      if (currentTemplate) {
+        // Use null coalescing for legacy templates that might not have tags
+        setEditingTags(currentTemplate.tags ?? []);
+      } else {
+        // Template was deleted, close the editor
+        setEditingTagsTemplateId(null);
+      }
+    }
+  }, [templates, editingTagsTemplateId]);
+
+  // Focus trap for tag editing popover
+  useEffect(() => {
+    if (!editingTagsTemplateId || !tagEditingRef.current) return;
+
+    // Auto-focus the first focusable element (TagInput's input)
+    const focusTimer = setTimeout(() => {
+      const firstFocusable = tagEditingRef.current?.querySelector<HTMLElement>(
+        'input:not([disabled]), button:not([disabled])'
+      );
+      firstFocusable?.focus();
+    }, 0);
+
+    // Tab trap handler
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !tagEditingRef.current) return;
+
+      const focusableElements = tagEditingRef.current.querySelectorAll<HTMLElement>(
+        'input:not([disabled]), button:not([disabled])'
+      );
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (e.shiftKey && document.activeElement === firstElement) {
+        e.preventDefault();
+        lastElement?.focus();
+      } else if (!e.shiftKey && document.activeElement === lastElement) {
+        e.preventDefault();
+        firstElement?.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(focusTimer);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [editingTagsTemplateId]);
 
   const loadTemplates = async () => {
     setTemplatesLoading(true);
@@ -200,13 +227,38 @@ export const LeftPanel = () => {
         variables: variablesMap,
         variableValidation: validationMap,
         iconColor: null,
+        tags: newTemplateTags,
       });
       setIsSavingTemplate(false);
       setNewTemplateName("");
       setNewTemplateDescription("");
+      setNewTemplateTags([]);
       loadTemplates();
+      // Tags will be derived from templates, no need for separate loadAllTags()
     } catch (e) {
       console.error("Failed to save template:", e);
+    }
+  };
+
+  const handleUpdateTemplateTags = async (templateId: string, tags: string[]) => {
+    setIsUpdatingTags(true);
+    setTagOperationError(null);
+    // Clear any existing error timeout
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+    }
+    try {
+      await invoke("cmd_update_template_tags", { id: templateId, tags });
+      loadTemplates();
+      // Tags will be derived from templates, no need for separate loadAllTags()
+    } catch (e) {
+      // Show user-friendly message, log technical details for debugging
+      setTagOperationError("Failed to update tags. Please try again.");
+      // Auto-clear error after 3 seconds (tracked for cleanup)
+      errorTimeoutRef.current = setTimeout(() => setTagOperationError(null), TAG_ERROR_DISPLAY_MS);
+      console.error("Failed to update template tags:", e);
+    } finally {
+      setIsUpdatingTags(false);
     }
   };
 
@@ -449,6 +501,29 @@ export const LeftPanel = () => {
   const fileName = schemaPath?.split("/").pop() || "";
   const lineCount = schemaContent?.split("\n").length || 0;
   const isFolderSource = sourceType === "folder";
+
+  // Compute filtered and sorted templates (using deferred query for smooth typing)
+  const filteredTemplates = useMemo(
+    () =>
+      getFilteredTemplates(
+        templates,
+        deferredSearchQuery,
+        templateSelectedTags,
+        templateSortBy,
+        templateSortOrder
+      ),
+    [templates, deferredSearchQuery, templateSelectedTags, templateSortBy, templateSortOrder]
+  );
+
+  // Derive unique tags from templates (avoids separate API call)
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    templates.forEach((t) => (t.tags ?? []).forEach((tag) => tagSet.add(tag)));
+    return Array.from(tagSet).sort();
+  }, [templates]);
+
+  // Check if search results are stale (for visual feedback)
+  const isSearchStale = templateSearchQuery !== deferredSearchQuery;
 
   return (
     <aside className="bg-mac-sidebar border-r border-border-muted flex flex-col overflow-hidden">
@@ -938,12 +1013,22 @@ export const LeftPanel = () => {
               placeholder="Description (optional)"
               className="w-full mac-input mb-2 text-mac-sm"
             />
+            <div className="mb-2">
+              <div className="text-mac-xs text-text-muted mb-1">Tags</div>
+              <TagInput
+                tags={newTemplateTags}
+                onChange={setNewTemplateTags}
+                suggestions={availableTags}
+                placeholder="Add tags (e.g., react, typescript)..."
+              />
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => {
                   setIsSavingTemplate(false);
                   setNewTemplateName("");
                   setNewTemplateDescription("");
+                  setNewTemplateTags([]);
                 }}
                 className="px-2 py-1 text-mac-xs text-text-secondary hover:text-text-primary transition-colors"
               >
@@ -960,6 +1045,115 @@ export const LeftPanel = () => {
           </div>
         )}
 
+        {/* Search Input */}
+        {templates.length > 0 && (
+          <div className="relative mb-2">
+            <input
+              type="text"
+              value={templateSearchQuery}
+              onChange={(e) => setTemplateSearchQuery(e.target.value)}
+              placeholder="Search templates..."
+              className={`w-full mac-input pl-8 text-mac-sm ${isSearchStale ? "opacity-70" : ""}`}
+              aria-label="Search templates"
+              aria-busy={isSearchStale}
+            />
+            <SearchIcon
+              size={14}
+              className={`absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${
+                isSearchStale ? "text-accent animate-pulse" : "text-text-muted"
+              }`}
+              aria-hidden="true"
+            />
+            {templateSearchQuery && (
+              <button
+                onClick={() => setTemplateSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                aria-label="Clear search"
+              >
+                <XIcon size={12} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Tag Filter Chips */}
+        {availableTags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2" role="group" aria-label="Filter by tags">
+            {(showAllFilterTags ? availableTags : availableTags.slice(0, MAX_VISIBLE_FILTER_TAGS)).map((tag) => (
+              <button
+                key={tag}
+                onClick={() => toggleTemplateTag(tag)}
+                aria-pressed={templateSelectedTags.includes(tag)}
+                className={`px-2 py-0.5 text-mac-xs rounded-full transition-colors ${
+                  templateSelectedTags.includes(tag)
+                    ? "bg-accent text-white"
+                    : "bg-mac-bg-hover text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+            {availableTags.length > MAX_VISIBLE_FILTER_TAGS && (
+              <button
+                onClick={() => setShowAllFilterTags(!showAllFilterTags)}
+                aria-expanded={showAllFilterTags}
+                className="px-2 py-0.5 text-mac-xs text-accent hover:text-accent/80"
+              >
+                {showAllFilterTags ? "Show less" : `+${availableTags.length - MAX_VISIBLE_FILTER_TAGS} more`}
+              </button>
+            )}
+            {templateSelectedTags.length > 0 && (
+              <button
+                onClick={() => setTemplateSelectedTags([])}
+                className="px-2 py-0.5 text-mac-xs text-text-muted hover:text-text-primary"
+                aria-label="Clear all tag filters"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Tag operation error feedback */}
+        {tagOperationError && (
+          <div
+            className="mb-2 px-2 py-1 text-mac-xs text-system-red bg-system-red/10 rounded"
+            role="alert"
+            aria-live="polite"
+          >
+            {tagOperationError}
+          </div>
+        )}
+
+        {/* Sort Controls */}
+        {templates.length > 0 && (
+          <div className="flex items-center gap-2 mb-2">
+            <label htmlFor="template-sort" className="text-mac-xs text-text-muted">Sort:</label>
+            <select
+              id="template-sort"
+              value={templateSortBy}
+              onChange={(e) => setTemplateSortBy(e.target.value as TemplateSortField)}
+              className="mac-input text-mac-xs py-1 px-2 flex-1"
+            >
+              <option value="updated_at">Last Updated</option>
+              <option value="use_count">Most Used</option>
+              <option value="name">Name</option>
+              <option value="created_at">Created</option>
+            </select>
+            <button
+              onClick={() => setTemplateSortOrder(templateSortOrder === "asc" ? "desc" : "asc")}
+              className="w-7 h-7 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-mac-bg-hover transition-colors"
+              title={templateSortOrder === "asc" ? "Ascending (click for descending)" : "Descending (click for ascending)"}
+              aria-label={`Sort ${templateSortOrder === "asc" ? "ascending" : "descending"}, click to toggle`}
+            >
+              <ArrowUpIcon
+                size={14}
+                className={`transition-transform ${templateSortOrder === "asc" ? "" : "rotate-180"}`}
+              />
+            </button>
+          </div>
+        )}
+
         <div className="space-y-2 flex-1">
           {templatesLoading ? (
             <div className="text-center text-text-muted text-mac-sm py-4">
@@ -971,59 +1165,138 @@ export const LeftPanel = () => {
               <div>No templates yet</div>
               <div className="text-mac-xs mt-1">Load a schema and save it as a template</div>
             </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="text-center text-text-muted text-mac-sm py-4">
+              <SearchIcon size={24} className="mx-auto mb-2 opacity-30" />
+              <div>No matching templates</div>
+              <div className="text-mac-xs mt-1">Try a different search or filter</div>
+            </div>
           ) : (
-            templates.map((template) => (
+            filteredTemplates.map((template) => {
+              const templateTags = template.tags ?? [];
+              return (
               <div
                 key={template.id}
-                onClick={() => handleLoadTemplate(template)}
-                className="mac-sidebar-item p-3 bg-card-bg border border-border-muted rounded-mac cursor-pointer group"
+                className="bg-card-bg border border-border-muted rounded-mac cursor-pointer group"
               >
+                {/* Tag editing popover */}
+                {editingTagsTemplateId === template.id && (
+                  <div ref={tagEditingRef} className="p-3 border-b border-border-muted">
+                    <div className="text-mac-xs text-text-muted mb-1">Edit tags</div>
+                    <TagInput
+                      tags={editingTags}
+                      onChange={setEditingTags}
+                      suggestions={availableTags}
+                      placeholder="Add tags..."
+                      disabled={isUpdatingTags}
+                    />
+                    <div className="flex justify-end gap-2 mt-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTagsTemplateId(null);
+                        }}
+                        disabled={isUpdatingTags}
+                        className="px-2 py-1 text-mac-xs text-text-secondary hover:text-text-primary disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateTemplateTags(template.id, editingTags);
+                          setEditingTagsTemplateId(null);
+                        }}
+                        disabled={isUpdatingTags}
+                        className="px-2 py-1 text-mac-xs font-medium text-accent hover:bg-accent/10 rounded disabled:opacity-50"
+                      >
+                        {isUpdatingTags ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div
-                  className="w-8 h-8 rounded-mac flex items-center justify-center flex-shrink-0"
-                  style={{
-                    backgroundColor: `${template.icon_color || "#0a84ff"}15`,
-                    color: template.icon_color || "#0a84ff",
-                  }}
+                  onClick={() => handleLoadTemplate(template)}
+                  className="mac-sidebar-item p-3"
                 >
-                  <LayersIcon size={16} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-mac-sm font-medium text-text-primary truncate">
-                    {template.name}
+                  <div
+                    className="w-8 h-8 rounded-mac flex items-center justify-center flex-shrink-0"
+                    style={{
+                      backgroundColor: `${template.icon_color || "#0a84ff"}15`,
+                      color: template.icon_color || "#0a84ff",
+                    }}
+                  >
+                    <LayersIcon size={16} />
                   </div>
-                  <div className="text-mac-xs text-text-muted truncate">
-                    {template.description || `Used ${template.use_count} times`}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-mac-sm font-medium text-text-primary truncate">
+                      {template.name}
+                    </div>
+                    <div className="text-mac-xs text-text-muted truncate">
+                      {template.description || `Used ${template.use_count} times`}
+                    </div>
+                    {/* Tags display */}
+                    {templateTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {templateTags.slice(0, MAX_VISIBLE_TEMPLATE_TAGS).map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-1.5 py-0.5 text-mac-xs bg-mac-bg-hover text-text-muted rounded"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {templateTags.length > MAX_VISIBLE_TEMPLATE_TAGS && (
+                          <span className="text-mac-xs text-text-muted">
+                            +{templateTags.length - MAX_VISIBLE_TEMPLATE_TAGS}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => handleToggleFavorite(e, template.id)}
-                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
-                      template.is_favorite
-                        ? "text-system-orange"
-                        : "text-text-muted hover:text-system-orange"
-                    }`}
-                    title={template.is_favorite ? "Remove from favorites" : "Add to favorites"}
-                  >
-                    <StarIcon size={14} filled={template.is_favorite} />
-                  </button>
-                  <button
-                    onClick={(e) => handleExportTemplate(e, template.id)}
-                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
-                    title="Export template"
-                  >
-                    <ExportIcon size={14} />
-                  </button>
-                  <button
-                    onClick={(e) => handleDeleteTemplate(e, template.id)}
-                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors"
-                    title="Delete template"
-                  >
-                    <TrashIcon size={14} />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handleToggleFavorite(e, template.id)}
+                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                        template.is_favorite
+                          ? "text-system-orange"
+                          : "text-text-muted hover:text-system-orange"
+                      }`}
+                      title={template.is_favorite ? "Remove from favorites" : "Add to favorites"}
+                    >
+                      <StarIcon size={14} filled={template.is_favorite} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTags(templateTags);
+                        setEditingTagsTemplateId(template.id);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                      title="Edit tags"
+                      aria-label={`Edit tags for ${template.name}`}
+                    >
+                      <TagIcon size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => handleExportTemplate(e, template.id)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                      title="Export template"
+                    >
+                      <ExportIcon size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteTemplate(e, template.id)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors"
+                      title="Delete template"
+                    >
+                      <TrashIcon size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

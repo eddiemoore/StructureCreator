@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortField, SortOrder } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
@@ -168,6 +168,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   templates: [],
   templatesLoading: false,
 
+  // Template filtering
+  templateSearchQuery: "",
+  templateSelectedTags: [],
+  templateSortBy: "updated_at" as TemplateSortField,
+  templateSortOrder: "desc" as SortOrder,
+
   // Settings
   settings: DEFAULT_SETTINGS,
   settingsLoading: false,
@@ -275,6 +281,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTemplates: (templates: Template[]) => set({ templates }),
 
   setTemplatesLoading: (templatesLoading: boolean) => set({ templatesLoading }),
+
+  setTemplateSearchQuery: (templateSearchQuery: string) => set({ templateSearchQuery }),
+
+  setTemplateSelectedTags: (templateSelectedTags: string[]) => set({ templateSelectedTags }),
+
+  toggleTemplateTag: (tag: string) =>
+    set((state) => ({
+      templateSelectedTags: state.templateSelectedTags.includes(tag)
+        ? state.templateSelectedTags.filter((t) => t !== tag)
+        : [...state.templateSelectedTags, tag],
+    })),
+
+  setTemplateSortBy: (templateSortBy: TemplateSortField) => set({ templateSortBy }),
+
+  setTemplateSortOrder: (templateSortOrder: SortOrder) => set({ templateSortOrder }),
 
   setSettings: (settings: Settings) => set({ settings }),
 
@@ -586,3 +607,66 @@ export const useAppStore = create<AppState>((set, get) => ({
     return state.schemaHistoryIndex < state.schemaHistory.length - 1;
   },
 }));
+
+/**
+ * Filter and sort templates based on search query, tags, and sort options.
+ *
+ * @param templates - Array of templates to filter
+ * @param searchQuery - Text to search in name and description
+ * @param selectedTags - Tags to filter by (AND logic - must have ALL selected tags)
+ * @param sortBy - Field to sort by
+ * @param sortOrder - Sort direction (asc/desc)
+ * @returns Filtered and sorted templates with favorites always first
+ */
+export const getFilteredTemplates = (
+  templates: Template[],
+  searchQuery: string,
+  selectedTags: string[],
+  sortBy: TemplateSortField,
+  sortOrder: SortOrder
+): Template[] => {
+  let filtered = [...templates];
+
+  // Search filter (name and description)
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        (t.description?.toLowerCase().includes(q) ?? false)
+    );
+  }
+
+  // Tag filter (AND logic - must have ALL selected tags)
+  if (selectedTags.length > 0) {
+    filtered = filtered.filter((t) =>
+      selectedTags.every((tag) => (t.tags ?? []).includes(tag))
+    );
+  }
+
+  // Single sort: favorites first, then by selected field
+  return filtered.sort((a, b) => {
+    // Favorites always come first
+    if (a.is_favorite !== b.is_favorite) {
+      return a.is_favorite ? -1 : 1;
+    }
+
+    // Then sort by selected field
+    let cmp = 0;
+    switch (sortBy) {
+      case "name":
+        cmp = a.name.localeCompare(b.name);
+        break;
+      case "created_at":
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
+      case "use_count":
+        cmp = a.use_count - b.use_count;
+        break;
+      case "updated_at":
+        cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+        break;
+    }
+    return sortOrder === "asc" ? cmp : -cmp;
+  });
+};

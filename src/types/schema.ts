@@ -139,6 +139,7 @@ export interface Template {
   use_count: number;
   created_at: string;
   updated_at: string;
+  tags: string[];
 }
 
 export interface TemplateExport {
@@ -147,7 +148,12 @@ export interface TemplateExport {
   schema_xml: string;
   variables?: Record<string, string>;
   icon_color: string | null;
+  tags?: string[];
 }
+
+// Template filter/sort types
+export type TemplateSortField = "name" | "created_at" | "use_count" | "updated_at";
+export type SortOrder = "asc" | "desc";
 
 export interface TemplateExportFile {
   version: string;
@@ -338,6 +344,12 @@ export interface AppState {
   templates: Template[];
   templatesLoading: boolean;
 
+  // Template filtering
+  templateSearchQuery: string;
+  templateSelectedTags: string[];
+  templateSortBy: TemplateSortField;
+  templateSortOrder: SortOrder;
+
   // Settings
   settings: Settings;
   settingsLoading: boolean;
@@ -372,6 +384,11 @@ export interface AppState {
   setValidationErrors: (errors: ValidationError[]) => void;
   setTemplates: (templates: Template[]) => void;
   setTemplatesLoading: (loading: boolean) => void;
+  setTemplateSearchQuery: (query: string) => void;
+  setTemplateSelectedTags: (tags: string[]) => void;
+  toggleTemplateTag: (tag: string) => void;
+  setTemplateSortBy: (sortBy: TemplateSortField) => void;
+  setTemplateSortOrder: (order: SortOrder) => void;
   setSettings: (settings: Settings) => void;
   setSettingsLoading: (loading: boolean) => void;
   updateSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
