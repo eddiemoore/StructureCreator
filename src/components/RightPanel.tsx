@@ -7,7 +7,8 @@ import {
   ClockIcon,
   AlertCircleIcon,
 } from "./Icons";
-import type { CreateResult, ResultSummary, ValidationError, ValidationRule } from "../types/schema";
+import { DiffPreviewModal } from "./DiffPreviewModal";
+import type { CreateResult, ResultSummary, ValidationError, ValidationRule, DiffResult } from "../types/schema";
 
 const WarningIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
   <svg
@@ -37,8 +38,16 @@ export const RightPanel = () => {
     progress,
     dryRun,
     overwrite,
+    diffResult,
+    diffLoading,
+    diffError,
+    showDiffModal,
     setDryRun,
     setOverwrite,
+    setDiffResult,
+    setDiffLoading,
+    setDiffError,
+    setShowDiffModal,
     setProgress,
     addLog,
     clearLogs,
@@ -62,15 +71,8 @@ export const RightPanel = () => {
     });
   };
 
-  const handleCreate = async () => {
-    if (!canExecute) return;
-
-    clearLogs();
-    setSummary(null);
-    setExpandedErrors(new Set());
-    setValidationErrors([]);
-
-    // Build variable maps for validation and structure creation
+  // Build variable maps from current variables
+  const buildVariableMaps = () => {
     const varsMap: Record<string, string> = {};
     const rulesMap: Record<string, ValidationRule> = {};
     variables.forEach((v) => {
@@ -79,44 +81,55 @@ export const RightPanel = () => {
         rulesMap[v.name] = v.validation;
       }
     });
+    return { varsMap, rulesMap };
+  };
 
-    // Run validation if any rules exist
-    if (Object.keys(rulesMap).length > 0) {
-      addLog({ type: "info", message: "Validating variables..." });
-      setProgress({ status: "running", current: 0, total: 0 });
+  // Run validation and return true if valid
+  const runValidation = async (varsMap: Record<string, string>, rulesMap: Record<string, ValidationRule>): Promise<boolean> => {
+    if (Object.keys(rulesMap).length === 0) {
+      return true;
+    }
 
-      try {
-        const errors = await invoke<ValidationError[]>("cmd_validate_variables", {
-          variables: varsMap,
-          rules: rulesMap,
-        });
+    addLog({ type: "info", message: "Validating variables..." });
+    setProgress({ status: "running", current: 0, total: 0 });
 
-        if (errors.length > 0) {
-          setValidationErrors(errors);
-          addLog({
-            type: "error",
-            message: `Validation failed: ${errors.length} error${errors.length > 1 ? "s" : ""}. Check the Variables section to fix.`,
-          });
-          errors.forEach((err) => {
-            addLog({
-              type: "error",
-              message: err.message,
-              details: `Variable: ${err.variable_name}`,
-            });
-          });
-          setProgress({ status: "error" });
-          return;
-        }
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : String(e);
+    try {
+      const errors = await invoke<ValidationError[]>("cmd_validate_variables", {
+        variables: varsMap,
+        rules: rulesMap,
+      });
+
+      if (errors.length > 0) {
+        setValidationErrors(errors);
         addLog({
           type: "error",
-          message: `Validation failed: ${errorMessage}`,
+          message: `Validation failed: ${errors.length} error${errors.length > 1 ? "s" : ""}. Check the Variables section to fix.`,
+        });
+        errors.forEach((err) => {
+          addLog({
+            type: "error",
+            message: err.message,
+            details: `Variable: ${err.variable_name}`,
+          });
         });
         setProgress({ status: "error" });
-        return;
+        return false;
       }
+      return true;
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addLog({
+        type: "error",
+        message: `Validation failed: ${errorMessage}`,
+      });
+      setProgress({ status: "error" });
+      return false;
     }
+  };
+
+  // Execute the actual structure creation
+  const executeCreate = async (isDryRun: boolean) => {
+    const { varsMap } = buildVariableMaps();
 
     setProgress({
       status: "running",
@@ -125,7 +138,7 @@ export const RightPanel = () => {
     });
 
     try {
-      addLog({ type: "info", message: "Starting structure creation..." });
+      addLog({ type: "info", message: isDryRun ? "Starting dry run..." : "Starting structure creation..." });
 
       let result: CreateResult;
 
@@ -134,7 +147,7 @@ export const RightPanel = () => {
           content: schemaContent,
           outputPath,
           variables: varsMap,
-          dryRun,
+          dryRun: isDryRun,
           overwrite,
         });
       } else if (schemaTree) {
@@ -142,7 +155,7 @@ export const RightPanel = () => {
           tree: schemaTree,
           outputPath,
           variables: varsMap,
-          dryRun,
+          dryRun: isDryRun,
           overwrite,
         });
       } else {
@@ -175,7 +188,7 @@ export const RightPanel = () => {
         });
       } else {
         setProgress({ status: "completed" });
-        const successParts = ["Structure created successfully!"];
+        const successParts = [isDryRun ? "Dry run completed!" : "Structure created successfully!"];
         if (result.summary.hooks_executed > 0) {
           successParts.push(`${result.summary.hooks_executed} hook(s) executed.`);
         }
@@ -186,6 +199,68 @@ export const RightPanel = () => {
       setProgress({ status: "error" });
       addLog({ type: "error", message: `Fatal error: ${e}` });
     }
+  };
+
+  const handleCreate = async () => {
+    if (!canExecute) return;
+
+    clearLogs();
+    setSummary(null);
+    setExpandedErrors(new Set());
+    setValidationErrors([]);
+
+    const { varsMap, rulesMap } = buildVariableMaps();
+
+    // Run validation first
+    const isValid = await runValidation(varsMap, rulesMap);
+    if (!isValid) return;
+
+    // If dry run is enabled, generate diff preview instead
+    if (dryRun && schemaTree) {
+      setDiffLoading(true);
+      setDiffError(null);
+      setDiffResult(null);
+      setShowDiffModal(true);
+
+      try {
+        const result = await invoke<DiffResult>("cmd_generate_diff_preview", {
+          tree: schemaTree,
+          outputPath,
+          variables: varsMap,
+          overwrite,
+        });
+        setDiffResult(result);
+      } catch (e) {
+        console.error("Failed to generate diff preview:", e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        setDiffError(errorMessage);
+        // Don't close modal - show error in modal instead
+      } finally {
+        setDiffLoading(false);
+      }
+      return;
+    }
+
+    // Otherwise, execute creation directly
+    await executeCreate(false);
+  };
+
+  // Handle proceeding from diff preview
+  const handleProceedFromDiff = async () => {
+    setShowDiffModal(false);
+    setDiffResult(null);
+    setDiffError(null);
+    setDiffLoading(false);
+    // Execute the actual creation (not dry run)
+    await executeCreate(false);
+  };
+
+  // Handle closing diff modal
+  const handleCloseDiffModal = () => {
+    setShowDiffModal(false);
+    setDiffResult(null);
+    setDiffError(null);
+    setDiffLoading(false);
   };
 
   const errorCount = progress.logs.filter((l) => l.type === "error").length;
@@ -333,6 +408,16 @@ export const RightPanel = () => {
           )}
         </div>
       </div>
+
+      {/* Diff Preview Modal */}
+      <DiffPreviewModal
+        isOpen={showDiffModal}
+        onClose={handleCloseDiffModal}
+        diffResult={diffResult}
+        onProceed={handleProceedFromDiff}
+        isLoading={diffLoading}
+        error={diffError}
+      />
     </aside>
   );
 };

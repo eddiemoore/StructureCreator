@@ -229,6 +229,84 @@ export interface CreateResult {
   hook_results: HookResult[];
 }
 
+// ============================================================================
+// Diff Preview Types
+// ============================================================================
+
+/** Action that would be taken for a filesystem entry */
+export type DiffAction = "create" | "overwrite" | "skip" | "unchanged";
+
+/** Type of node in the diff tree */
+export type DiffNodeType = "folder" | "file";
+
+/** Type of diff line */
+export type DiffLineType = "add" | "remove" | "context" | "truncated";
+
+/** A single line in a diff hunk */
+export interface DiffLine {
+  /** Type of this diff line */
+  line_type: DiffLineType;
+  /** The line content */
+  content: string;
+}
+
+/** A diff hunk representing a contiguous block of changes */
+export interface DiffHunk {
+  /** Line number in old file (1-indexed) */
+  old_start: number;
+  /** Number of lines from old file in this hunk */
+  old_count: number;
+  /** Line number in new file (1-indexed) */
+  new_start: number;
+  /** Number of lines from new file in this hunk */
+  new_count: number;
+  /** The diff lines */
+  lines: DiffLine[];
+}
+
+/** Represents a file or folder in the diff preview tree */
+export interface DiffNode {
+  /** Unique identifier for frontend tree navigation */
+  id: string;
+  /** Type of this node (folder or file) */
+  node_type: DiffNodeType;
+  /** Display name (with variables substituted) */
+  name: string;
+  /** Full path relative to output directory */
+  path: string;
+  /** Action to be taken */
+  action: DiffAction;
+  /** For files: existing content (if overwriting) */
+  existing_content?: string;
+  /** For files: new content to be written */
+  new_content?: string;
+  /** For files: computed diff hunks (for text files only) */
+  diff_hunks?: DiffHunk[];
+  /** For files with URLs: the source URL */
+  url?: string;
+  /** Whether this is a binary file (no text diff available) */
+  is_binary: boolean;
+  /** Child nodes (for folders) */
+  children?: DiffNode[];
+}
+
+/** Summary statistics for the diff preview */
+export interface DiffSummary {
+  total_items: number;
+  creates: number;
+  overwrites: number;
+  skips: number;
+  unchanged_folders: number;
+  /** Warnings generated during diff preview (e.g., invalid repeat counts) */
+  warnings?: string[];
+}
+
+/** Complete diff preview result */
+export interface DiffResult {
+  root: DiffNode;
+  summary: DiffSummary;
+}
+
 export interface CreationProgress {
   current: number;
   total: number;
@@ -271,6 +349,12 @@ export interface AppState {
   dryRun: boolean;
   overwrite: boolean;
 
+  // Diff Preview
+  diffResult: DiffResult | null;
+  diffLoading: boolean;
+  diffError: string | null;
+  showDiffModal: boolean;
+
   // Actions
   setSchemaPath: (path: string | null) => void;
   setSchemaContent: (content: string | null) => void;
@@ -296,6 +380,10 @@ export interface AppState {
   clearLogs: () => void;
   setDryRun: (dryRun: boolean) => void;
   setOverwrite: (overwrite: boolean) => void;
+  setDiffResult: (result: DiffResult | null) => void;
+  setDiffLoading: (loading: boolean) => void;
+  setDiffError: (error: string | null) => void;
+  setShowDiffModal: (show: boolean) => void;
   reset: () => void;
 
   // Schema editing actions
