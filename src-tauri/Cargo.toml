@@ -52,6 +52,8 @@ flate2 = "1.0"
 tempfile = "3"
 # CLI data directory
 dirs = "5"
+# Text diff algorithm
+similar = "2"
 
 [profile.release]
 panic = "abort"

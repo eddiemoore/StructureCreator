@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
@@ -179,6 +179,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   dryRun: false,
   overwrite: false,
 
+  // Diff Preview
+  diffResult: null,
+  diffLoading: false,
+  diffError: null,
+  showDiffModal: false,
+
   // Actions
   setSchemaPath: (path: string | null) => set({ schemaPath: path }),
 
@@ -308,6 +314,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setOverwrite: (overwrite: boolean) => set({ overwrite }),
 
+  // Diff Preview actions
+  setDiffResult: (diffResult: DiffResult | null) => set({ diffResult }),
+  setDiffLoading: (diffLoading: boolean) => set({ diffLoading }),
+  setDiffError: (diffError: string | null) => set({ diffError }),
+  setShowDiffModal: (showDiffModal: boolean) => set({ showDiffModal }),
+
   reset: () =>
     set({
       schemaPath: null,
@@ -318,6 +330,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       schemaDirty: false,
       schemaHistory: [],
       schemaHistoryIndex: -1,
+      diffResult: null,
+      diffLoading: false,
+      diffError: null,
+      showDiffModal: false,
     }),
 
   // Schema editing actions
