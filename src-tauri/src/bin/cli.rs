@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use structure_creator_lib::{
     create_structure_from_tree, parse_xml_schema, scan_folder_to_schema, schema_to_xml,
-    CreateResult, Database, SchemaTree, Template,
+    CreateResult, Database, SchemaTree, Template, ValidationRule,
 };
 
 /// Application identifier - must match tauri.conf.json
@@ -216,6 +216,8 @@ struct TemplateExport {
     description: Option<String>,
     schema_xml: String,
     variables: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    variable_validation: HashMap<String, ValidationRule>,
     #[serde(skip_serializing_if = "Option::is_none")]
     icon_color: Option<String>,
     #[serde(default)]
@@ -844,6 +846,7 @@ fn cmd_templates_export(name: &str, output: &std::path::Path, overwrite: bool, q
         description: template.description,
         schema_xml: template.schema_xml,
         variables: template.variables,
+        variable_validation: template.variable_validation,
         icon_color: template.icon_color,
         is_favorite: template.is_favorite,
     };
@@ -962,6 +965,7 @@ fn cmd_templates_import(path: &std::path::Path, force: bool, quiet: bool) -> Cli
         description: export.description,
         schema_xml: export.schema_xml,
         variables: export.variables,
+        variable_validation: export.variable_validation,
         icon_color: export.icon_color,
         is_favorite: export.is_favorite,
     };

@@ -7,7 +7,7 @@ import {
   ClockIcon,
   AlertCircleIcon,
 } from "./Icons";
-import type { CreateResult, ResultSummary } from "../types/schema";
+import type { CreateResult, ResultSummary, ValidationError, ValidationRule } from "../types/schema";
 
 const WarningIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
   <svg
@@ -42,6 +42,7 @@ export const RightPanel = () => {
     setProgress,
     addLog,
     clearLogs,
+    setValidationErrors,
   } = useAppStore();
 
   const [summary, setSummary] = useState<ResultSummary | null>(null);
@@ -67,6 +68,56 @@ export const RightPanel = () => {
     clearLogs();
     setSummary(null);
     setExpandedErrors(new Set());
+    setValidationErrors([]);
+
+    // Build variable maps for validation and structure creation
+    const varsMap: Record<string, string> = {};
+    const rulesMap: Record<string, ValidationRule> = {};
+    variables.forEach((v) => {
+      varsMap[v.name] = v.value;
+      if (v.validation) {
+        rulesMap[v.name] = v.validation;
+      }
+    });
+
+    // Run validation if any rules exist
+    if (Object.keys(rulesMap).length > 0) {
+      addLog({ type: "info", message: "Validating variables..." });
+      setProgress({ status: "running", current: 0, total: 0 });
+
+      try {
+        const errors = await invoke<ValidationError[]>("cmd_validate_variables", {
+          variables: varsMap,
+          rules: rulesMap,
+        });
+
+        if (errors.length > 0) {
+          setValidationErrors(errors);
+          addLog({
+            type: "error",
+            message: `Validation failed: ${errors.length} error${errors.length > 1 ? "s" : ""}. Check the Variables section to fix.`,
+          });
+          errors.forEach((err) => {
+            addLog({
+              type: "error",
+              message: err.message,
+              details: `Variable: ${err.variable_name}`,
+            });
+          });
+          setProgress({ status: "error" });
+          return;
+        }
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        addLog({
+          type: "error",
+          message: `Validation failed: ${errorMessage}`,
+        });
+        setProgress({ status: "error" });
+        return;
+      }
+    }
+
     setProgress({
       status: "running",
       current: 0,
@@ -74,11 +125,6 @@ export const RightPanel = () => {
     });
 
     try {
-      const varsMap: Record<string, string> = {};
-      variables.forEach((v) => {
-        varsMap[v.name] = v.value;
-      });
-
       addLog({ type: "info", message: "Starting structure creation..." });
 
       let result: CreateResult;
