@@ -20,23 +20,43 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FolderIcon, FileIcon, PlusIcon, TrashIcon, SaveIcon, BranchIcon, GitMergeIcon } from "./Icons";
-import type { SchemaNode } from "../types/schema";
+import { FolderIcon, FileIcon, PlusIcon, TrashIcon, SaveIcon, BranchIcon, GitMergeIcon, RepeatIcon } from "./Icons";
+import type { SchemaNode, NodeType } from "../types/schema";
 import { findNode, findParent, canHaveChildren, INDENT_PX } from "../utils/schemaTree";
+import { sanitizeVariableName, validateVariableName, validateRepeatCount } from "../utils/validation";
 
 /** Default condition variable name for new if blocks */
 const DEFAULT_CONDITION_VAR = "CONDITION";
 
-/** Sanitize condition variable: strip %, allow only alphanumeric and underscore, limit length */
-const sanitizeConditionVar = (value: string): string => {
-  return value
-    .trim()
-    .replace(/%/g, "") // Strip % signs if user accidentally includes them
-    .replace(/[^a-zA-Z0-9_]/g, "") // Only allow alphanumeric and underscore
-    .slice(0, 50); // Max 50 characters
-};
+/** Default repeat count for new repeat blocks */
+const DEFAULT_REPEAT_COUNT = "1";
 
-type NodeType = "folder" | "file" | "if" | "else";
+/** Default iteration variable name for repeat blocks */
+const DEFAULT_REPEAT_AS = "i";
+
+/** Icon and text style configuration for drag overlay by node type */
+const DRAG_OVERLAY_STYLES: Record<NodeType, { iconClass: string; textClass: string }> = {
+  folder: {
+    iconClass: "text-system-blue",
+    textClass: "font-medium text-text-primary",
+  },
+  file: {
+    iconClass: "text-text-muted",
+    textClass: "text-text-secondary",
+  },
+  if: {
+    iconClass: "text-system-orange",
+    textClass: "font-semibold text-system-orange",
+  },
+  else: {
+    iconClass: "text-system-purple",
+    textClass: "font-semibold text-system-purple",
+  },
+  repeat: {
+    iconClass: "text-system-green",
+    textClass: "font-semibold text-system-green",
+  },
+};
 
 interface EditableTreeItemProps {
   node: SchemaNode;
@@ -61,12 +81,37 @@ const EditableTreeItem = ({
   const [editValue, setEditValue] = useState(node.name);
   const [isEditingCondition, setIsEditingCondition] = useState(false);
   const [conditionValue, setConditionValue] = useState(node.condition_var || "");
+  const [isEditingRepeatCount, setIsEditingRepeatCount] = useState(false);
+  const [repeatCountValue, setRepeatCountValue] = useState(node.repeat_count || DEFAULT_REPEAT_COUNT);
+  const [isEditingRepeatAs, setIsEditingRepeatAs] = useState(false);
+  const [repeatAsValue, setRepeatAsValue] = useState(node.repeat_as || DEFAULT_REPEAT_AS);
+
+  // Sync local state when node props change (e.g., from undo/redo or external updates)
+  useEffect(() => {
+    if (!isEditing) setEditValue(node.name);
+  }, [node.name, isEditing]);
+
+  useEffect(() => {
+    if (!isEditingCondition) setConditionValue(node.condition_var || "");
+  }, [node.condition_var, isEditingCondition]);
+
+  useEffect(() => {
+    if (!isEditingRepeatCount) setRepeatCountValue(node.repeat_count || DEFAULT_REPEAT_COUNT);
+  }, [node.repeat_count, isEditingRepeatCount]);
+
+  useEffect(() => {
+    if (!isEditingRepeatAs) setRepeatAsValue(node.repeat_as || DEFAULT_REPEAT_AS);
+  }, [node.repeat_as, isEditingRepeatAs]);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
   const [isExpanded, setIsExpanded] = useState(true);
   const [sanitizationMessage, setSanitizationMessage] = useState("");
+  const [repeatCountError, setRepeatCountError] = useState<string | null>(null);
+  const [repeatAsError, setRepeatAsError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const conditionInputRef = useRef<HTMLInputElement>(null);
+  const repeatCountInputRef = useRef<HTMLInputElement>(null);
+  const repeatAsInputRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number | null>(null);
 
   // Cleanup animation frame on unmount
@@ -82,8 +127,9 @@ const EditableTreeItem = ({
   const isFolder = node.type === "folder";
   const isIf = node.type === "if";
   const isElse = node.type === "else";
+  const isRepeat = node.type === "repeat";
   const isConditional = isIf || isElse;
-  const isContainer = isFolder || isConditional;
+  const isContainer = isFolder || isConditional || isRepeat;
 
   const {
     attributes,
@@ -117,11 +163,109 @@ const EditableTreeItem = ({
     }
   }, [isEditingCondition]);
 
+  useEffect(() => {
+    if (isEditingRepeatCount && repeatCountInputRef.current) {
+      repeatCountInputRef.current.focus();
+      repeatCountInputRef.current.select();
+    }
+  }, [isEditingRepeatCount]);
+
+  useEffect(() => {
+    if (isEditingRepeatAs && repeatAsInputRef.current) {
+      repeatAsInputRef.current.focus();
+      repeatAsInputRef.current.select();
+    }
+  }, [isEditingRepeatAs]);
+
   const handleDoubleClick = () => {
-    // For if/else nodes, don't allow name editing via double-click
-    if (node.type === "if" || node.type === "else") return;
+    // For if/else/repeat nodes, don't allow name editing via double-click
+    if (node.type === "if" || node.type === "else" || node.type === "repeat") return;
     setIsEditing(true);
     setEditValue(node.name);
+  };
+
+  // Repeat count editing handlers
+  const handleRepeatCountSave = () => {
+    const trimmedValue = repeatCountValue.trim() || DEFAULT_REPEAT_COUNT;
+    const error = validateRepeatCount(trimmedValue);
+    if (error) {
+      // Keep editing if there's an error
+      setRepeatCountError(error);
+      return;
+    }
+    if (trimmedValue !== (node.repeat_count || DEFAULT_REPEAT_COUNT)) {
+      onUpdate(node.id!, { repeat_count: trimmedValue });
+    }
+    setRepeatCountValue(trimmedValue);
+    setIsEditingRepeatCount(false);
+    setRepeatCountError(null);
+  };
+
+  const handleRepeatCountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      handleRepeatCountSave();
+    } else if (e.key === "Escape") {
+      setIsEditingRepeatCount(false);
+      setRepeatCountValue(node.repeat_count || DEFAULT_REPEAT_COUNT);
+      setRepeatCountError(null);
+    }
+  };
+
+  // Validate repeat count on change for real-time feedback
+  const handleRepeatCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setRepeatCountValue(value);
+    const error = validateRepeatCount(value);
+    setRepeatCountError(error);
+  };
+
+  // Repeat "as" variable editing handlers
+  const handleRepeatAsSave = () => {
+    const sanitized = sanitizeVariableName(repeatAsValue) || DEFAULT_REPEAT_AS;
+    const error = validateVariableName(sanitized);
+    if (error) {
+      // Keep editing if there's an error
+      setRepeatAsError(error);
+      return;
+    }
+    if (sanitized !== (node.repeat_as || DEFAULT_REPEAT_AS)) {
+      onUpdate(node.id!, { repeat_as: sanitized });
+    }
+    setRepeatAsValue(sanitized);
+    setIsEditingRepeatAs(false);
+    setSanitizationMessage("");
+    setRepeatAsError(null);
+  };
+
+  const handleRepeatAsKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      handleRepeatAsSave();
+    } else if (e.key === "Escape") {
+      setIsEditingRepeatAs(false);
+      setRepeatAsValue(node.repeat_as || DEFAULT_REPEAT_AS);
+      setSanitizationMessage("");
+      setRepeatAsError(null);
+    }
+  };
+
+  // Validate repeat-as variable name on change for real-time feedback
+  const handleRepeatAsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const sanitized = sanitizeVariableName(raw);
+    setRepeatAsValue(sanitized);
+
+    // Check for invalid characters being stripped
+    if (raw.length > sanitized.length) {
+      setSanitizationMessage("Invalid characters removed. Only letters, numbers, and underscores are allowed.");
+    } else {
+      setSanitizationMessage("");
+    }
+
+    // Validate the sanitized value
+    const error = validateVariableName(sanitized);
+    setRepeatAsError(error);
   };
 
   const startConditionEditing = () => {
@@ -142,7 +286,7 @@ const EditableTreeItem = ({
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
-    const sanitizedValue = sanitizeConditionVar(conditionValue);
+    const sanitizedValue = sanitizeVariableName(conditionValue);
     if (sanitizedValue !== (node.condition_var || "")) {
       onUpdate(node.id!, { condition_var: sanitizedValue || undefined });
     }
@@ -159,7 +303,7 @@ const EditableTreeItem = ({
       // Store ID so it can be cancelled on unmount
       animationFrameRef.current = requestAnimationFrame(() => {
         animationFrameRef.current = null;
-        const sanitizedValue = sanitizeConditionVar(conditionInputRef.current?.value || "");
+        const sanitizedValue = sanitizeVariableName(conditionInputRef.current?.value || "");
         if (sanitizedValue !== (node.condition_var || "")) {
           onUpdate(node.id!, { condition_var: sanitizedValue || undefined });
         }
@@ -253,6 +397,8 @@ const EditableTreeItem = ({
           className={`flex items-center gap-2 px-2 py-1.5 rounded-mac hover:bg-mac-bg-hover transition-colors group ${
             isConditional
               ? `border-l-2 ${isIf ? "border-system-orange" : "border-system-purple"} ${isElse ? "cursor-default" : "cursor-pointer"}`
+              : isRepeat
+              ? "border-l-2 border-system-green cursor-pointer"
               : "cursor-pointer"
           }`}
           style={{ marginLeft: `${depth * INDENT_PX}px` }}
@@ -284,6 +430,8 @@ const EditableTreeItem = ({
             <BranchIcon size={16} className="text-system-orange flex-shrink-0" />
           ) : isElse ? (
             <GitMergeIcon size={16} className="text-system-purple flex-shrink-0" />
+          ) : isRepeat ? (
+            <RepeatIcon size={16} className="text-system-green flex-shrink-0" />
           ) : (
             <FileIcon size={16} className="text-text-muted flex-shrink-0" />
           )}
@@ -304,7 +452,7 @@ const EditableTreeItem = ({
                       value={conditionValue}
                       onChange={(e) => {
                         const raw = e.target.value;
-                        const sanitized = sanitizeConditionVar(raw);
+                        const sanitized = sanitizeVariableName(raw);
                         setConditionValue(sanitized);
                         // Notify if characters were removed
                         if (raw.length > sanitized.length) {
@@ -357,6 +505,129 @@ const EditableTreeItem = ({
                     %{node.condition_var || "?"}%
                   </span>
                 )
+              )}
+            </div>
+          ) : isRepeat ? (
+            // Repeat node display
+            <div className="flex items-center gap-1.5 flex-1 font-mono text-mac-sm">
+              <span className="font-semibold text-system-green">repeat</span>
+              {isEditingRepeatCount ? (
+                <>
+                  <input
+                    ref={repeatCountInputRef}
+                    type="text"
+                    value={repeatCountValue}
+                    onChange={handleRepeatCountChange}
+                    onBlur={handleRepeatCountSave}
+                    onKeyDown={handleRepeatCountKeyDown}
+                    placeholder={DEFAULT_REPEAT_COUNT}
+                    list={datalistId}
+                    aria-label="Repeat count"
+                    aria-describedby={repeatCountError ? `repeat-count-error-${node.id}` : undefined}
+                    aria-invalid={repeatCountError ? "true" : undefined}
+                    className={`bg-mac-bg border rounded px-1 py-0.5 text-mac-sm font-mono outline-none max-w-[80px] ${
+                      repeatCountError ? "border-system-red" : "border-accent"
+                    }`}
+                    title={repeatCountError || undefined}
+                  />
+                  {repeatCountError && (
+                    <span className="text-system-red text-mac-xs" title={repeatCountError}>
+                      ⚠
+                    </span>
+                  )}
+                  <span
+                    id={`repeat-count-error-${node.id}`}
+                    role="status"
+                    aria-live="polite"
+                    className="sr-only"
+                  >
+                    {repeatCountError}
+                  </span>
+                </>
+              ) : (
+                <span
+                  className="text-text-secondary cursor-pointer hover:text-text-primary px-1 py-0.5 rounded hover:bg-mac-bg-hover focus:outline-none focus:ring-1 focus:ring-accent"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditingRepeatCount(true);
+                    setRepeatCountValue(node.repeat_count || DEFAULT_REPEAT_COUNT);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setIsEditingRepeatCount(true);
+                      setRepeatCountValue(node.repeat_count || DEFAULT_REPEAT_COUNT);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Edit repeat count: ${node.repeat_count || DEFAULT_REPEAT_COUNT}`}
+                  title="Press Enter or double-click to edit count"
+                >
+                  {node.repeat_count || DEFAULT_REPEAT_COUNT}
+                </span>
+              )}
+              <span className="text-text-muted">as</span>
+              {isEditingRepeatAs ? (
+                <>
+                  <input
+                    ref={repeatAsInputRef}
+                    type="text"
+                    value={repeatAsValue}
+                    onChange={handleRepeatAsChange}
+                    onBlur={handleRepeatAsSave}
+                    onKeyDown={handleRepeatAsKeyDown}
+                    placeholder="i"
+                    aria-label="Iteration variable name"
+                    aria-describedby={
+                      sanitizationMessage || repeatAsError
+                        ? `repeat-as-feedback-${node.id}`
+                        : undefined
+                    }
+                    aria-invalid={sanitizationMessage || repeatAsError ? "true" : undefined}
+                    className={`bg-mac-bg border rounded px-1 py-0.5 text-mac-sm font-mono outline-none max-w-[60px] ${
+                      sanitizationMessage || repeatAsError ? "border-system-red" : "border-accent"
+                    }`}
+                    title={repeatAsError || sanitizationMessage || undefined}
+                  />
+                  {/* Visible feedback when there's an error */}
+                  {(sanitizationMessage || repeatAsError) && (
+                    <span className="text-system-red text-mac-xs" title={repeatAsError || sanitizationMessage}>
+                      ⚠
+                    </span>
+                  )}
+                  {/* Screen reader announcement for errors */}
+                  <span
+                    id={`repeat-as-feedback-${node.id}`}
+                    role="status"
+                    aria-live="polite"
+                    className="sr-only"
+                  >
+                    {repeatAsError || sanitizationMessage}
+                  </span>
+                </>
+              ) : (
+                <span
+                  className="text-text-secondary cursor-pointer hover:text-text-primary px-1 py-0.5 rounded hover:bg-mac-bg-hover focus:outline-none focus:ring-1 focus:ring-accent"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditingRepeatAs(true);
+                    setRepeatAsValue(node.repeat_as || DEFAULT_REPEAT_AS);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setIsEditingRepeatAs(true);
+                      setRepeatAsValue(node.repeat_as || DEFAULT_REPEAT_AS);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Edit iteration variable: ${node.repeat_as || DEFAULT_REPEAT_AS}`}
+                  title="Press Enter or double-click to edit variable name"
+                >
+                  %{node.repeat_as || DEFAULT_REPEAT_AS}%
+                </span>
               )}
             </div>
           ) : isEditing ? (
@@ -426,7 +697,7 @@ const EditableTreeItem = ({
             style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
           >
             {/* Rename option - only for folders and files */}
-            {!isConditional && (
+            {!isConditional && !isRepeat && (
               <button
                 onClick={() => {
                   setIsEditing(true);
@@ -448,6 +719,29 @@ const EditableTreeItem = ({
               >
                 Edit Condition
               </button>
+            )}
+            {/* Edit repeat settings - only for repeat nodes */}
+            {isRepeat && (
+              <>
+                <button
+                  onClick={() => {
+                    setIsEditingRepeatCount(true);
+                    setShowContextMenu(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-mac-bg-hover text-mac-sm"
+                >
+                  Edit Count
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingRepeatAs(true);
+                    setShowContextMenu(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-mac-bg-hover text-mac-sm"
+                >
+                  Edit Variable
+                </button>
+              </>
             )}
             {/* Add children - for folders and conditionals */}
             {isContainer && (
@@ -495,6 +789,15 @@ const EditableTreeItem = ({
                   }`}
                 >
                   Add Else Block
+                </button>
+                <button
+                  onClick={() => {
+                    onAdd(node.id!, "repeat");
+                    setShowContextMenu(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-mac-bg-hover text-mac-sm text-system-green"
+                >
+                  Add Repeat Block
                 </button>
               </>
             )}
@@ -645,7 +948,7 @@ export const VisualSchemaEditor = () => {
   const handleAdd = (parentId: string, type: NodeType, conditionVar?: string) => {
     if (type === "if") {
       // Sanitize conditionVar to ensure valid format
-      const sanitized = conditionVar ? sanitizeConditionVar(conditionVar) : "";
+      const sanitized = conditionVar ? sanitizeVariableName(conditionVar) : "";
       addSchemaNode(parentId, {
         type,
         name: "",
@@ -655,6 +958,13 @@ export const VisualSchemaEditor = () => {
       addSchemaNode(parentId, {
         type,
         name: "",
+      });
+    } else if (type === "repeat") {
+      addSchemaNode(parentId, {
+        type,
+        name: "",
+        repeat_count: DEFAULT_REPEAT_COUNT,
+        repeat_as: DEFAULT_REPEAT_AS,
       });
     } else {
       addSchemaNode(parentId, {
@@ -789,53 +1099,60 @@ export const VisualSchemaEditor = () => {
           </SortableContext>
 
           <DragOverlay>
-            {activeId ? (
-              (() => {
-                const draggedNode = findNode(schemaTree.root, activeId);
-                if (!draggedNode) return null;
-                const isFolder = draggedNode.type === "folder";
-                const isIf = draggedNode.type === "if";
-                const isElse = draggedNode.type === "else";
+            {activeId && (() => {
+              const draggedNode = findNode(schemaTree.root, activeId);
+              if (!draggedNode) return null;
 
-                // Use cached group count (computed in handleDragStart)
-                const groupCount = dragGroupCount;
+              const nodeType = draggedNode.type;
 
-                const displayName = isIf
-                  ? `if %${draggedNode.condition_var || "?"}%`
-                  : isElse
-                  ? "else"
-                  : draggedNode.name === "%BASE%"
-                  ? projectName
-                  : draggedNode.name.replace(/%BASE%/g, projectName);
-                return (
-                  <div className="bg-mac-bg-secondary border border-accent rounded-mac px-2 py-1.5 shadow-lg flex items-center gap-2">
-                    {isFolder ? (
-                      <FolderIcon size={16} className="text-system-blue flex-shrink-0" />
-                    ) : isIf ? (
-                      <BranchIcon size={16} className="text-system-orange flex-shrink-0" />
-                    ) : isElse ? (
-                      <GitMergeIcon size={16} className="text-system-purple flex-shrink-0" />
-                    ) : (
-                      <FileIcon size={16} className="text-text-muted flex-shrink-0" />
-                    )}
-                    <span className={`font-mono text-mac-sm ${
-                      isFolder ? "font-medium text-text-primary"
-                      : isIf ? "font-semibold text-system-orange"
-                      : isElse ? "font-semibold text-system-purple"
-                      : "text-text-secondary"
-                    }`}>
-                      {displayName}
+              // Use cached group count (computed in handleDragStart)
+              const groupCount = dragGroupCount;
+
+              // Compute display name based on node type
+              const getDisplayName = (): string => {
+                switch (nodeType) {
+                  case "if":
+                    return `if %${draggedNode.condition_var || "?"}%`;
+                  case "else":
+                    return "else";
+                  case "repeat":
+                    return `repeat ${draggedNode.repeat_count || DEFAULT_REPEAT_COUNT} as %${draggedNode.repeat_as || DEFAULT_REPEAT_AS}%`;
+                  default:
+                    return draggedNode.name === "%BASE%"
+                      ? projectName
+                      : draggedNode.name.replace(/%BASE%/g, projectName);
+                }
+              };
+
+              // Get icon component for this node type
+              const getIcon = () => {
+                const iconClass = `${DRAG_OVERLAY_STYLES[nodeType].iconClass} flex-shrink-0`;
+                switch (nodeType) {
+                  case "folder": return <FolderIcon size={16} className={iconClass} />;
+                  case "if": return <BranchIcon size={16} className={iconClass} />;
+                  case "else": return <GitMergeIcon size={16} className={iconClass} />;
+                  case "repeat": return <RepeatIcon size={16} className={iconClass} />;
+                  default: return <FileIcon size={16} className={iconClass} />;
+                }
+              };
+
+              const style = DRAG_OVERLAY_STYLES[nodeType];
+
+              return (
+                <div className="bg-mac-bg-secondary border border-accent rounded-mac px-2 py-1.5 shadow-lg flex items-center gap-2">
+                  {getIcon()}
+                  <span className={`font-mono text-mac-sm ${style.textClass}`}>
+                    {getDisplayName()}
+                  </span>
+                  {/* Show badge for if/else group */}
+                  {nodeType === "if" && groupCount > 1 && (
+                    <span className="text-mac-xs bg-system-purple/20 text-system-purple px-1.5 py-0.5 rounded">
+                      +{groupCount - 1} else
                     </span>
-                    {/* Show badge for if/else group */}
-                    {isIf && groupCount > 1 && (
-                      <span className="text-mac-xs bg-system-purple/20 text-system-purple px-1.5 py-0.5 rounded">
-                        +{groupCount - 1} else
-                      </span>
-                    )}
-                  </div>
-                );
-              })()
-            ) : null}
+                  )}
+                </div>
+              );
+            })()}
           </DragOverlay>
         </DndContext>
       </div>
