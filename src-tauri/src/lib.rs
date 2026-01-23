@@ -55,6 +55,19 @@ pub struct ResultSummary {
     pub hooks_failed: usize,
 }
 
+/// Maximum allowed repeat count to prevent accidental resource exhaustion
+const MAX_REPEAT_COUNT: usize = 10000;
+
+/// Helper to log a repeat-related error and increment error count
+fn log_repeat_error(logs: &mut Vec<LogEntry>, summary: &mut ResultSummary, message: String, details: String) {
+    logs.push(LogEntry {
+        log_type: "error".to_string(),
+        message,
+        details: Some(details),
+    });
+    summary.errors += 1;
+}
+
 #[cfg(feature = "tauri-app")]
 #[tauri::command]
 fn cmd_parse_schema(content: String) -> Result<SchemaTree, String> {
@@ -308,7 +321,7 @@ fn create_node_internal(
     summary: &mut ResultSummary,
     last_if_result: Option<bool>,
 ) -> Result<(), String> {
-    // Handle conditional nodes (if/else)
+    // Handle conditional and repeat nodes (if/else/repeat)
     match node.node_type.as_str() {
         "if" => {
             // Evaluate condition using shared helper
@@ -342,6 +355,126 @@ fn create_node_internal(
             if should_execute {
                 if let Some(children) = &node.children {
                     process_children(children, parent_path, variables, dry_run, overwrite, logs, summary)?;
+                }
+            }
+
+            return Ok(());
+        }
+        "repeat" => {
+            let count_str = node.repeat_count.as_deref().unwrap_or("1");
+            let as_var = node.repeat_as.as_deref().unwrap_or("i");
+
+            // Validate 'as' variable name:
+            // - Must be non-empty
+            // - Must contain only alphanumeric characters or underscores
+            // - Must not start with a digit (conventional variable naming)
+            let first_char = as_var.chars().next();
+            if as_var.is_empty()
+                || !as_var.chars().all(|c| c.is_alphanumeric() || c == '_')
+                || first_char.map_or(false, |c| c.is_ascii_digit())
+            {
+                log_repeat_error(
+                    logs,
+                    summary,
+                    format!("Invalid repeat variable name: '{}'", as_var),
+                    "Variable name must be non-empty, start with a letter or underscore, and contain only alphanumeric characters or underscores".to_string(),
+                );
+                return Ok(());
+            }
+
+            // Warn about potentially confusing variable names ending in _1
+            // Since %var_1% is the 1-indexed version, %n_1% would create %n_1% and %n_1_1%
+            if as_var.ends_with("_1") {
+                logs.push(LogEntry {
+                    log_type: "warning".to_string(),
+                    message: format!("Variable name '{}' ends with '_1' which may be confusing", as_var),
+                    details: Some(format!(
+                        "The 1-indexed variable will be '%{}_1%'. Consider using a different name.",
+                        as_var
+                    )),
+                });
+            }
+
+            // Resolve count (may contain variable references)
+            let mut resolved = count_str.to_string();
+            for (var_name, var_value) in variables {
+                resolved = resolved.replace(var_name, var_value);
+            }
+
+            // Parse count to integer with safe bounds checking
+            let count: usize = match resolved.trim().parse::<i64>() {
+                Ok(n) if n < 0 => {
+                    log_repeat_error(
+                        logs,
+                        summary,
+                        format!("Repeat count cannot be negative: '{}'", resolved),
+                        format!("Count must be a non-negative integer (resolved from '{}')", count_str),
+                    );
+                    return Ok(());
+                }
+                // Safe conversion: check against MAX_REPEAT_COUNT before casting
+                // This prevents overflow on 32-bit systems where usize is smaller than i64
+                Ok(n) if n as u64 > MAX_REPEAT_COUNT as u64 => {
+                    log_repeat_error(
+                        logs,
+                        summary,
+                        format!("Repeat count '{}' exceeds maximum of {}", n, MAX_REPEAT_COUNT),
+                        "Consider reducing the count or splitting into multiple repeat blocks".to_string(),
+                    );
+                    return Ok(());
+                }
+                Ok(n) => n as usize,
+                Err(_) => {
+                    log_repeat_error(
+                        logs,
+                        summary,
+                        format!("Invalid repeat count: '{}'", resolved),
+                        format!("Count must be a non-negative integer (resolved from '{}')", count_str),
+                    );
+                    return Ok(());
+                }
+            };
+
+            // Log the repeat operation
+            if count == 0 {
+                // Provide accurate details: distinguish literal "0" from variable that resolved to 0
+                let details = if count_str == "0" {
+                    "Count is explicitly set to 0".to_string()
+                } else {
+                    format!("Count '{}' resolved to 0", count_str)
+                };
+                logs.push(LogEntry {
+                    log_type: "info".to_string(),
+                    message: "Skipping repeat block (count is 0)".to_string(),
+                    details: Some(details),
+                });
+            } else if dry_run {
+                logs.push(LogEntry {
+                    log_type: "info".to_string(),
+                    message: format!("Would repeat {} times (as %{}%)", count, as_var),
+                    details: None,
+                });
+            } else {
+                logs.push(LogEntry {
+                    log_type: "info".to_string(),
+                    message: format!("Repeating {} times (as %{}%)", count, as_var),
+                    details: None,
+                });
+            }
+
+            // Process children N times
+            if let Some(children) = &node.children {
+                // Clone variables once before the loop for efficiency
+                let mut scoped_vars = variables.clone();
+                let var_0_key = format!("%{}%", as_var);
+                let var_1_key = format!("%{}_1%", as_var);
+
+                for i in 0..count {
+                    // Update iteration variables in-place (more efficient than cloning per iteration)
+                    scoped_vars.insert(var_0_key.clone(), i.to_string());
+                    scoped_vars.insert(var_1_key.clone(), (i + 1).to_string());
+
+                    process_children(children, parent_path, &scoped_vars, dry_run, overwrite, logs, summary)?;
                 }
             }
 

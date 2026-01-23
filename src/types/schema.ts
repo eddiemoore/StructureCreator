@@ -1,12 +1,47 @@
+/**
+ * Valid node types for schema elements.
+ * - folder: Directory container
+ * - file: File with optional content or URL
+ * - if: Conditional block (renders children when condition_var is truthy)
+ * - else: Alternative block (follows an if block)
+ * - repeat: Loop block (repeats children count times)
+ */
+export const NODE_TYPES = ["folder", "file", "if", "else", "repeat"] as const;
+export type NodeType = (typeof NODE_TYPES)[number];
+
+/**
+ * Represents a single node in the schema tree structure.
+ * Nodes can be files, folders, or control flow elements (if/else/repeat).
+ */
 export interface SchemaNode {
-  id?: string; // Unique ID for tracking during editing
-  type: "folder" | "file" | "if" | "else";
+  /** Unique identifier for tracking during editing and drag-drop operations */
+  id?: string;
+  /** The type of this schema element */
+  type: NodeType;
+  /** Display name (supports variable substitution with %VAR% syntax) */
   name: string;
+  /** URL to download file content from (file nodes only) */
   url?: string;
+  /** Inline file content (file nodes only) */
   content?: string;
+  /** Child nodes (for folder, if, else, repeat types) */
   children?: SchemaNode[];
+  /** Additional XML attributes to preserve during round-trips */
   attributes?: Record<string, string>;
+  /** Variable name to check for conditional rendering (if nodes only, without % delimiters) */
   condition_var?: string;
+  /**
+   * Number of iterations for repeat loops. Can be a literal number or variable reference.
+   * Examples: "3", "%NUM_MODULES%"
+   * @default "1"
+   */
+  repeat_count?: string;
+  /**
+   * Iteration variable name for repeat loops (without % delimiters).
+   * Available inside the loop as %name% (0-indexed) and %name_1% (1-indexed).
+   * @default "i"
+   */
+  repeat_as?: string;
 }
 
 export interface SchemaHooks {

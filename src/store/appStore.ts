@@ -37,7 +37,7 @@ const calculateStats = (node: SchemaNode): { folders: number; files: number; dow
       files++;
       if (n.url) downloads++;
     }
-    // if/else are control structures, not counted in stats
+    // if/else/repeat are control structures, not counted in stats
     n.children?.forEach(traverse);
   };
 

@@ -7,6 +7,7 @@ import {
   GridIcon,
   BranchIcon,
   GitMergeIcon,
+  RepeatIcon,
 } from "./Icons";
 import type { SchemaNode } from "../types/schema";
 import { VisualSchemaEditor } from "./VisualSchemaEditor";
@@ -34,6 +35,7 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
   const isFolder = node.type === "folder";
   const isIf = node.type === "if";
   const isElse = node.type === "else";
+  const isRepeat = node.type === "repeat";
   const isConditional = isIf || isElse;
   const hasUrl = !!node.url;
 
@@ -42,6 +44,11 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
     ? `if %${node.condition_var || "?"}%`
     : isElse
     ? "else"
+    : null;
+
+  // For repeat nodes, show the count and iteration variable
+  const repeatLabel = isRepeat
+    ? `repeat ${node.repeat_count || "1"} as %${node.repeat_as || "i"}%`
     : null;
 
   // Render children (shared between conditional and non-conditional nodes)
@@ -53,6 +60,24 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
       projectName={projectName}
     />
   ));
+
+  // Render repeat block
+  if (isRepeat) {
+    return (
+      <>
+        <div
+          className="flex items-center gap-2 px-2 py-1 rounded-mac cursor-default"
+          style={{ marginLeft: `${depth * INDENT_PX}px` }}
+        >
+          <RepeatIcon size={16} className="text-system-green flex-shrink-0" />
+          <span className="font-mono text-mac-sm font-medium text-system-green">
+            {repeatLabel}
+          </span>
+        </div>
+        {childrenElements}
+      </>
+    );
+  }
 
   return (
     <>

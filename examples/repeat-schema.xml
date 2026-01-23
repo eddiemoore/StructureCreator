@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<folder name="%BASE%">
+  <!-- Generate multiple module folders dynamically -->
+  <repeat count="%NUM_MODULES%" as="i">
+    <folder name="module_%i%">
+      <file name="index.ts" />
+      <file name="README.md" />
+    </folder>
+  </repeat>
+
+  <!-- Nested repeat example: 2 groups with 3 items each -->
+  <folder name="data">
+    <repeat count="2" as="group">
+      <folder name="group_%group_1%">
+        <repeat count="3" as="item">
+          <file name="item_%item_1%.json" />
+        </repeat>
+      </folder>
+    </repeat>
+  </folder>
+
+  <!-- Repeat combined with conditionals -->
+  <repeat count="3" as="n">
+    <folder name="chapter_%n_1%">
+      <file name="content.md" />
+      <if var="INCLUDE_TESTS">
+        <file name="test_%n%.spec.ts" />
+      </if>
+    </folder>
+  </repeat>
+
+  <file name="package.json" />
+</folder>

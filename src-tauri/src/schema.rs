@@ -21,6 +21,12 @@ pub struct SchemaNode {
     pub children: Option<Vec<SchemaNode>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub condition_var: Option<String>,
+    /// For repeat nodes: the count expression (variable like "%NUM%" or literal "3")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repeat_count: Option<String>,
+    /// For repeat nodes: the iteration variable name (e.g., "i" creates %i%)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repeat_as: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,12 +149,15 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         "file" => "file",
         "if" => "if",
         "else" => "else",
+        "repeat" => "repeat",
         _ => return Ok(None),
     };
 
     let mut name = String::new();
     let mut url: Option<String> = None;
     let mut condition_var: Option<String> = None;
+    let mut repeat_count: Option<String> = None;
+    let mut repeat_as: Option<String> = None;
 
     for attr in e.attributes() {
         let attr = attr?;
@@ -159,11 +168,13 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
             "name" => name = value.to_string(),
             "url" => url = Some(value.to_string()),
             "var" => condition_var = Some(value.to_string()),
+            "count" => repeat_count = Some(value.to_string()),
+            "as" => repeat_as = Some(value.to_string()),
             _ => {}
         }
     }
 
-    // For if/else nodes, name is not required and defaults to empty string
+    // For if/else/repeat nodes, name is not required and defaults to empty string
     if node_type == "folder" || node_type == "file" {
         if name.is_empty() {
             return Ok(None);
@@ -178,6 +189,8 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         content: None,
         children: None,
         condition_var,
+        repeat_count,
+        repeat_as,
     }))
 }
 
@@ -201,8 +214,8 @@ fn count_nodes(node: &SchemaNode, stats: &mut SchemaStats) {
                 stats.downloads += 1;
             }
         }
-        // if/else are control structures, not counted
-        "if" | "else" => {}
+        // if/else/repeat are control structures, not counted
+        "if" | "else" | "repeat" => {}
         _ => {}
     }
 
@@ -292,6 +305,8 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
                 content,
                 children: None,
                 condition_var: None,
+                repeat_count: None,
+                repeat_as: None,
             });
         }
     }
@@ -304,6 +319,8 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
         content: None,
         children: if children.is_empty() { None } else { Some(children) },
         condition_var: None,
+        repeat_count: None,
+        repeat_as: None,
     })
 }
 
@@ -416,6 +433,28 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
             }
             xml.push_str(&format!("{}</else>\n", indent_str));
         }
+        "repeat" => {
+            let count = node.repeat_count.as_deref().unwrap_or("1");
+            let as_var = node.repeat_as.as_deref().unwrap_or("i");
+
+            if node.children.is_some() && !node.children.as_ref().unwrap().is_empty() {
+                xml.push_str(&format!(
+                    "{}<repeat count=\"{}\" as=\"{}\">\n",
+                    indent_str, escape_xml(count), escape_xml(as_var)
+                ));
+                if let Some(children) = &node.children {
+                    for child in children {
+                        node_to_xml(child, xml, indent + 1);
+                    }
+                }
+                xml.push_str(&format!("{}</repeat>\n", indent_str));
+            } else {
+                xml.push_str(&format!(
+                    "{}<repeat count=\"{}\" as=\"{}\" />\n",
+                    indent_str, escape_xml(count), escape_xml(as_var)
+                ));
+            }
+        }
         _ => {}
     }
 }
@@ -503,6 +542,8 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                             content: None,
                             children: None, // Will be filled later
                             condition_var: None,
+                            repeat_count: None,
+                            repeat_as: None,
                         });
                 }
 
@@ -517,6 +558,8 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                     content: content.clone(),
                     children: None,
                     condition_var: None,
+                    repeat_count: None,
+                    repeat_as: None,
                 };
 
                 if is_dir {
@@ -664,6 +707,8 @@ fn build_tree_from_map(
             Some(processed_children)
         },
         condition_var: None,
+        repeat_count: None,
+        repeat_as: None,
     }
 }
 
@@ -746,6 +791,8 @@ mod tests {
                 content: None,
                 children: None,
                 condition_var: None,
+                repeat_count: None,
+                repeat_as: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -775,6 +822,8 @@ mod tests {
                 content: None,
                 children: None,
                 condition_var: None,
+                repeat_count: None,
+                repeat_as: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -802,5 +851,104 @@ mod tests {
         let hooks = tree.hooks.unwrap();
         assert_eq!(hooks.post_create.len(), 1);
         assert_eq!(hooks.post_create[0], "echo \"Hello & World\"");
+    }
+
+    #[test]
+    fn test_parse_repeat_schema() {
+        let xml = r#"
+            <folder name="project">
+                <repeat count="3" as="i">
+                    <folder name="module_%i%">
+                        <file name="index.ts" />
+                    </folder>
+                </repeat>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert_eq!(tree.root.name, "project");
+
+        // The repeat node should be a child of root
+        let children = tree.root.children.as_ref().unwrap();
+        assert_eq!(children.len(), 1);
+
+        let repeat_node = &children[0];
+        assert_eq!(repeat_node.node_type, "repeat");
+        assert_eq!(repeat_node.repeat_count, Some("3".to_string()));
+        assert_eq!(repeat_node.repeat_as, Some("i".to_string()));
+
+        // Repeat node should have children
+        let repeat_children = repeat_node.children.as_ref().unwrap();
+        assert_eq!(repeat_children.len(), 1);
+        assert_eq!(repeat_children[0].node_type, "folder");
+        assert_eq!(repeat_children[0].name, "module_%i%");
+    }
+
+    #[test]
+    fn test_repeat_schema_to_xml() {
+        let tree = SchemaTree {
+            root: SchemaNode {
+                id: None,
+                node_type: "folder".to_string(),
+                name: "project".to_string(),
+                url: None,
+                content: None,
+                children: Some(vec![
+                    SchemaNode {
+                        id: None,
+                        node_type: "repeat".to_string(),
+                        name: "".to_string(),
+                        url: None,
+                        content: None,
+                        children: Some(vec![
+                            SchemaNode {
+                                id: None,
+                                node_type: "folder".to_string(),
+                                name: "module_%i%".to_string(),
+                                url: None,
+                                content: None,
+                                children: None,
+                                condition_var: None,
+                                repeat_count: None,
+                                repeat_as: None,
+                            }
+                        ]),
+                        condition_var: None,
+                        repeat_count: Some("5".to_string()),
+                        repeat_as: Some("idx".to_string()),
+                    }
+                ]),
+                condition_var: None,
+                repeat_count: None,
+                repeat_as: None,
+            },
+            stats: SchemaStats {
+                folders: 2,
+                files: 0,
+                downloads: 0,
+            },
+            hooks: None,
+        };
+
+        let xml = schema_to_xml(&tree);
+        assert!(xml.contains("<repeat count=\"5\" as=\"idx\">"));
+        assert!(xml.contains("</repeat>"));
+        assert!(xml.contains("<folder name=\"module_%i%\""));
+    }
+
+    #[test]
+    fn test_repeat_with_variable_count() {
+        let xml = r#"
+            <folder name="root">
+                <repeat count="%NUM_MODULES%" as="j">
+                    <file name="file_%j%.txt" />
+                </repeat>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let repeat_node = &tree.root.children.as_ref().unwrap()[0];
+        assert_eq!(repeat_node.repeat_count, Some("%NUM_MODULES%".to_string()));
+        assert_eq!(repeat_node.repeat_as, Some("j".to_string()));
     }
 }

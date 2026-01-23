@@ -4,7 +4,7 @@ import type { SchemaNode } from "../types/schema";
 export const INDENT_PX = 20;
 
 /** Node types that can contain children */
-const CONTAINER_TYPES = ["folder", "if", "else"] as const;
+const CONTAINER_TYPES = ["folder", "if", "else", "repeat"] as const;
 
 /**
  * Check if a node type can have children

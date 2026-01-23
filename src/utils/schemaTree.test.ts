@@ -44,6 +44,10 @@ describe("schemaTree utilities", () => {
       expect(canHaveChildren("else")).toBe(true);
     });
 
+    it("returns true for repeat type", () => {
+      expect(canHaveChildren("repeat")).toBe(true);
+    });
+
     it("returns false for file type", () => {
       expect(canHaveChildren("file")).toBe(false);
     });
