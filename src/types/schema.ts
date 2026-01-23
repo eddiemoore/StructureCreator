@@ -58,10 +58,59 @@ export interface SchemaTree {
   hooks?: SchemaHooks;
 }
 
+export interface ValidationRule {
+  pattern?: string;
+  minLength?: number;
+  maxLength?: number;
+  required?: boolean;
+}
+
 export interface Variable {
   name: string;
   value: string;
+  validation?: ValidationRule;
 }
+
+export interface ValidationError {
+  variable_name: string;
+  message: string;
+}
+
+/**
+ * Available variable transformations for the UI help section.
+ * IMPORTANT: Keep in sync with src-tauri/src/transforms.rs parse_transform()
+ * If you add a transformation in Rust, add it here too for the UI.
+ */
+export const TRANSFORMATIONS = [
+  { id: "uppercase", label: "UPPERCASE", example: "hello → HELLO" },
+  { id: "lowercase", label: "lowercase", example: "HELLO → hello" },
+  { id: "camelCase", label: "camelCase", example: "hello world → helloWorld" },
+  {
+    id: "PascalCase",
+    label: "PascalCase",
+    example: "hello world → HelloWorld",
+  },
+  { id: "kebab-case", label: "kebab-case", example: "HelloWorld → hello-world" },
+  { id: "snake_case", label: "snake_case", example: "HelloWorld → hello_world" },
+  { id: "plural", label: "plural", example: "cat → cats" },
+  { id: "length", label: "length", example: "hello → 5" },
+] as const;
+
+/**
+ * Available date format options for the UI help section.
+ * IMPORTANT: Keep in sync with src-tauri/src/transforms.rs format_date()
+ *
+ * Supported tokens: YYYY, YY, MMMM, MMM, MM, DD, D
+ */
+export const DATE_FORMATS = [
+  { id: "YYYY-MM-DD", label: "ISO (2024-01-15)" },
+  { id: "MM/DD/YYYY", label: "US (01/15/2024)" },
+  { id: "DD/MM/YYYY", label: "EU (15/01/2024)" },
+  { id: "YYYY", label: "Year only (2024)" },
+  { id: "YY", label: "2-digit year (24)" },
+  { id: "MMMM DD, YYYY", label: "Long (January 15, 2024)" },
+  { id: "MMM D, YYYY", label: "Short (Jan 15, 2024)" },
+] as const;
 
 export interface Template {
   id: string;
@@ -69,6 +118,7 @@ export interface Template {
   description: string | null;
   schema_xml: string;
   variables: Record<string, string>;
+  variable_validation?: Record<string, ValidationRule>;
   icon_color: string | null;
   is_favorite: boolean;
   use_count: number;
@@ -189,6 +239,7 @@ export interface AppState {
 
   // Variables
   variables: Variable[];
+  validationErrors: ValidationError[];
 
   // Templates
   templates: Template[];
@@ -215,6 +266,11 @@ export interface AppState {
   updateVariable: (name: string, value: string) => void;
   addVariable: (name: string, value: string) => void;
   removeVariable: (name: string) => void;
+  updateVariableValidation: (
+    name: string,
+    validation: ValidationRule | undefined
+  ) => void;
+  setValidationErrors: (errors: ValidationError[]) => void;
   setTemplates: (templates: Template[]) => void;
   setTemplatesLoading: (loading: boolean) => void;
   setSettings: (settings: Settings) => void;

@@ -1,8 +1,11 @@
 pub mod database;
 pub mod schema;
+pub mod transforms;
 
-pub use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput};
+pub use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput, ValidationRule};
 pub use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree, SchemaNode, SchemaStats, SchemaHooks};
+use transforms::substitute_variables;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -57,6 +60,13 @@ pub struct ResultSummary {
 
 /// Maximum allowed repeat count to prevent accidental resource exhaustion
 const MAX_REPEAT_COUNT: usize = 10000;
+
+/// Validation error for a variable
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationError {
+    pub variable_name: String,
+    pub message: String,
+}
 
 /// Helper to log a repeat-related error and increment error count
 fn log_repeat_error(logs: &mut Vec<LogEntry>, summary: &mut ResultSummary, message: String, details: String) {
@@ -146,10 +156,7 @@ pub fn create_structure_from_tree(
             // Determine the working directory for hooks
             // Use the root folder path if it was created, otherwise use output_path
             // Apply variable substitution to root name (same as in create_node)
-            let mut substituted_root_name = tree.root.name.clone();
-            for (var_name, var_value) in variables {
-                substituted_root_name = substituted_root_name.replace(var_name, var_value);
-            }
+            let substituted_root_name = substitute_variables(&tree.root.name, variables);
             let hook_working_dir = base_path.join(&substituted_root_name);
             let working_dir = if hook_working_dir.exists() {
                 hook_working_dir
@@ -159,10 +166,7 @@ pub fn create_structure_from_tree(
 
             for cmd in &hooks.post_create {
                 // Replace variables in command
-                let mut resolved_cmd = cmd.clone();
-                for (var_name, var_value) in variables {
-                    resolved_cmd = resolved_cmd.replace(var_name, var_value);
-                }
+                let resolved_cmd = substitute_variables(cmd, variables);
 
                 if dry_run {
                     logs.push(LogEntry {
@@ -396,10 +400,7 @@ fn create_node_internal(
             }
 
             // Resolve count (may contain variable references)
-            let mut resolved = count_str.to_string();
-            for (var_name, var_value) in variables {
-                resolved = resolved.replace(var_name, var_value);
-            }
+            let resolved = substitute_variables(count_str, variables);
 
             // Parse count to integer with safe bounds checking
             let count: usize = match resolved.trim().parse::<i64>() {
@@ -484,10 +485,7 @@ fn create_node_internal(
     }
 
     // Replace variables in name
-    let mut name = node.name.clone();
-    for (var_name, var_value) in variables {
-        name = name.replace(var_name, var_value);
-    }
+    let name = substitute_variables(&node.name, variables);
 
     let current_path = parent_path.join(&name);
     let display_path = current_path.display().to_string();
@@ -647,10 +645,7 @@ fn create_node_internal(
                                             message: format!("Notebook processing failed, using text replacement: {}", name),
                                             details: Some(e),
                                         });
-                                        let mut fallback = content;
-                                        for (var_name, var_value) in variables {
-                                            fallback = fallback.replace(var_name, var_value);
-                                        }
+                                        let fallback = substitute_variables(&content, variables);
                                         fallback
                                     }
                                 };
@@ -688,10 +683,7 @@ fn create_node_internal(
                         match download_file(url) {
                             Ok(content) => {
                                 // Replace variables in downloaded content
-                                let mut file_content = content;
-                                for (var_name, var_value) in variables {
-                                    file_content = file_content.replace(var_name, var_value);
-                                }
+                                let file_content = substitute_variables(&content, variables);
                                 match fs::write(&current_path, &file_content) {
                                     Ok(_) => {
                                         summary.files_downloaded += 1;
@@ -732,10 +724,7 @@ fn create_node_internal(
                 } else {
                     // Create file with content (or empty if no content)
                     // Replace variables in file content
-                    let mut file_content = node.content.clone().unwrap_or_default();
-                    for (var_name, var_value) in variables {
-                        file_content = file_content.replace(var_name, var_value);
-                    }
+                    let file_content = substitute_variables(&node.content.clone().unwrap_or_default(), variables);
                     match fs::write(&current_path, &file_content) {
                         Ok(_) => {
                             summary.files_created += 1;
@@ -988,20 +977,14 @@ fn process_jupyter_notebook(
             if let Some(source) = cell.get_mut("source").and_then(|s| s.as_array_mut()) {
                 for line in source {
                     if let Some(text) = line.as_str() {
-                        let mut replaced = text.to_string();
-                        for (var_name, var_value) in variables {
-                            replaced = replaced.replace(var_name, var_value);
-                        }
+                        let replaced = substitute_variables(text, variables);
                         *line = serde_json::Value::String(replaced);
                     }
                 }
             }
             // Also handle source as a single string (some notebooks use this format)
             if let Some(source) = cell.get_mut("source").and_then(|s| s.as_str().map(|t| t.to_string())) {
-                let mut replaced = source;
-                for (var_name, var_value) in variables {
-                    replaced = replaced.replace(var_name, var_value);
-                }
+                let replaced = substitute_variables(&source, variables);
                 cell["source"] = serde_json::Value::String(replaced);
             }
         }
@@ -1011,10 +994,7 @@ fn process_jupyter_notebook(
     if let Some(metadata) = notebook.get_mut("metadata") {
         let metadata_str = serde_json::to_string(metadata)
             .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
-        let mut replaced = metadata_str;
-        for (var_name, var_value) in variables {
-            replaced = replaced.replace(var_name, var_value);
-        }
+        let replaced = substitute_variables(&metadata_str, variables);
         if let Ok(new_metadata) = serde_json::from_str(&replaced) {
             *metadata = new_metadata;
         }
@@ -1053,10 +1033,7 @@ fn process_epub_file(
         if should_modify {
             let mut content = String::new();
             if file.read_to_string(&mut content).is_ok() {
-                let mut modified = content;
-                for (var_name, var_value) in variables {
-                    modified = modified.replace(var_name, var_value);
-                }
+                let modified = substitute_variables(&content, variables);
                 modified_files.insert(name, modified.into_bytes());
             }
         }
@@ -1123,10 +1100,7 @@ fn process_pdf_file(
             for key in metadata_keys {
                 if let Ok(Object::String(ref mut value, _format)) = dict.get_mut(key) {
                     let text = String::from_utf8_lossy(value).to_string();
-                    let mut new_text = text.clone();
-                    for (var_name, var_value) in variables {
-                        new_text = new_text.replace(var_name, var_value);
-                    }
+                    let new_text = substitute_variables(&text, variables);
                     if new_text != text {
                         *value = new_text.into_bytes();
                     }
@@ -1170,10 +1144,7 @@ fn process_pdf_form_field(
         // Process field value (V)
         if let Ok(Object::String(ref mut value, _format)) = field.get_mut(b"V") {
             let text = String::from_utf8_lossy(value).to_string();
-            let mut new_text = text.clone();
-            for (var_name, var_value) in variables {
-                new_text = new_text.replace(var_name, var_value);
-            }
+            let new_text = substitute_variables(&text, variables);
             if new_text != text {
                 *value = new_text.into_bytes();
             }
@@ -1182,10 +1153,7 @@ fn process_pdf_form_field(
         // Process default value (DV)
         if let Ok(Object::String(ref mut value, _format)) = field.get_mut(b"DV") {
             let text = String::from_utf8_lossy(value).to_string();
-            let mut new_text = text.clone();
-            for (var_name, var_value) in variables {
-                new_text = new_text.replace(var_name, var_value);
-            }
+            let new_text = substitute_variables(&text, variables);
             if new_text != text {
                 *value = new_text.into_bytes();
             }
@@ -1241,18 +1209,9 @@ fn process_jpeg_xmp(
         if let Some(xmp_end) = find_xmp_end(&data[xmp_start..]) {
             let xmp_data = &data[xmp_start..xmp_start + xmp_end];
             let xmp_str = String::from_utf8_lossy(xmp_data);
-            let mut modified_xmp = xmp_str.to_string();
+            let modified_xmp = substitute_variables(&xmp_str, variables);
 
-            let mut changed = false;
-            for (var_name, var_value) in variables {
-                let new_xmp = modified_xmp.replace(var_name, var_value);
-                if new_xmp != modified_xmp {
-                    changed = true;
-                    modified_xmp = new_xmp;
-                }
-            }
-
-            if changed {
+            if modified_xmp != xmp_str {
                 // Reconstruct the file with modified XMP
                 let mut output = Vec::new();
                 output.extend_from_slice(&data[..xmp_start]);
@@ -1304,18 +1263,9 @@ fn process_png_xmp(
             if let Some(xmp_len) = find_xmp_end(&data[xmp_start..]) {
                 let xmp_data = &data[xmp_start..xmp_start + xmp_len];
                 let xmp_str = String::from_utf8_lossy(xmp_data);
-                let mut modified_xmp = xmp_str.to_string();
+                let modified_xmp = substitute_variables(&xmp_str, variables);
 
-                let mut changed = false;
-                for (var_name, var_value) in variables {
-                    let new_xmp = modified_xmp.replace(var_name, var_value);
-                    if new_xmp != modified_xmp {
-                        changed = true;
-                        modified_xmp = new_xmp;
-                    }
-                }
-
-                if changed {
+                if modified_xmp != xmp_str {
                     let mut output = Vec::new();
                     output.extend_from_slice(&data[..xmp_start]);
                     output.extend_from_slice(modified_xmp.as_bytes());
@@ -1366,10 +1316,7 @@ fn process_mp3_id3(
     for frame_id in frame_ids {
         if let Some(text) = tag.get(frame_id).and_then(|f| f.content().text()) {
             let original = text.to_string();
-            let mut new_text = original.clone();
-            for (var_name, var_value) in variables {
-                new_text = new_text.replace(var_name, var_value);
-            }
+            let new_text = substitute_variables(&original, variables);
             if new_text != original {
                 tag.set_text(frame_id, new_text);
                 modified = true;
@@ -1430,9 +1377,7 @@ fn process_flac_vorbis(
         if let Some(values) = vorbis.comments.get_mut(&key) {
             for value in values.iter_mut() {
                 let original = value.clone();
-                for (var_name, var_value) in variables {
-                    *value = value.replace(var_name, var_value);
-                }
+                *value = substitute_variables(value, variables);
                 if *value != original {
                     modified = true;
                 }
@@ -1824,10 +1769,7 @@ fn process_file_content(
     // Text files - simple string replacement
     if is_text_like_file(filename) {
         if let Ok(text) = String::from_utf8(data.to_vec()) {
-            let mut processed = text;
-            for (var_name, var_value) in variables {
-                processed = processed.replace(var_name, var_value);
-            }
+            let processed = substitute_variables(&text, variables);
             return Ok(processed.into_bytes());
         }
     }
@@ -1892,10 +1834,7 @@ fn process_office_file(
                 .map_err(|e| format!("Failed to read XML content: {}", e))?;
 
             // Replace variables
-            let mut modified = content;
-            for (var_name, var_value) in variables {
-                modified = modified.replace(var_name, var_value);
-            }
+            let modified = substitute_variables(&content, variables);
 
             modified_files.insert(name, modified.into_bytes());
         }
@@ -1950,6 +1889,9 @@ pub struct TemplateExport {
     pub schema_xml: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<HashMap<String, String>>,
+    /// Validation rules for variables (optional, for backwards compatibility)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub variable_validation: HashMap<String, ValidationRule>,
     pub icon_color: Option<String>,
 }
 
@@ -2119,6 +2061,7 @@ fn cmd_create_template(
     description: Option<String>,
     schema_xml: String,
     variables: HashMap<String, String>,
+    variable_validation: Option<HashMap<String, ValidationRule>>,
     icon_color: Option<String>,
 ) -> Result<Template, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
@@ -2129,6 +2072,7 @@ fn cmd_create_template(
             description,
             schema_xml,
             variables,
+            variable_validation: variable_validation.unwrap_or_default(),
             icon_color,
             is_favorite: false,
         })
@@ -2338,11 +2282,11 @@ fn import_templates_from_json_internal(
             continue;
         }
 
-        // Determine variables to use
-        let variables = if include_variables {
-            template_export.variables.unwrap_or_default()
+        // Determine variables and validation to use
+        let (variables, variable_validation) = if include_variables {
+            (template_export.variables.unwrap_or_default(), template_export.variable_validation)
         } else {
-            HashMap::new()
+            (HashMap::new(), HashMap::new())
         };
 
         // Create the template
@@ -2351,6 +2295,7 @@ fn import_templates_from_json_internal(
             description: template_export.description,
             schema_xml: template_export.schema_xml,
             variables,
+            variable_validation,
             icon_color: template_export.icon_color,
             is_favorite: false,
         };
@@ -2382,6 +2327,7 @@ fn cmd_export_template(
         description: template.description,
         schema_xml: template.schema_xml,
         variables: if include_variables { Some(template.variables) } else { None },
+        variable_validation: if include_variables { template.variable_validation } else { HashMap::new() },
         icon_color: template.icon_color,
     };
 
@@ -2426,6 +2372,7 @@ fn cmd_export_templates_bulk(
             description: t.description,
             schema_xml: t.schema_xml,
             variables: if include_variables { Some(t.variables) } else { None },
+            variable_validation: if include_variables { t.variable_validation } else { HashMap::new() },
             icon_color: t.icon_color,
         })
         .collect();
@@ -2486,6 +2433,136 @@ fn cmd_get_settings(state: State<Mutex<AppState>>) -> Result<std::collections::H
 fn cmd_set_setting(state: State<Mutex<AppState>>, key: String, value: String) -> Result<(), String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.set_setting(&key, &value).map_err(|e| e.to_string())
+}
+
+/// Strip % delimiters from variable name for user-friendly display
+fn display_var_name(name: &str) -> &str {
+    name.trim_start_matches('%').trim_end_matches('%')
+}
+
+/// Maximum allowed length for regex patterns to prevent DoS via complex patterns
+const MAX_REGEX_PATTERN_LENGTH: usize = 1000;
+
+/// Error type for regex pattern compilation failures
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PatternError {
+    TooLong,
+    InvalidRegex,
+}
+
+/// Validate variables against their validation rules.
+///
+/// Returns a list of validation errors sorted by variable name for consistent ordering.
+/// Pre-compiles regex patterns for efficiency when validating multiple variables.
+pub fn validate_variables(
+    variables: &HashMap<String, String>,
+    rules: &HashMap<String, ValidationRule>,
+) -> Vec<ValidationError> {
+    let mut errors = Vec::new();
+
+    // Pre-compile all regex patterns to avoid recompilation on each validation
+    // Patterns exceeding MAX_REGEX_PATTERN_LENGTH are treated as invalid
+    let compiled_patterns: HashMap<&String, Result<Regex, PatternError>> = rules
+        .iter()
+        .filter_map(|(name, rule)| {
+            rule.pattern.as_ref().map(|pattern| {
+                if pattern.len() > MAX_REGEX_PATTERN_LENGTH {
+                    (name, Err(PatternError::TooLong))
+                } else {
+                    (name, Regex::new(pattern).map_err(|_| PatternError::InvalidRegex))
+                }
+            })
+        })
+        .collect();
+
+    // Sort rules by name for deterministic error ordering
+    let mut sorted_rules: Vec<_> = rules.iter().collect();
+    sorted_rules.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (name, rule) in sorted_rules {
+        let value = variables.get(name).map(|s| s.as_str()).unwrap_or("");
+        // Use clean display name (without % delimiters) for both variable_name and messages
+        let display_name = display_var_name(name).to_string();
+
+        // Validate rule sanity: min_length should not exceed max_length
+        if let (Some(min), Some(max)) = (rule.min_length, rule.max_length) {
+            if min > max {
+                errors.push(ValidationError {
+                    variable_name: display_name.clone(),
+                    message: format!("Invalid rule for {}: min length ({}) exceeds max length ({})", display_name, min, max),
+                });
+                continue;
+            }
+        }
+
+        if rule.required && value.is_empty() {
+            errors.push(ValidationError {
+                variable_name: display_name.clone(),
+                message: format!("{} is required", display_name),
+            });
+            continue;
+        }
+
+        if !value.is_empty() {
+            // Use chars().count() for proper Unicode character counting
+            let char_count = value.chars().count();
+
+            if let Some(min) = rule.min_length {
+                if char_count < min {
+                    errors.push(ValidationError {
+                        variable_name: display_name.clone(),
+                        message: format!("{} must be at least {} characters", display_name, min),
+                    });
+                }
+            }
+
+            if let Some(max) = rule.max_length {
+                if char_count > max {
+                    errors.push(ValidationError {
+                        variable_name: display_name.clone(),
+                        message: format!("{} must be at most {} characters", display_name, max),
+                    });
+                }
+            }
+
+            // Use pre-compiled regex pattern
+            if let Some(compiled_result) = compiled_patterns.get(name) {
+                match compiled_result {
+                    Ok(re) => {
+                        if !re.is_match(value) {
+                            errors.push(ValidationError {
+                                variable_name: display_name.clone(),
+                                message: format!("{} does not match required pattern", display_name),
+                            });
+                        }
+                    }
+                    Err(PatternError::TooLong) => {
+                        errors.push(ValidationError {
+                            variable_name: display_name.clone(),
+                            message: format!("Regex pattern for {} exceeds maximum length of {} characters", display_name, MAX_REGEX_PATTERN_LENGTH),
+                        });
+                    }
+                    Err(PatternError::InvalidRegex) => {
+                        errors.push(ValidationError {
+                            variable_name: display_name.clone(),
+                            message: format!("Invalid regex pattern for {}", display_name),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    errors
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_validate_variables(
+    variables: HashMap<String, String>,
+    rules: HashMap<String, ValidationRule>,
+) -> Result<Vec<ValidationError>, String> {
+    Ok(validate_variables(&variables, &rules))
 }
 
 #[cfg(feature = "tauri-app")]
@@ -2615,7 +2692,8 @@ pub fn run() {
             cmd_import_templates_from_json,
             cmd_import_templates_from_url,
             cmd_get_settings,
-            cmd_set_setting
+            cmd_set_setting,
+            cmd_validate_variables
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2886,6 +2964,7 @@ mod tests {
                     description: Some("A test template".to_string()),
                     schema_xml: "<folder name=\"test\"/>".to_string(),
                     variables: None,
+                    variable_validation: HashMap::new(),
                     icon_color: None,
                 }),
                 templates: None,
@@ -2934,6 +3013,301 @@ mod tests {
             assert_eq!(export.file_type, ExportFileType::TemplateBundle);
             assert!(export.templates.is_some());
             assert_eq!(export.templates.unwrap().len(), 2);
+        }
+    }
+
+    mod validate_variables_tests {
+        use super::*;
+
+        #[test]
+        fn passes_with_no_rules() {
+            let variables = HashMap::new();
+            let rules = HashMap::new();
+            let errors = validate_variables(&variables, &rules);
+            assert!(errors.is_empty());
+        }
+
+        #[test]
+        fn validates_required_field() {
+            let variables: HashMap<String, String> = HashMap::new();
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    required: true,
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("required"));
+        }
+
+        #[test]
+        fn validates_required_with_empty_value() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    required: true,
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("required"));
+        }
+
+        #[test]
+        fn passes_required_with_value() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "test".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    required: true,
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert!(errors.is_empty());
+        }
+
+        #[test]
+        fn validates_min_length() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "ab".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    min_length: Some(5),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("at least 5"));
+        }
+
+        #[test]
+        fn validates_max_length() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "abcdefghij".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    max_length: Some(5),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("at most 5"));
+        }
+
+        #[test]
+        fn validates_min_length_with_unicode() {
+            let mut variables = HashMap::new();
+            // "héllo" is 5 characters but 6 bytes
+            variables.insert("%NAME%".to_string(), "héllo".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    min_length: Some(6),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("at least 6"));
+        }
+
+        #[test]
+        fn validates_pattern() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "invalid!".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    pattern: Some("^[a-z]+$".to_string()),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("does not match"));
+        }
+
+        #[test]
+        fn passes_valid_pattern() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "validname".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    pattern: Some("^[a-z]+$".to_string()),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert!(errors.is_empty());
+        }
+
+        #[test]
+        fn handles_invalid_regex_pattern() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "test".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    pattern: Some("[invalid".to_string()),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("Invalid regex"));
+        }
+
+        #[test]
+        fn validates_rule_sanity_min_exceeds_max() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "test".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    min_length: Some(10),
+                    max_length: Some(5),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("min length (10) exceeds max length (5)"));
+        }
+
+        #[test]
+        fn validates_multiple_rules() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "ab".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    min_length: Some(5),
+                    pattern: Some("^[0-9]+$".to_string()),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            // Should have 2 errors: min_length and pattern
+            assert_eq!(errors.len(), 2);
+        }
+
+        #[test]
+        fn skips_length_validation_for_empty_non_required() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "".to_string());
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    min_length: Some(5),
+                    required: false,
+                    ..Default::default()
+                },
+            );
+
+            // Empty value with non-required field should not trigger min_length error
+            let errors = validate_variables(&variables, &rules);
+            assert!(errors.is_empty());
+        }
+
+        #[test]
+        fn strips_percent_delimiters_in_display_name() {
+            let variables: HashMap<String, String> = HashMap::new();
+            let mut rules = HashMap::new();
+            rules.insert(
+                "%MY_VAR%".to_string(),
+                ValidationRule {
+                    required: true,
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            // Both variable_name and message should use clean names without % delimiters
+            assert_eq!(errors[0].variable_name, "MY_VAR");
+            assert!(errors[0].message.contains("MY_VAR is required"));
+            assert!(!errors[0].message.contains("%"));
+        }
+
+        #[test]
+        fn rejects_overly_long_regex_pattern() {
+            let mut variables = HashMap::new();
+            variables.insert("%NAME%".to_string(), "test".to_string());
+            let mut rules = HashMap::new();
+            // Create a pattern longer than MAX_REGEX_PATTERN_LENGTH (1000)
+            let long_pattern = "a".repeat(1001);
+            rules.insert(
+                "%NAME%".to_string(),
+                ValidationRule {
+                    pattern: Some(long_pattern),
+                    ..Default::default()
+                },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 1);
+            assert!(errors[0].message.contains("exceeds maximum length"));
+        }
+
+        #[test]
+        fn errors_are_sorted_by_variable_name() {
+            let variables: HashMap<String, String> = HashMap::new();
+            let mut rules = HashMap::new();
+            // Insert in non-alphabetical order
+            rules.insert(
+                "%ZEBRA%".to_string(),
+                ValidationRule { required: true, ..Default::default() },
+            );
+            rules.insert(
+                "%APPLE%".to_string(),
+                ValidationRule { required: true, ..Default::default() },
+            );
+            rules.insert(
+                "%MANGO%".to_string(),
+                ValidationRule { required: true, ..Default::default() },
+            );
+
+            let errors = validate_variables(&variables, &rules);
+            assert_eq!(errors.len(), 3);
+            // Errors should be sorted alphabetically by variable name (clean names without % delimiters)
+            assert_eq!(errors[0].variable_name, "APPLE");
+            assert_eq!(errors[1].variable_name, "MANGO");
+            assert_eq!(errors[2].variable_name, "ZEBRA");
         }
     }
 }

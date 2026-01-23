@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, readFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store/appStore";
+import { useClickAwayEscape } from "../hooks";
 import {
   CheckIcon,
   XIcon,
@@ -17,7 +18,8 @@ import {
   ExportIcon,
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
-import type { SchemaTree, Template } from "../types/schema";
+import type { SchemaTree, Template, ValidationRule } from "../types/schema";
+import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import type { ReactNode } from "react";
 
 type SchemaSourceType = "xml" | "folder";
@@ -64,6 +66,39 @@ const DownloadIcon = ({ size = 24, className = "" }: { size?: number; className?
   </svg>
 );
 
+const SettingsIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    className={className}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+const ChevronDownIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    className={className}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
 export const LeftPanel = () => {
   const {
     schemaPath,
@@ -72,6 +107,7 @@ export const LeftPanel = () => {
     outputPath,
     projectName,
     variables,
+    validationErrors,
     templates,
     templatesLoading,
     setSchemaPath,
@@ -82,21 +118,37 @@ export const LeftPanel = () => {
     updateVariable,
     addVariable,
     removeVariable,
+    updateVariableValidation,
     setVariables,
     setTemplates,
     setTemplatesLoading,
   } = useAppStore();
 
+  // State declarations
   const [sourceType, setSourceType] = useState<SchemaSourceType>("xml");
   const [isExporting, setIsExporting] = useState(false);
   const [isAddingVariable, setIsAddingVariable] = useState(false);
   const [newVarName, setNewVarName] = useState("");
   const [newVarValue, setNewVarValue] = useState("");
+  const [editingValidation, setEditingValidation] = useState<string | null>(null);
+  const [showTransformHelp, setShowTransformHelp] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
   const [importExportMode, setImportExportMode] = useState<"import" | "export" | "bulk-export" | null>(null);
   const [exportTemplateId, setExportTemplateId] = useState<string | undefined>();
+
+  // Refs for click-away detection
+  const validationPopoverRef = useRef<HTMLDivElement>(null);
+  const transformHelpRef = useRef<HTMLDivElement>(null);
+
+  // Stable callbacks for click-away hooks
+  const closeValidationPopover = useCallback(() => setEditingValidation(null), []);
+  const closeTransformHelp = useCallback(() => setShowTransformHelp(false), []);
+
+  // Click-away and Escape handlers for popovers
+  useClickAwayEscape(validationPopoverRef, editingValidation !== null, closeValidationPopover);
+  useClickAwayEscape(transformHelpRef, showTransformHelp, closeTransformHelp);
 
   // Load templates on mount
   useEffect(() => {
@@ -121,8 +173,12 @@ export const LeftPanel = () => {
     try {
       // Convert variables array to a record/map for storage
       const variablesMap: Record<string, string> = {};
+      const validationMap: Record<string, ValidationRule> = {};
       for (const v of variables) {
         variablesMap[v.name] = v.value;
+        if (v.validation) {
+          validationMap[v.name] = v.validation;
+        }
       }
 
       await invoke("cmd_create_template", {
@@ -130,6 +186,7 @@ export const LeftPanel = () => {
         description: newTemplateDescription.trim() || null,
         schemaXml: schemaContent,
         variables: variablesMap,
+        variableValidation: validationMap,
         iconColor: null,
       });
       setIsSavingTemplate(false);
@@ -153,11 +210,12 @@ export const LeftPanel = () => {
       const tree = await invoke<SchemaTree>("cmd_parse_schema", { content: template.schema_xml });
       setSchemaTree(tree);
 
-      // Load variables from the template
+      // Load variables from the template (with validation rules if present)
       if (template.variables && Object.keys(template.variables).length > 0) {
         const loadedVariables = Object.entries(template.variables).map(([name, value]) => ({
           name,
           value,
+          validation: template.variable_validation?.[name],
         }));
         setVariables(loadedVariables);
       }
@@ -472,31 +530,184 @@ export const LeftPanel = () => {
           </button>
         </div>
         <div className="space-y-1.5">
-          {variables.map((variable) => (
-            <div
-              key={variable.name}
-              className="flex items-center gap-2 p-2 bg-card-bg rounded-mac border border-border-muted group"
-            >
-              <span className="font-mono text-mac-xs font-medium text-system-orange bg-system-orange/10 px-1.5 py-0.5 rounded flex-shrink-0">
-                {variable.name}
-              </span>
-              <span className="text-text-muted text-mac-xs">=</span>
-              <input
-                type="text"
-                value={variable.value}
-                onChange={(e) => updateVariable(variable.name, e.target.value)}
-                className="flex-1 min-w-0 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-transparent focus:border-accent transition-colors"
-                placeholder="Enter value..."
-              />
-              <button
-                onClick={() => removeVariable(variable.name)}
-                className="w-5 h-5 flex items-center justify-center rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-system-red hover:bg-system-red/10 transition-all"
-                title="Remove variable"
+          {variables.map((variable) => {
+            // Match by clean name (without % delimiters) since validation returns clean names
+            const cleanName = variable.name.replace(/^%|%$/g, "");
+            const varError = validationErrors.find(
+              (e) => e.variable_name === cleanName
+            );
+            const hasValidation = variable.validation && (
+              variable.validation.required ||
+              variable.validation.minLength ||
+              variable.validation.maxLength ||
+              variable.validation.pattern
+            );
+            return (
+              // Conditional ref: only the currently-editing variable's container gets the ref
+              // This allows the click-away hook to detect clicks outside the active popover
+              <div
+                key={variable.name}
+                className="relative"
+                ref={editingValidation === variable.name ? validationPopoverRef : undefined}
               >
-                <XIcon size={12} />
-              </button>
-            </div>
-          ))}
+                <div
+                  className={`flex items-center gap-2 p-2 bg-card-bg rounded-mac border group ${
+                    varError ? "border-system-red" : "border-border-muted"
+                  }`}
+                >
+                  <span className="font-mono text-mac-xs font-medium text-system-orange bg-system-orange/10 px-1.5 py-0.5 rounded flex-shrink-0">
+                    {variable.name}
+                  </span>
+                  <span className="text-text-muted text-mac-xs">=</span>
+                  <input
+                    type="text"
+                    value={variable.value}
+                    onChange={(e) => updateVariable(variable.name, e.target.value)}
+                    className="flex-1 min-w-0 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-transparent focus:border-accent transition-colors"
+                    placeholder="Enter value..."
+                    aria-invalid={varError ? "true" : undefined}
+                    aria-describedby={varError ? `error-${variable.name}` : undefined}
+                  />
+                  <button
+                    onClick={() =>
+                      setEditingValidation(
+                        editingValidation === variable.name ? null : variable.name
+                      )
+                    }
+                    className={`w-5 h-5 flex items-center justify-center rounded transition-all ${
+                      hasValidation
+                        ? "text-accent"
+                        : "text-text-muted opacity-0 group-hover:opacity-100"
+                    } hover:text-accent hover:bg-accent/10`}
+                    title="Configure validation"
+                    aria-expanded={editingValidation === variable.name}
+                    aria-controls={`validation-panel-${variable.name}`}
+                    aria-label={`Configure validation for ${variable.name}`}
+                  >
+                    <SettingsIcon size={12} />
+                  </button>
+                  <button
+                    onClick={() => removeVariable(variable.name)}
+                    className="w-5 h-5 flex items-center justify-center rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-system-red hover:bg-system-red/10 transition-all"
+                    title="Remove variable"
+                  >
+                    <XIcon size={12} />
+                  </button>
+                </div>
+                {varError && (
+                  <p
+                    id={`error-${variable.name}`}
+                    role="alert"
+                    className="mt-0.5 text-mac-xs text-system-red pl-2"
+                  >
+                    {varError.message}
+                  </p>
+                )}
+                {/* Validation Config Popover */}
+                {editingValidation === variable.name && (
+                  <div
+                    id={`validation-panel-${variable.name}`}
+                    role="region"
+                    aria-label={`Validation settings for ${variable.name}`}
+                    className="mt-1 p-2 bg-card-bg rounded-mac border border-accent text-mac-xs"
+                  >
+                    <div className="font-medium text-text-primary mb-2">
+                      Validation Rules
+                    </div>
+                    <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={variable.validation?.required ?? false}
+                        onChange={(e) =>
+                          updateVariableValidation(variable.name, {
+                            ...variable.validation,
+                            required: e.target.checked,
+                          })
+                        }
+                        className="rounded border-border-default"
+                      />
+                      <span className="text-text-secondary">Required</span>
+                    </label>
+                    <div className="flex gap-2 mb-2">
+                      <label className="flex-1">
+                        <span className="text-text-muted block mb-0.5">
+                          Min length
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={variable.validation?.minLength ?? ""}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            const minLength = !e.target.value ? undefined :
+                              (isNaN(val) || val < 0) ? 0 : val;
+                            // Ensure min doesn't exceed max
+                            const maxLength = variable.validation?.maxLength;
+                            updateVariableValidation(variable.name, {
+                              ...variable.validation,
+                              minLength,
+                              maxLength: maxLength !== undefined && minLength !== undefined && minLength > maxLength
+                                ? minLength : maxLength,
+                            });
+                          }}
+                          className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 text-text-primary outline-none focus:border-accent"
+                          placeholder="0"
+                        />
+                      </label>
+                      <label className="flex-1">
+                        <span className="text-text-muted block mb-0.5">
+                          Max length
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={variable.validation?.maxLength ?? ""}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            const maxLength = !e.target.value ? undefined :
+                              (isNaN(val) || val < 0) ? 0 : val;
+                            // Ensure max isn't less than min
+                            const minLength = variable.validation?.minLength;
+                            updateVariableValidation(variable.name, {
+                              ...variable.validation,
+                              maxLength,
+                              minLength: minLength !== undefined && maxLength !== undefined && maxLength < minLength
+                                ? maxLength : minLength,
+                            });
+                          }}
+                          className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 text-text-primary outline-none focus:border-accent"
+                          placeholder="None"
+                        />
+                      </label>
+                    </div>
+                    <label className="block mb-2">
+                      <span className="text-text-muted block mb-0.5">
+                        Pattern (regex)
+                      </span>
+                      <input
+                        type="text"
+                        value={variable.validation?.pattern ?? ""}
+                        onChange={(e) =>
+                          updateVariableValidation(variable.name, {
+                            ...variable.validation,
+                            pattern: e.target.value || undefined,
+                          })
+                        }
+                        className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 font-mono text-text-primary outline-none focus:border-accent"
+                        placeholder="e.g., ^[a-z]+$"
+                      />
+                    </label>
+                    <button
+                      onClick={() => setEditingValidation(null)}
+                      className="w-full px-2 py-1 text-accent hover:bg-accent/10 rounded transition-colors font-medium"
+                    >
+                      Done
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* Add Variable Form */}
           {isAddingVariable && (
@@ -552,6 +763,56 @@ export const LeftPanel = () => {
         <p className="mt-2 text-mac-xs text-text-muted">
           Use %VARIABLE% in file names or content
         </p>
+
+        {/* Transformation Help */}
+        <div ref={transformHelpRef}>
+          <button
+            onClick={() => setShowTransformHelp(!showTransformHelp)}
+            className="mt-2 flex items-center gap-1 text-mac-xs text-text-muted hover:text-accent transition-colors"
+            aria-expanded={showTransformHelp}
+            aria-controls="transform-help-panel"
+          >
+            <ChevronDownIcon
+              size={12}
+              className={`transition-transform ${showTransformHelp ? "rotate-180" : ""}`}
+            />
+            <span>Available transformations</span>
+          </button>
+          {showTransformHelp && (
+            <div
+              id="transform-help-panel"
+              role="region"
+              aria-label="Available variable transformations"
+              className="mt-2 p-2 bg-card-bg rounded-mac border border-border-muted text-mac-xs space-y-1"
+            >
+              <div className="font-medium text-text-primary mb-1">
+                Case transformations
+              </div>
+              {TRANSFORMATIONS.map((t) => (
+                <div key={t.id} className="flex items-center gap-2">
+                  <code className="font-mono text-accent bg-accent/10 px-1 rounded">
+                    :{t.id}
+                  </code>
+                  <span className="text-text-muted">{t.example}</span>
+                </div>
+              ))}
+              <div className="font-medium text-text-primary mt-2 mb-1">
+                Date formatting
+              </div>
+              {DATE_FORMATS.map((f) => (
+                <div key={f.id} className="flex items-center gap-2">
+                  <code className="font-mono text-accent bg-accent/10 px-1 rounded">
+                    :format({f.id})
+                  </code>
+                  <span className="text-text-muted">{f.label}</span>
+                </div>
+              ))}
+              <div className="mt-2 pt-2 border-t border-border-muted text-text-muted">
+                Example: <code className="font-mono">%NAME:kebab-case%</code>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Templates Section */}

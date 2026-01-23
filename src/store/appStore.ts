@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
@@ -162,6 +162,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   variables: [
     { name: "%DATE%", value: new Date().toISOString().split("T")[0] },
   ],
+  validationErrors: [],
 
   // Templates
   templates: [],
@@ -213,11 +214,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   setVariables: (variables: Variable[]) => set({ variables }),
 
   updateVariable: (name: string, value: string) =>
-    set((state) => ({
-      variables: state.variables.map((v) =>
-        v.name === name ? { ...v, value } : v
-      ),
-    })),
+    set((state) => {
+      // Clean name for comparison (validation errors use clean names without % delimiters)
+      const cleanName = name.replace(/^%|%$/g, "");
+      return {
+        variables: state.variables.map((v) =>
+          v.name === name ? { ...v, value } : v
+        ),
+        // Clear validation errors when value changes
+        validationErrors: state.validationErrors.filter(
+          (e) => e.variable_name !== cleanName
+        ),
+      };
+    }),
 
   addVariable: (name: string, value: string) =>
     set((state) => {
@@ -233,9 +242,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   removeVariable: (name: string) =>
+    set((state) => {
+      // Clean name for comparison (validation errors use clean names without % delimiters)
+      const cleanName = name.replace(/^%|%$/g, "");
+      return {
+        variables: state.variables.filter((v) => v.name !== name),
+        validationErrors: state.validationErrors.filter(
+          (e) => e.variable_name !== cleanName
+        ),
+      };
+    }),
+
+  updateVariableValidation: (
+    name: string,
+    validation: ValidationRule | undefined
+  ) =>
     set((state) => ({
-      variables: state.variables.filter((v) => v.name !== name),
+      variables: state.variables.map((v) =>
+        v.name === name ? { ...v, validation } : v
+      ),
     })),
+
+  setValidationErrors: (validationErrors: ValidationError[]) =>
+    set({ validationErrors }),
 
   setTemplates: (templates: Template[]) => set({ templates }),
 

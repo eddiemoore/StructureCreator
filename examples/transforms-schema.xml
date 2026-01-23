@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<folder name="%PROJECT_NAME:kebab-case%">
+  <!-- Source files using different case transformations -->
+  <folder name="src">
+    <!-- PascalCase for component names -->
+    <file name="%COMPONENT_NAME:PascalCase%.tsx">
+      <![CDATA[import React from 'react';
+
+export const %COMPONENT_NAME:PascalCase% = () => {
+  return <div className="%COMPONENT_NAME:kebab-case%">Hello</div>;
+};
+]]>
+    </file>
+
+    <!-- kebab-case for CSS files -->
+    <file name="%COMPONENT_NAME:kebab-case%.css">
+      <![CDATA[.%COMPONENT_NAME:kebab-case% {
+  display: flex;
+}
+]]>
+    </file>
+
+    <!-- snake_case for test files -->
+    <file name="%COMPONENT_NAME:snake_case%_test.ts" />
+
+    <!-- camelCase for utility functions -->
+    <file name="%UTILITY_NAME:camelCase%.ts" />
+  </folder>
+
+  <!-- Using plural transformation for collection names -->
+  <folder name="%MODEL_NAME:plural%">
+    <file name="%MODEL_NAME:kebab-case%.model.ts" />
+    <file name="%MODEL_NAME:kebab-case%.service.ts" />
+    <file name="%MODEL_NAME:kebab-case%.controller.ts" />
+  </folder>
+
+  <!-- Date formatting in file names and content -->
+  <folder name="docs">
+    <file name="CHANGELOG-%DATE:format(YYYY-MM-DD)%.md">
+      <![CDATA[# Changelog
+
+## %DATE:format(MMMM DD, YYYY)%
+
+- Initial release of %PROJECT_NAME%
+]]>
+    </file>
+
+    <file name="README.md">
+      <![CDATA[# %PROJECT_NAME:PascalCase%
+
+Created on %DATE:format(MMMM DD, YYYY)%
+
+## Components
+
+- %COMPONENT_NAME:PascalCase% (%COMPONENT_NAME:length% characters)
+
+## Models
+
+- %MODEL_NAME:PascalCase% → %MODEL_NAME:plural%
+]]>
+    </file>
+  </folder>
+
+  <!-- Using length transform for validation hints -->
+  <file name="config.json">
+    <![CDATA[{
+  "name": "%PROJECT_NAME%",
+  "nameLength": %PROJECT_NAME:length%,
+  "component": "%COMPONENT_NAME:PascalCase%",
+  "model": "%MODEL_NAME:lowercase%",
+  "modelPlural": "%MODEL_NAME:plural%",
+  "createdAt": "%DATE:format(YYYY-MM-DD)%"
+}
+]]>
+  </file>
+</folder>
