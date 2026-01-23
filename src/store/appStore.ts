@@ -363,6 +363,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({
       schemaTree: newTree,
+      schemaContent: null,
       schemaHistory: history,
       schemaHistoryIndex: history.length - 1,
       schemaDirty: true,
@@ -403,6 +404,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({
       schemaTree: newTree,
+      schemaContent: null,
       schemaHistory: history,
       schemaHistoryIndex: history.length - 1,
       schemaDirty: true,
@@ -443,6 +445,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({
       schemaTree: newTree,
+      schemaContent: null,
       schemaHistory: history,
       schemaHistoryIndex: history.length - 1,
       schemaDirty: true,
@@ -477,6 +480,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({
       schemaTree: newTree,
+      schemaContent: null,
       schemaHistory: history,
       schemaHistoryIndex: history.length - 1,
       schemaDirty: true,
@@ -515,6 +519,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({
       schemaTree: newTree,
+      schemaContent: null,
       schemaHistory: history,
       schemaHistoryIndex: history.length - 1,
       schemaDirty: true,
