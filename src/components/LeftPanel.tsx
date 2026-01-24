@@ -18,6 +18,7 @@ import {
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
 import { TagInput } from "./TagInput";
+import { RecentProjectsSection } from "./RecentProjectsSection";
 import type { Template, ValidationRule, TemplateSortOption } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import type { ReactNode } from "react";
@@ -137,6 +138,8 @@ export const LeftPanel = () => {
     setAllTags,
     getFilteredTemplates,
     addLog,
+    setRecentProjects,
+    setRecentProjectsLoading,
   } = useAppStore();
 
   // State declarations
@@ -177,27 +180,31 @@ export const LeftPanel = () => {
     }
   }, [addLog]);
 
-  // Load templates and tags
-  const loadTemplates = useCallback(async () => {
+  // Load templates, tags, and recent projects
+  const loadData = useCallback(async () => {
     setTemplatesLoading(true);
+    setRecentProjectsLoading(true);
     try {
-      const [templates, tags] = await Promise.all([
+      const [templates, tags, recentProjects] = await Promise.all([
         api.database.listTemplates(),
         api.database.getAllTags(),
+        api.database.listRecentProjects(),
       ]);
       setTemplates(templates);
       setAllTags(tags);
+      setRecentProjects(recentProjects);
     } catch (e) {
-      console.error("Failed to load templates:", e);
+      console.error("Failed to load data:", e);
     } finally {
       setTemplatesLoading(false);
+      setRecentProjectsLoading(false);
     }
-  }, [setTemplates, setAllTags, setTemplatesLoading]);
+  }, [setTemplates, setAllTags, setTemplatesLoading, setRecentProjects, setRecentProjectsLoading]);
 
   // Initial load on mount
   useEffect(() => {
-    loadTemplates();
-  }, [loadTemplates]);
+    loadData();
+  }, [loadData]);
 
   const handleSaveAsTemplate = async () => {
     if (!schemaContent || !newTemplateName.trim()) return;
@@ -226,7 +233,7 @@ export const LeftPanel = () => {
       setNewTemplateName("");
       setNewTemplateDescription("");
       setNewTemplateTags([]);
-      loadTemplates();
+      loadData();
     } catch (e) {
       console.error("Failed to save template:", e);
     }
@@ -267,7 +274,7 @@ export const LeftPanel = () => {
         setVariables(loadedVariables);
       }
 
-      loadTemplates(); // Refresh to update use count
+      loadData(); // Refresh to update use count
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       addLog({
@@ -282,7 +289,7 @@ export const LeftPanel = () => {
     e.stopPropagation();
     try {
       await api.database.toggleFavorite(templateId);
-      loadTemplates();
+      loadData();
     } catch (e) {
       console.error("Failed to toggle favorite:", e);
     }
@@ -292,7 +299,7 @@ export const LeftPanel = () => {
     e.stopPropagation();
     try {
       await api.database.deleteTemplate(templateId);
-      loadTemplates();
+      loadData();
     } catch (e) {
       console.error("Failed to delete template:", e);
     }
@@ -939,6 +946,9 @@ export const LeftPanel = () => {
         </div>
       </div>
 
+      {/* Recent Projects Section */}
+      <RecentProjectsSection />
+
       {/* Templates Section */}
       <div className="p-4 flex-1 overflow-auto mac-scroll flex flex-col">
         <div className="flex items-center justify-between mb-2">
@@ -1232,7 +1242,7 @@ export const LeftPanel = () => {
         mode={importExportMode || "import"}
         templates={templates}
         selectedTemplateId={exportTemplateId}
-        onComplete={loadTemplates}
+        onComplete={loadData}
       />
     </aside>
   );

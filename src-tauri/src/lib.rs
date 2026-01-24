@@ -2,7 +2,7 @@ pub mod database;
 pub mod schema;
 pub mod transforms;
 
-pub use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput, ValidationRule};
+pub use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput, ValidationRule, RecentProject, CreateRecentProjectInput};
 pub use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree, SchemaNode, SchemaStats, SchemaHooks, resolve_template_inheritance, ParseWithInheritanceResult, TemplateData};
 use transforms::substitute_variables;
 use regex::Regex;
@@ -2603,6 +2603,64 @@ fn cmd_set_setting(state: State<Mutex<AppState>>, key: String, value: String) ->
     state.db.set_setting(&key, &value).map_err(|e| e.to_string())
 }
 
+// Recent Projects commands
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_list_recent_projects(state: State<Mutex<AppState>>) -> Result<Vec<RecentProject>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.list_recent_projects().map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_get_recent_project(state: State<Mutex<AppState>>, id: String) -> Result<Option<RecentProject>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.get_recent_project(&id).map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_add_recent_project(
+    state: State<Mutex<AppState>>,
+    project_name: String,
+    output_path: String,
+    schema_xml: String,
+    variables: std::collections::HashMap<String, String>,
+    variable_validation: std::collections::HashMap<String, ValidationRule>,
+    template_id: Option<String>,
+    template_name: Option<String>,
+    folders_created: i32,
+    files_created: i32,
+) -> Result<RecentProject, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.add_recent_project(CreateRecentProjectInput {
+        project_name,
+        output_path,
+        schema_xml,
+        variables,
+        variable_validation,
+        template_id,
+        template_name,
+        folders_created,
+        files_created,
+    }).map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_delete_recent_project(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.delete_recent_project(&id).map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_clear_recent_projects(state: State<Mutex<AppState>>) -> Result<usize, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.clear_recent_projects().map_err(|e| e.to_string())
+}
+
 /// Strip % delimiters from variable name for user-friendly display
 fn display_var_name(name: &str) -> &str {
     name.trim_start_matches('%').trim_end_matches('%')
@@ -3324,7 +3382,12 @@ pub fn run() {
             cmd_get_settings,
             cmd_set_setting,
             cmd_validate_variables,
-            cmd_generate_diff_preview
+            cmd_generate_diff_preview,
+            cmd_list_recent_projects,
+            cmd_get_recent_project,
+            cmd_add_recent_project,
+            cmd_delete_recent_project,
+            cmd_clear_recent_projects
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
