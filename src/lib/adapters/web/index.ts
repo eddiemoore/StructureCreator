@@ -29,6 +29,7 @@ import { parseSchema, exportSchemaXml, scanDirectoryToSchema } from "./schema-pa
 import { createStructureFromTree, generateDiffPreview } from "./structure-creator";
 import { validateVariables as validateVars } from "./transforms";
 import { WebTemplateImportExportAdapter } from "./template-io";
+import { scanZipToSchema } from "./zip-utils";
 
 // ============================================================================
 // Web Schema Adapter
@@ -126,13 +127,8 @@ class WebSchemaAdapter implements SchemaAdapter {
     return scanDirectoryToSchema(handle);
   }
 
-  async scanZip(_data: Uint8Array, _filename: string): Promise<SchemaTree> {
-    // ZIP scanning is not fully supported in web mode without additional libraries
-    // For now, throw an error
-    throw new Error(
-      "ZIP file scanning is not supported in web mode. " +
-        "Please extract the ZIP file and use folder scanning instead."
-    );
+  async scanZip(data: Uint8Array, filename: string): Promise<SchemaTree> {
+    return scanZipToSchema(data, filename);
   }
 
   async exportSchemaXml(tree: SchemaTree): Promise<string> {

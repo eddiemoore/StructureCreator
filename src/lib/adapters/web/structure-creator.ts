@@ -15,6 +15,81 @@ import type {
   DiffAction,
 } from "../../../types/schema";
 import { substituteVariables } from "./transforms";
+import {
+  isOfficeDocument,
+  processOfficeDocument,
+  isEpub,
+  processEpub,
+  processZipWithVariables,
+} from "./zip-utils";
+
+/**
+ * Process a downloaded file, applying variable substitution where applicable.
+ */
+const processDownloadedFile = async (
+  data: Uint8Array,
+  filename: string,
+  variables: Record<string, string>
+): Promise<Uint8Array> => {
+  const substituteVars = (text: string) => substituteVariables(text, variables);
+
+  // Check for Office documents (DOCX, XLSX, PPTX, etc.)
+  const officeType = isOfficeDocument(filename);
+  if (officeType) {
+    try {
+      return await processOfficeDocument(data, officeType, substituteVars);
+    } catch (e) {
+      console.warn(`Failed to process Office document ${filename}:`, e);
+      return data; // Return original on error
+    }
+  }
+
+  // Check for EPUB
+  if (isEpub(filename)) {
+    try {
+      return await processEpub(data, substituteVars);
+    } catch (e) {
+      console.warn(`Failed to process EPUB ${filename}:`, e);
+      return data;
+    }
+  }
+
+  // Check for ZIP files (process text files inside)
+  if (filename.toLowerCase().endsWith(".zip")) {
+    try {
+      return await processZipWithVariables(data, substituteVars);
+    } catch (e) {
+      console.warn(`Failed to process ZIP ${filename}:`, e);
+      return data;
+    }
+  }
+
+  // For text files, try to apply variable substitution
+  const textExtensions = [
+    ".txt", ".md", ".json", ".yaml", ".yml", ".xml", ".html", ".htm",
+    ".css", ".js", ".ts", ".jsx", ".tsx", ".vue", ".svelte",
+    ".py", ".rb", ".php", ".java", ".c", ".cpp", ".h", ".hpp",
+    ".cs", ".go", ".rs", ".swift", ".kt", ".scala",
+    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd",
+    ".sql", ".graphql", ".gql", ".env", ".ini", ".toml", ".conf",
+    ".cfg", ".properties", ".csv",
+  ];
+
+  const ext = "." + filename.split(".").pop()?.toLowerCase();
+  if (textExtensions.includes(ext)) {
+    try {
+      const text = new TextDecoder().decode(data);
+      if (text.includes("%")) {
+        const processed = substituteVars(text);
+        return new TextEncoder().encode(processed);
+      }
+    } catch (e) {
+      // Not a valid text file, return original
+    }
+  }
+
+  return data;
+};
 
 interface CreationContext {
   rootHandle: FileSystemDirectoryHandle;
@@ -221,7 +296,16 @@ const processFile = async (
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         const arrayBuffer = await response.arrayBuffer();
-        content = new Uint8Array(arrayBuffer);
+        const rawContent = new Uint8Array(arrayBuffer);
+
+        // Process the downloaded content for variable substitution
+        const processedContent = await processDownloadedFile(
+          rawContent,
+          fileName,
+          context.variables
+        );
+
+        content = processedContent;
       } catch (fetchError) {
         const errorMessage =
           fetchError instanceof Error ? fetchError.message : String(fetchError);
