@@ -31,6 +31,7 @@ export type {
   StructureCreatorAdapter,
   ValidationAdapter,
   TemplateImportExportAdapter,
+  WatchAdapter,
 } from "./adapters/types";
 
 // Global adapter instance
@@ -160,6 +161,13 @@ export const api = {
    */
   get templateImportExport() {
     return getAdapter().templateImportExport;
+  },
+
+  /**
+   * File watch operations.
+   */
+  get watch() {
+    return getAdapter().watch;
   },
 };
 

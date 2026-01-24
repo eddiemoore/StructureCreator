@@ -278,6 +278,40 @@ export interface TemplateImportExportAdapter {
 }
 
 // ============================================================================
+// Watch Adapter
+// ============================================================================
+
+export interface WatchAdapter {
+  /**
+   * Start watching a schema file for changes.
+   * Emits 'schema-file-changed' events when the file is modified.
+   */
+  startWatch(path: string): Promise<void>;
+
+  /**
+   * Stop watching the schema file.
+   */
+  stopWatch(): Promise<void>;
+
+  /**
+   * Get the currently watched path, or null if not watching.
+   */
+  getWatchStatus(): Promise<string | null>;
+
+  /**
+   * Register a callback for when the schema file changes.
+   * Returns an unsubscribe function.
+   */
+  onSchemaFileChanged(callback: (path: string, content: string) => void): () => void;
+
+  /**
+   * Register a callback for watch errors.
+   * Returns an unsubscribe function.
+   */
+  onWatchError(callback: (error: string) => void): () => void;
+}
+
+// ============================================================================
 // Combined Platform Adapter
 // ============================================================================
 
@@ -292,6 +326,7 @@ export interface PlatformAdapter {
   structureCreator: StructureCreatorAdapter;
   validation: ValidationAdapter;
   templateImportExport: TemplateImportExportAdapter;
+  watch: WatchAdapter;
 
   /**
    * Initialize all adapters.
