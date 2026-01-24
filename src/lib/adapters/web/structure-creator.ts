@@ -444,10 +444,11 @@ const processRepeat = async (
   // Process children for each iteration
   for (let i = 0; i < count; i++) {
     // Create scoped variables for this iteration
+    // Use uppercase keys to match substituteVariables lookup
     const scopedVars = {
       ...context.variables,
-      [`%${repeatAs}%`]: i.toString(),
-      [`%${repeatAs}_1%`]: (i + 1).toString(),
+      [`%${repeatAs.toUpperCase()}%`]: i.toString(),
+      [`%${repeatAs.toUpperCase()}_1%`]: (i + 1).toString(),
     };
 
     const scopedContext = {
@@ -757,10 +758,11 @@ const generateDiffRepeat = async (
   const children: DiffNode[] = [];
 
   for (let i = 0; i < count; i++) {
+    // Use uppercase keys to match substituteVariables lookup
     const scopedVars = {
       ...context.variables,
-      [`%${repeatAs}%`]: i.toString(),
-      [`%${repeatAs}_1%`]: (i + 1).toString(),
+      [`%${repeatAs.toUpperCase()}%`]: i.toString(),
+      [`%${repeatAs.toUpperCase()}_1%`]: (i + 1).toString(),
     };
 
     const scopedContext = {
