@@ -32,7 +32,6 @@ export const ImportExportModal = ({
   onComplete,
 }: ImportExportModalProps) => {
   // Export state
-  const [includeVariables, setIncludeVariables] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     selectedTemplateId ? new Set([selectedTemplateId]) : new Set(templates.map((t) => t.id))
   );
@@ -41,7 +40,6 @@ export const ImportExportModal = ({
   const [importTab, setImportTab] = useState<ImportTab>("file");
   const [importUrl, setImportUrl] = useState("");
   const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>("skip");
-  const [importIncludeVariables, setImportIncludeVariables] = useState(true);
 
   // Status state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -66,8 +64,6 @@ export const ImportExportModal = ({
       setImportUrl("");
       setImportTab("file");
       setDuplicateStrategy("skip");
-      setImportIncludeVariables(true);
-      setIncludeVariables(true);
       setSelectedIds(
         selectedTemplateId
           ? new Set([selectedTemplateId])
@@ -367,16 +363,6 @@ export const ImportExportModal = ({
           </div>
         )}
 
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeVariables}
-            onChange={(e) => setIncludeVariables(e.target.checked)}
-            className="w-4 h-4 rounded border-border-default text-accent focus:ring-accent"
-          />
-          <span className="text-mac-sm text-text-secondary">Include variable values</span>
-        </label>
-
         <div className="flex justify-end gap-2 pt-2">
           <button
             onClick={onClose}
@@ -532,17 +518,6 @@ export const ImportExportModal = ({
             </div>
           </div>
         </div>
-
-        {/* Include Variables */}
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={importIncludeVariables}
-            onChange={(e) => setImportIncludeVariables(e.target.checked)}
-            className="w-4 h-4 rounded border-border-default text-accent focus:ring-accent"
-          />
-          <span className="text-mac-sm text-text-secondary">Import variable values</span>
-        </label>
 
         {error && (
           <div className="p-3 bg-system-red/10 border border-system-red/20 rounded-mac text-system-red text-mac-sm">

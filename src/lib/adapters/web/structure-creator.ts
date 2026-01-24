@@ -3,6 +3,12 @@
  * Creates file/folder structures using the File System Access API.
  */
 
+/** Maximum number of iterations allowed in a repeat block to prevent DoS */
+const MAX_REPEAT_COUNT = 10000;
+
+/** Default timeout for fetch operations in milliseconds */
+const FETCH_TIMEOUT_MS = 30000;
+
 import type {
   SchemaTree,
   SchemaNode,
@@ -83,8 +89,9 @@ const processDownloadedFile = async (
         const processed = substituteVars(text);
         return new TextEncoder().encode(processed);
       }
-    } catch (e) {
-      // Not a valid text file, return original
+    } catch {
+      // Binary file or encoding issue - this is expected for non-text files
+      // Return original data unchanged
     }
   }
 
@@ -291,12 +298,26 @@ const processFile = async (
       }
 
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Use AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          var rawContent = new Uint8Array(arrayBuffer);
+        } catch (e) {
+          clearTimeout(timeoutId);
+          if (e instanceof Error && e.name === "AbortError") {
+            throw new Error(`Request timed out after ${FETCH_TIMEOUT_MS / 1000}s`);
+          }
+          throw e;
         }
-        const arrayBuffer = await response.arrayBuffer();
-        const rawContent = new Uint8Array(arrayBuffer);
 
         // Process the downloaded content for variable substitution
         const processedContent = await processDownloadedFile(
@@ -343,8 +364,9 @@ const processFile = async (
     if (typeof content === "string") {
       await writable.write(content);
     } else {
-      // Cast to BlobPart to satisfy TypeScript's strict type checking
-      await writable.write(content as unknown as BlobPart);
+      // Convert to ArrayBuffer for type compatibility with File System API
+      const buffer = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
+      await writable.write(buffer);
     }
     await writable.close();
 
@@ -439,6 +461,16 @@ const processRepeat = async (
     return;
   }
 
+  if (count > MAX_REPEAT_COUNT) {
+    context.logs.push({
+      log_type: "error",
+      message: `Repeat count ${count} exceeds maximum allowed (${MAX_REPEAT_COUNT})`,
+      details: "Skipping repeat block to prevent resource exhaustion",
+    });
+    context.summary.errors++;
+    return;
+  }
+
   const repeatAs = node.repeat_as || "i";
 
   // Process children for each iteration
@@ -451,9 +483,11 @@ const processRepeat = async (
       [`%${repeatAs.toUpperCase()}_1%`]: (i + 1).toString(),
     };
 
-    const scopedContext = {
+    // Create scoped context - ifWasTrue is reset for each iteration
+    const scopedContext: CreationContext = {
       ...context,
       variables: scopedVars,
+      ifWasTrue: false,
     };
 
     if (node.children) {
@@ -462,7 +496,7 @@ const processRepeat = async (
       }
     }
 
-    // Merge back the summary and logs
+    // Merge back the summary and logs (but NOT ifWasTrue - it's scoped to iteration)
     context.logs = scopedContext.logs;
     context.summary = scopedContext.summary;
   }
@@ -754,6 +788,20 @@ const generateDiffRepeat = async (
     };
   }
 
+  if (count > MAX_REPEAT_COUNT) {
+    context.warnings.push(
+      `Repeat count ${count} exceeds maximum allowed (${MAX_REPEAT_COUNT})`
+    );
+    return {
+      id: generateId(),
+      node_type: "folder",
+      name: `[repeat (exceeds limit)]`,
+      path: currentPath,
+      action: "skip",
+      is_binary: false,
+    };
+  }
+
   const repeatAs = node.repeat_as || "i";
   const children: DiffNode[] = [];
 
@@ -765,9 +813,11 @@ const generateDiffRepeat = async (
       [`%${repeatAs.toUpperCase()}_1%`]: (i + 1).toString(),
     };
 
-    const scopedContext = {
+    // Create scoped context - ifWasTrue is reset for each iteration
+    const scopedContext: DiffContext = {
       ...context,
       variables: scopedVars,
+      ifWasTrue: false,
     };
 
     if (node.children) {

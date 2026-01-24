@@ -207,7 +207,9 @@ const applyTransform = (value: string, transform: string): string => {
 // ============================================================================
 
 /**
- * Regex to match variables: %NAME% or %NAME|transform%
+ * Regex to match variables: %NAME% or %NAME:transform% or %NAME:transform|transform2%
+ * - Variable names must start with a letter or underscore
+ * - Transforms are separated from the name by `:` and can be chained with `|`
  */
 const VARIABLE_REGEX = /%([A-Z_][A-Z0-9_]*)(?::([^%]+))?%/gi;
 

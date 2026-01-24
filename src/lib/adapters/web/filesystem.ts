@@ -276,8 +276,9 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
     }
 
     const writable = await handle.createWritable();
-    // Cast to BlobPart to satisfy TypeScript's strict type checking
-    await writable.write(data as unknown as BlobPart);
+    // Convert to ArrayBuffer for type compatibility with File System API
+    const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    await writable.write(buffer);
     await writable.close();
   }
 

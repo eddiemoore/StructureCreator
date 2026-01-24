@@ -222,8 +222,9 @@ export const processOfficeDocument = async (
             const processed = substituteVarsInXml(content, substituteVars);
             zip.file(path, processed);
           }
-        } catch (e) {
-          // Skip files that can't be processed
+        } catch {
+          // XML parsing failed - file may be binary or malformed
+          // Continue processing other files in the archive
         }
       }
     }
@@ -537,8 +538,9 @@ export const processZipWithVariables = async (
             const processed = substituteVars(content);
             zip.file(path, processed);
           }
-        } catch (e) {
-          // Skip files that can't be processed as text
+        } catch {
+          // Binary file or encoding issue - expected for non-text content
+          // Continue processing other files in the archive
         }
       }
     }
