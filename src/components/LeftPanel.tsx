@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect, RefObject } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import { useClickAwayEscape, useDebounce } from "../hooks";
@@ -21,7 +21,15 @@ import { TagInput } from "./TagInput";
 import { RecentProjectsSection } from "./RecentProjectsSection";
 import type { Template, ValidationRule, TemplateSortOption } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
+import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
 import type { ReactNode } from "react";
+
+interface LeftPanelProps {
+  /** Ref for the search input, used by keyboard shortcuts */
+  searchInputRef: RefObject<HTMLInputElement>;
+  /** Callback to notify parent when import/export modal state changes */
+  onImportExportModalChange: (isOpen: boolean) => void;
+}
 
 type SchemaSourceType = "xml" | "folder";
 
@@ -103,7 +111,7 @@ const ChevronDownIcon = ({ size = 24, className = "" }: { size?: number; classNa
   </svg>
 );
 
-export const LeftPanel = () => {
+export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPanelProps) => {
   const {
     schemaPath,
     schemaContent,
@@ -156,10 +164,17 @@ export const LeftPanel = () => {
   const [newTemplateTags, setNewTemplateTags] = useState<string[]>([]);
   const [importExportMode, setImportExportMode] = useState<"import" | "export" | "bulk-export" | null>(null);
   const [exportTemplateId, setExportTemplateId] = useState<string | undefined>();
+  const [focusedTemplateIndex, setFocusedTemplateIndex] = useState<number>(-1);
 
   // Refs for click-away detection
   const validationPopoverRef = useRef<HTMLDivElement>(null);
   const transformHelpRef = useRef<HTMLDivElement>(null);
+  const templateItemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // Refs for stable function references in keyboard shortcut event handlers
+  // This avoids stale closures when functions are captured in event listeners
+  const handleSelectSchemaRef = useRef<() => void>(() => {});
+  const handleLoadTemplateRef = useRef<(template: Template) => void>(() => {});
 
   // Stable callbacks for click-away hooks
   const closeValidationPopover = useCallback(() => setEditingValidation(null), []);
@@ -206,6 +221,35 @@ export const LeftPanel = () => {
     loadData();
   }, [loadData]);
 
+  // Listen for keyboard shortcut events
+  useEffect(() => {
+    const handleOpenFile = () => {
+      handleSelectSchemaRef.current();
+    };
+
+    const handleSaveTemplateShortcut = () => {
+      setIsSavingTemplate(true);
+    };
+
+    window.addEventListener(SHORTCUT_EVENTS.OPEN_FILE, handleOpenFile);
+    window.addEventListener(SHORTCUT_EVENTS.SAVE_TEMPLATE, handleSaveTemplateShortcut);
+
+    return () => {
+      window.removeEventListener(SHORTCUT_EVENTS.OPEN_FILE, handleOpenFile);
+      window.removeEventListener(SHORTCUT_EVENTS.SAVE_TEMPLATE, handleSaveTemplateShortcut);
+    };
+  }, []);
+
+  // Notify parent when import/export modal state changes
+  useEffect(() => {
+    onImportExportModalChange(importExportMode !== null);
+  }, [importExportMode, onImportExportModalChange]);
+
+  // Reset focused index when search/filter criteria change
+  useEffect(() => {
+    setFocusedTemplateIndex(-1);
+  }, [templateSearchQuery, templateFilterTags, templateSortOption]);
+
   const handleSaveAsTemplate = async () => {
     if (!schemaContent || !newTemplateName.trim()) return;
 
@@ -239,7 +283,7 @@ export const LeftPanel = () => {
     }
   };
 
-  const handleLoadTemplate = async (template: Template) => {
+  const handleLoadTemplate = useCallback(async (template: Template) => {
     try {
       // Increment use count
       await api.database.incrementUseCount(template.id);
@@ -283,7 +327,7 @@ export const LeftPanel = () => {
         details: errorMessage,
       });
     }
-  };
+  }, [setSchemaPath, setSchemaContent, setSchemaTree, logInheritanceResolved, setVariables, loadData, addLog]);
 
   const handleToggleFavorite = async (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
@@ -356,6 +400,54 @@ export const LeftPanel = () => {
     localSearchQuery.trim() !== "" ||
     templateFilterTags.length > 0 ||
     templateSortOption !== "default";
+
+  // Handle arrow key navigation in template list
+  const handleTemplateListKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (filteredTemplates.length === 0) return;
+
+    switch (e.key) {
+      case "ArrowDown": {
+        e.preventDefault();
+        const nextIndex = focusedTemplateIndex < filteredTemplates.length - 1
+          ? focusedTemplateIndex + 1
+          : 0;
+        setFocusedTemplateIndex(nextIndex);
+        templateItemRefs.current.get(nextIndex)?.scrollIntoView({ block: "nearest" });
+        break;
+      }
+      case "ArrowUp": {
+        e.preventDefault();
+        const prevIndex = focusedTemplateIndex > 0
+          ? focusedTemplateIndex - 1
+          : filteredTemplates.length - 1;
+        setFocusedTemplateIndex(prevIndex);
+        templateItemRefs.current.get(prevIndex)?.scrollIntoView({ block: "nearest" });
+        break;
+      }
+      case "Home": {
+        e.preventDefault();
+        setFocusedTemplateIndex(0);
+        templateItemRefs.current.get(0)?.scrollIntoView({ block: "nearest" });
+        break;
+      }
+      case "End": {
+        e.preventDefault();
+        const lastIndex = filteredTemplates.length - 1;
+        setFocusedTemplateIndex(lastIndex);
+        templateItemRefs.current.get(lastIndex)?.scrollIntoView({ block: "nearest" });
+        break;
+      }
+      case "Enter":
+      case " ": {
+        // Both Enter and Space activate the focused item (standard listbox behavior)
+        e.preventDefault();
+        if (focusedTemplateIndex >= 0 && focusedTemplateIndex < filteredTemplates.length) {
+          handleLoadTemplateRef.current(filteredTemplates[focusedTemplateIndex]);
+        }
+        break;
+      }
+    }
+  }, [focusedTemplateIndex, filteredTemplates]);
 
   const handleSelectSchema = async () => {
     try {
@@ -433,6 +525,15 @@ export const LeftPanel = () => {
       });
     }
   };
+
+  // Update refs so event handlers always use current versions
+  // Using useLayoutEffect to ensure refs are updated synchronously after render
+  // before any effects that might use them. Empty deps intentional - we want this
+  // to run on every render to capture the latest function references.
+  useLayoutEffect(() => {
+    handleSelectSchemaRef.current = handleSelectSchema;
+    handleLoadTemplateRef.current = handleLoadTemplate;
+  });
 
   const handleSelectFolder = async () => {
     try {
@@ -583,6 +684,7 @@ export const LeftPanel = () => {
           <button
             onClick={isFolderSource ? handleSelectFolder : handleSelectSchema}
             className="w-full border-2 border-dashed border-accent rounded-mac-lg p-6 text-center hover:bg-accent/5 transition-all cursor-pointer"
+            title={isFolderSource ? "Select a folder" : `Select schema file (${getShortcutLabel("OPEN_FILE")})`}
           >
             {isFolderSource ? (
               <>
@@ -974,7 +1076,7 @@ export const LeftPanel = () => {
               <button
                 onClick={() => setIsSavingTemplate(true)}
                 className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-system-blue hover:bg-system-blue/10 transition-colors"
-                title="Save as template"
+                title={`Save as template (${getShortcutLabel("SAVE_TEMPLATE")})`}
               >
                 <SaveIcon size={14} />
               </button>
@@ -992,6 +1094,7 @@ export const LeftPanel = () => {
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
               />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={localSearchQuery}
                 onChange={(e) => setLocalSearchQuery(e.target.value)}
@@ -999,6 +1102,7 @@ export const LeftPanel = () => {
                 className="w-full mac-input pr-8 text-mac-sm"
                 style={{ paddingLeft: "2.25rem" }}
                 aria-label="Search templates"
+                title={`Search templates (${getShortcutLabel("FOCUS_SEARCH")})`}
               />
               {localSearchQuery && (
                 <button
@@ -1117,7 +1221,32 @@ export const LeftPanel = () => {
           </div>
         )}
 
-        <div className="space-y-2 flex-1">
+        <div
+          className="space-y-2 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary rounded-mac"
+          tabIndex={filteredTemplates.length > 0 ? 0 : -1}
+          onKeyDown={handleTemplateListKeyDown}
+          onFocus={() => {
+            if (focusedTemplateIndex === -1 && filteredTemplates.length > 0) {
+              setFocusedTemplateIndex(0);
+            }
+          }}
+          onBlur={(e) => {
+            // Only reset if focus leaves the template list entirely
+            // Check if relatedTarget exists and is within the current container
+            const relatedTarget = e.relatedTarget;
+            if (!relatedTarget || !e.currentTarget.contains(relatedTarget as Node)) {
+              setFocusedTemplateIndex(-1);
+            }
+          }}
+          role="listbox"
+          aria-multiselectable="false"
+          aria-label="Template list - use arrow keys to navigate, Enter or Space to select"
+          aria-activedescendant={
+            focusedTemplateIndex >= 0 && filteredTemplates[focusedTemplateIndex]
+              ? `template-${filteredTemplates[focusedTemplateIndex].id}`
+              : undefined
+          }
+        >
           {templatesLoading ? (
             <div className="text-center text-text-muted text-mac-sm py-4">
               Loading templates...
@@ -1142,19 +1271,26 @@ export const LeftPanel = () => {
               )}
             </div>
           ) : (
-            filteredTemplates.map((template) => (
+            filteredTemplates.map((template, index) => (
               <div
                 key={template.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleLoadTemplate(template)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleLoadTemplate(template);
+                id={`template-${template.id}`}
+                ref={(el) => {
+                  if (el) {
+                    templateItemRefs.current.set(index, el);
+                  } else {
+                    templateItemRefs.current.delete(index);
                   }
                 }}
-                className="p-3 bg-card-bg border border-border-muted rounded-mac cursor-pointer group hover:border-border-default focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-bg-primary transition-colors"
+                role="option"
+                aria-selected={focusedTemplateIndex === index}
+                tabIndex={-1}
+                onClick={() => handleLoadTemplate(template)}
+                className={`p-3 bg-card-bg border rounded-mac cursor-pointer group transition-colors ${
+                  focusedTemplateIndex === index
+                    ? "border-accent ring-2 ring-accent ring-offset-1 ring-offset-bg-primary"
+                    : "border-border-muted hover:border-border-default"
+                }`}
               >
                 <div className="flex items-start gap-2.5">
                   <div

@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { LeftPanel } from "./components/LeftPanel";
 import { TreePreview } from "./components/TreePreview";
 import { RightPanel } from "./components/RightPanel";
 import { Footer } from "./components/Footer";
 import { SettingsModal } from "./components/SettingsModal";
 import { useAppStore } from "./store/appStore";
+import { useKeyboardShortcuts } from "./hooks";
 import { api } from "./lib/api";
 import type { Settings, ThemeMode, AccentColor } from "./types/schema";
 import { DEFAULT_SETTINGS } from "./types/schema";
@@ -14,7 +15,22 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const { setSettings, setOutputPath, setProjectName, createNewSchema } = useAppStore();
+  const [importExportModalOpen, setImportExportModalOpen] = useState(false);
+  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent } = useAppStore();
+
+  // Ref for search input (passed to LeftPanel)
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Check if any modal is open (used to disable shortcuts)
+  const isModalOpen = settingsOpen || showDiffModal || importExportModalOpen;
+
+  // Initialize keyboard shortcuts
+  // Note: Escape key is handled by individual modals, not here
+  useKeyboardShortcuts({
+    searchInputRef,
+    isModalOpen,
+    hasSchema: !!schemaContent,
+  });
 
   // Initialize the API and load settings on mount
   useEffect(() => {
@@ -125,7 +141,10 @@ function App() {
   return (
     <div className="bg-mac-bg min-h-screen flex flex-col">
       <div className="flex-1 grid grid-cols-[280px_1fr_300px] border-t border-border-muted">
-        <LeftPanel />
+        <LeftPanel
+          searchInputRef={searchInputRef}
+          onImportExportModalChange={setImportExportModalOpen}
+        />
         <TreePreview />
         <RightPanel />
       </div>
