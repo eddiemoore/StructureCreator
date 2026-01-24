@@ -31,8 +31,8 @@ export const ImportExportModal = ({
   selectedTemplateId,
   onComplete,
 }: ImportExportModalProps) => {
-  // Export state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+  // Export state - initialized fresh on each mount (use key prop in parent to remount)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() =>
     selectedTemplateId ? new Set([selectedTemplateId]) : new Set(templates.map((t) => t.id))
   );
 
@@ -47,32 +47,9 @@ export const ImportExportModal = ({
   const [error, setError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
 
-  // Track previous isOpen to detect when modal opens
-  const prevIsOpenRef = useRef(false);
-
   // Ref for focus trap
   const modalRef = useRef<HTMLDivElement>(null);
   const lastUrlImportTime = useRef<number>(0);
-
-  // Reset state only when modal opens (not on every templates/selection change)
-  useEffect(() => {
-    if (isOpen && !prevIsOpenRef.current) {
-      // Modal just opened - reset all state
-      setError(null);
-      setResult(null);
-      setExportSuccess(null);
-      setImportUrl("");
-      setImportTab("file");
-      setDuplicateStrategy("skip");
-      setSelectedIds(
-        selectedTemplateId
-          ? new Set([selectedTemplateId])
-          : new Set(templates.map((t) => t.id))
-      );
-      lastUrlImportTime.current = 0; // Reset rate limit on modal open
-    }
-    prevIsOpenRef.current = isOpen;
-  }, [isOpen, selectedTemplateId, templates]);
 
   // Body scroll lock when modal is open
   useEffect(() => {

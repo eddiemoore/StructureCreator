@@ -1011,8 +1011,9 @@ export const LeftPanel = () => {
         </div>
       </div>
 
-      {/* Import/Export Modal */}
+      {/* Import/Export Modal - key forces remount to reset state when mode/selection changes */}
       <ImportExportModal
+        key={importExportMode ? `${importExportMode}-${exportTemplateId || "bulk"}` : "closed"}
         isOpen={importExportMode !== null}
         onClose={() => {
           setImportExportMode(null);

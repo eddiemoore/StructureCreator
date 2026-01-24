@@ -305,6 +305,19 @@ const DiffHunkView = ({ hunk }: { hunk: DiffHunk }) => {
   );
 };
 
+// Compute initial expanded nodes for a diff result
+const computeInitialExpanded = (result: DiffResult | null): Set<string> => {
+  if (!result) return new Set<string>();
+  const set = new Set<string>();
+  set.add(result.root.id);
+  result.root.children?.forEach((child) => {
+    if (child.node_type === "folder") {
+      set.add(child.id);
+    }
+  });
+  return set;
+};
+
 export const DiffPreviewModal = ({
   isOpen,
   onClose,
@@ -313,26 +326,13 @@ export const DiffPreviewModal = ({
   isLoading,
   error,
 }: DiffPreviewModalProps) => {
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  // State initialized via lazy initializer - use key prop in parent to reset on new diffResult
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() =>
+    computeInitialExpanded(diffResult)
+  );
   const [selectedNode, setSelectedNode] = useState<DiffNode | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen && diffResult) {
-      // Auto-expand root and first level
-      const initialExpanded = new Set<string>();
-      initialExpanded.add(diffResult.root.id);
-      diffResult.root.children?.forEach((child) => {
-        if (child.node_type === "folder") {
-          initialExpanded.add(child.id);
-        }
-      });
-      setExpandedNodes(initialExpanded);
-      setSelectedNode(null);
-    }
-  }, [isOpen, diffResult]);
 
   // Focus trap and escape key handling
   useEffect(() => {
