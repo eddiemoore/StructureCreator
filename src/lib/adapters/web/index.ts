@@ -228,6 +228,18 @@ export class WebPlatformAdapter implements PlatformAdapter {
   }
 
   async initialize(): Promise<void> {
+    // Check for File System Access API support before anything else
+    if (
+      !window.showOpenFilePicker ||
+      !window.showDirectoryPicker ||
+      !window.showSaveFilePicker
+    ) {
+      throw new Error(
+        "Your browser does not support the File System Access API. " +
+          "Please use a Chromium-based browser such as Google Chrome, Microsoft Edge, or Brave."
+      );
+    }
+
     await this.indexedDB.initialize();
   }
 }
