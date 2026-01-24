@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
-import { useClickAwayEscape } from "../hooks";
+import { useClickAwayEscape, useDebounce } from "../hooks";
 import {
   CheckIcon,
   XIcon,
@@ -14,13 +14,18 @@ import {
   SaveIcon,
   ImportIcon,
   ExportIcon,
+  SearchIcon,
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
-import type { Template, ValidationRule } from "../types/schema";
+import { TagInput } from "./TagInput";
+import type { Template, ValidationRule, TemplateSortOption } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import type { ReactNode } from "react";
 
 type SchemaSourceType = "xml" | "folder";
+
+/** Debounce delay for search input (ms) */
+const SEARCH_DEBOUNCE_MS = 200;
 
 const SectionTitle = ({ children }: { children: ReactNode }) => (
   <div className="text-mac-xs font-medium text-text-muted mb-2">{children}</div>
@@ -108,6 +113,10 @@ export const LeftPanel = () => {
     validationErrors,
     templates,
     templatesLoading,
+    templateSearchQuery,
+    templateFilterTags,
+    templateSortOption,
+    allTags,
     setSchemaPath,
     setSchemaContent,
     setSchemaTree,
@@ -120,6 +129,13 @@ export const LeftPanel = () => {
     setVariables,
     setTemplates,
     setTemplatesLoading,
+    setTemplateSearchQuery,
+    addTemplateFilterTag,
+    removeTemplateFilterTag,
+    clearTemplateFilters,
+    setTemplateSortOption,
+    setAllTags,
+    getFilteredTemplates,
     addLog,
   } = useAppStore();
 
@@ -134,6 +150,7 @@ export const LeftPanel = () => {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateDescription, setNewTemplateDescription] = useState("");
+  const [newTemplateTags, setNewTemplateTags] = useState<string[]>([]);
   const [importExportMode, setImportExportMode] = useState<"import" | "export" | "bulk-export" | null>(null);
   const [exportTemplateId, setExportTemplateId] = useState<string | undefined>();
 
@@ -160,22 +177,27 @@ export const LeftPanel = () => {
     }
   }, [addLog]);
 
-  // Load templates on mount
-  useEffect(() => {
-    loadTemplates();
-  }, []);
-
-  const loadTemplates = async () => {
+  // Load templates and tags
+  const loadTemplates = useCallback(async () => {
     setTemplatesLoading(true);
     try {
-      const templates = await api.database.listTemplates();
+      const [templates, tags] = await Promise.all([
+        api.database.listTemplates(),
+        api.database.getAllTags(),
+      ]);
       setTemplates(templates);
+      setAllTags(tags);
     } catch (e) {
       console.error("Failed to load templates:", e);
     } finally {
       setTemplatesLoading(false);
     }
-  };
+  }, [setTemplates, setAllTags, setTemplatesLoading]);
+
+  // Initial load on mount
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
 
   const handleSaveAsTemplate = async () => {
     if (!schemaContent || !newTemplateName.trim()) return;
@@ -198,10 +220,12 @@ export const LeftPanel = () => {
         variables: variablesMap,
         variableValidation: validationMap,
         iconColor: null,
+        tags: newTemplateTags,
       });
       setIsSavingTemplate(false);
       setNewTemplateName("");
       setNewTemplateDescription("");
+      setNewTemplateTags([]);
       loadTemplates();
     } catch (e) {
       console.error("Failed to save template:", e);
@@ -279,6 +303,52 @@ export const LeftPanel = () => {
     setExportTemplateId(templateId);
     setImportExportMode("export");
   };
+
+  const handleTagClick = (e: React.MouseEvent, tag: string) => {
+    e.stopPropagation();
+    addTemplateFilterTag(tag);
+  };
+
+  // Local search input state for immediate display, debounced for filtering
+  const [localSearchQuery, setLocalSearchQuery] = useState(templateSearchQuery);
+  const debouncedSearchQuery = useDebounce(localSearchQuery, SEARCH_DEBOUNCE_MS);
+
+  // Sync debounced value to store
+  useEffect(() => {
+    setTemplateSearchQuery(debouncedSearchQuery);
+  }, [debouncedSearchQuery, setTemplateSearchQuery]);
+
+  // Clear all filters including local search state
+  const handleClearAllFilters = useCallback(() => {
+    setLocalSearchQuery("");
+    clearTemplateFilters();
+  }, [clearTemplateFilters]);
+
+  // Sort option configuration (stable reference)
+  const sortOptions = useMemo<{ value: TemplateSortOption; label: string }[]>(() => [
+    { value: "default", label: "Default" },
+    { value: "name_asc", label: "Name A-Z" },
+    { value: "name_desc", label: "Name Z-A" },
+    { value: "created_desc", label: "Newest First" },
+    { value: "created_asc", label: "Oldest First" },
+    { value: "updated_desc", label: "Recently Updated" },
+    { value: "updated_asc", label: "Least Recently Updated" },
+    { value: "usage_desc", label: "Most Used" },
+    { value: "usage_asc", label: "Least Used" },
+  ], []);
+
+  // Memoized filtered templates - only recalculates when filter inputs change
+  // Note: getFilteredTemplates is stable from Zustand, no need to include in deps
+  const filteredTemplates = useMemo(() => {
+    return getFilteredTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates, templateSearchQuery, templateFilterTags, templateSortOption]);
+
+  // Check if any filters are active
+  const hasActiveFilters =
+    localSearchQuery.trim() !== "" ||
+    templateFilterTags.length > 0 ||
+    templateSortOption !== "default";
 
   const handleSelectSchema = async () => {
     try {
@@ -902,6 +972,89 @@ export const LeftPanel = () => {
           </div>
         </div>
 
+        {/* Search and Filter Controls */}
+        {templates.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {/* Search Bar */}
+            <div className="relative">
+              <SearchIcon
+                size={14}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+              />
+              <input
+                type="text"
+                value={localSearchQuery}
+                onChange={(e) => setLocalSearchQuery(e.target.value)}
+                placeholder="Search templates..."
+                className="w-full mac-input pl-8 pr-8 text-mac-sm"
+                aria-label="Search templates"
+              />
+              {localSearchQuery && (
+                <button
+                  onClick={() => setLocalSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full text-text-muted hover:text-text-primary hover:bg-border-muted transition-colors"
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <XIcon size={10} />
+                </button>
+              )}
+            </div>
+
+            {/* Sort Select */}
+            <div className="relative">
+              <select
+                value={templateSortOption}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (sortOptions.some((opt) => opt.value === value)) {
+                    setTemplateSortOption(value as TemplateSortOption);
+                  }
+                }}
+                className="mac-input w-full appearance-none cursor-pointer pr-8 text-mac-xs"
+                aria-label="Sort templates"
+              >
+                {sortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+                <ChevronDownIcon size={12} />
+              </div>
+            </div>
+
+            {/* Active Filter Tags */}
+            {templateFilterTags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {templateFilterTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent/10 text-accent text-mac-xs rounded-full"
+                  >
+                    {tag}
+                    <button
+                      onClick={() => removeTemplateFilterTag(tag)}
+                      className="w-3.5 h-3.5 flex items-center justify-center rounded-full hover:bg-accent/20 transition-colors"
+                      title={`Remove ${tag} filter`}
+                      aria-label={`Remove ${tag} filter`}
+                    >
+                      <XIcon size={10} />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  onClick={handleClearAllFilters}
+                  className="px-2 py-0.5 text-mac-xs text-text-muted hover:text-text-secondary transition-colors"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Save Template Form */}
         {isSavingTemplate && (
           <div className="p-3 bg-card-bg rounded-mac border border-system-blue mb-3">
@@ -921,12 +1074,22 @@ export const LeftPanel = () => {
               placeholder="Description (optional)"
               className="w-full mac-input mb-2 text-mac-sm"
             />
+            <div className="mb-2">
+              <label className="block text-mac-xs text-text-muted mb-1">Tags</label>
+              <TagInput
+                tags={newTemplateTags}
+                onChange={setNewTemplateTags}
+                suggestions={allTags}
+                placeholder="Add tags..."
+              />
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => {
                   setIsSavingTemplate(false);
                   setNewTemplateName("");
                   setNewTemplateDescription("");
+                  setNewTemplateTags([]);
                 }}
                 className="px-2 py-1 text-mac-xs text-text-secondary hover:text-text-primary transition-colors"
               >
@@ -954,56 +1117,102 @@ export const LeftPanel = () => {
               <div>No templates yet</div>
               <div className="text-mac-xs mt-1">Load a schema and save it as a template</div>
             </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="text-center text-text-muted text-mac-sm py-4">
+              <SearchIcon size={24} className="mx-auto mb-2 opacity-30" />
+              <div>No matching templates</div>
+              {hasActiveFilters && (
+                <button
+                  onClick={handleClearAllFilters}
+                  className="text-mac-xs mt-1 text-accent hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           ) : (
-            templates.map((template) => (
+            filteredTemplates.map((template) => (
               <div
                 key={template.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => handleLoadTemplate(template)}
-                className="mac-sidebar-item p-3 bg-card-bg border border-border-muted rounded-mac cursor-pointer group"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleLoadTemplate(template);
+                  }
+                }}
+                className="p-3 bg-card-bg border border-border-muted rounded-mac cursor-pointer group hover:border-border-default focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-bg-primary transition-colors"
               >
-                <div
-                  className="w-8 h-8 rounded-mac flex items-center justify-center flex-shrink-0"
-                  style={{
-                    backgroundColor: `${template.icon_color || "#0a84ff"}15`,
-                    color: template.icon_color || "#0a84ff",
-                  }}
-                >
-                  <LayersIcon size={16} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-mac-sm font-medium text-text-primary truncate">
-                    {template.name}
+                <div className="flex items-start gap-2.5">
+                  <div
+                    className="w-8 h-8 rounded-mac flex items-center justify-center flex-shrink-0"
+                    style={{
+                      backgroundColor: `${template.icon_color || "#0a84ff"}15`,
+                      color: template.icon_color || "#0a84ff",
+                    }}
+                  >
+                    <LayersIcon size={16} />
                   </div>
-                  <div className="text-mac-xs text-text-muted truncate">
-                    {template.description || `Used ${template.use_count} times`}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-mac-sm font-medium text-text-primary truncate">
+                      {template.name}
+                    </div>
+                    <div className="text-mac-xs text-text-muted truncate">
+                      {template.description || `Used ${template.use_count} times`}
+                    </div>
+                    {/* Tags */}
+                    {template.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {template.tags.map((tag) => (
+                          <button
+                            key={tag}
+                            onClick={(e) => handleTagClick(e, tag)}
+                            className={`px-1.5 py-0.5 text-[10px] rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-accent ${
+                              templateFilterTags.includes(tag)
+                                ? "bg-accent/20 text-accent"
+                                : "bg-border-muted text-text-muted hover:bg-accent/10 hover:text-accent"
+                            }`}
+                            aria-pressed={templateFilterTags.includes(tag)}
+                            aria-label={`Filter by tag: ${tag}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => handleToggleFavorite(e, template.id)}
-                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
-                      template.is_favorite
-                        ? "text-system-orange"
-                        : "text-text-muted hover:text-system-orange"
-                    }`}
-                    title={template.is_favorite ? "Remove from favorites" : "Add to favorites"}
-                  >
-                    <StarIcon size={14} filled={template.is_favorite} />
-                  </button>
-                  <button
-                    onClick={(e) => handleExportTemplate(e, template.id)}
-                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
-                    title="Export template"
-                  >
-                    <ExportIcon size={14} />
-                  </button>
-                  <button
-                    onClick={(e) => handleDeleteTemplate(e, template.id)}
-                    className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors"
-                    title="Delete template"
-                  >
-                    <TrashIcon size={14} />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handleToggleFavorite(e, template.id)}
+                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                        template.is_favorite
+                          ? "text-system-orange"
+                          : "text-text-muted hover:text-system-orange"
+                      }`}
+                      title={template.is_favorite ? "Remove from favorites" : "Add to favorites"}
+                      aria-label={template.is_favorite ? "Remove from favorites" : "Add to favorites"}
+                    >
+                      <StarIcon size={14} filled={template.is_favorite} />
+                    </button>
+                    <button
+                      onClick={(e) => handleExportTemplate(e, template.id)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                      title="Export template"
+                      aria-label="Export template"
+                    >
+                      <ExportIcon size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteTemplate(e, template.id)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors"
+                      title="Delete template"
+                      aria-label="Delete template"
+                    >
+                      <TrashIcon size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))

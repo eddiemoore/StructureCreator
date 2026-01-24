@@ -104,6 +104,7 @@ export interface CreateTemplateInput {
   variables: Record<string, string>;
   variableValidation: Record<string, ValidationRule>;
   iconColor: string | null;
+  tags?: string[];
 }
 
 export interface UpdateTemplateInput {
@@ -127,6 +128,10 @@ export interface DatabaseAdapter {
   deleteTemplate(id: string): Promise<boolean>;
   toggleFavorite(id: string): Promise<void>;
   incrementUseCount(id: string): Promise<void>;
+
+  // Tag operations
+  getAllTags(): Promise<string[]>;
+  updateTemplateTags(id: string, tags: string[]): Promise<void>;
 
   // Settings operations
   getAllSettings(): Promise<Record<string, string>>;
@@ -238,7 +243,8 @@ export interface TemplateImportExportAdapter {
    */
   importTemplatesFromJson(
     jsonContent: string,
-    duplicateStrategy: DuplicateStrategy
+    duplicateStrategy: DuplicateStrategy,
+    includeVariables?: boolean
   ): Promise<ImportResult>;
 
   /**
@@ -246,7 +252,8 @@ export interface TemplateImportExportAdapter {
    */
   importTemplatesFromUrl(
     url: string,
-    duplicateStrategy: DuplicateStrategy
+    duplicateStrategy: DuplicateStrategy,
+    includeVariables?: boolean
   ): Promise<ImportResult>;
 }
 

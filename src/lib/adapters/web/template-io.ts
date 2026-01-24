@@ -192,7 +192,8 @@ export class WebTemplateImportExportAdapter implements TemplateImportExportAdapt
 
   async importTemplatesFromJson(
     jsonContent: string,
-    duplicateStrategy: DuplicateStrategy
+    duplicateStrategy: DuplicateStrategy,
+    includeVariables: boolean = true
   ): Promise<ImportResult> {
     const result: ImportResult = {
       imported: [],
@@ -261,7 +262,7 @@ export class WebTemplateImportExportAdapter implements TemplateImportExportAdapt
             name: nameValidation.sanitized,
           };
 
-          await this.importSingleTemplate(sanitizedTemplate, duplicateStrategy, result);
+          await this.importSingleTemplate(sanitizedTemplate, duplicateStrategy, includeVariables, result);
         } catch (e) {
           const errorMessage = e instanceof Error ? e.message : String(e);
           const name = isObject(templateData) && isString(templateData.name) ? templateData.name : `Template${templateIndex}`;
@@ -278,7 +279,8 @@ export class WebTemplateImportExportAdapter implements TemplateImportExportAdapt
 
   async importTemplatesFromUrl(
     url: string,
-    duplicateStrategy: DuplicateStrategy
+    duplicateStrategy: DuplicateStrategy,
+    includeVariables: boolean = true
   ): Promise<ImportResult> {
     const result: ImportResult = {
       imported: [],
@@ -327,7 +329,7 @@ export class WebTemplateImportExportAdapter implements TemplateImportExportAdapt
         throw new Error(`Response too large (max ${MAX_IMPORT_SIZE_BYTES / 1024 / 1024}MB)`);
       }
 
-      return this.importTemplatesFromJson(jsonContent, duplicateStrategy);
+      return this.importTemplatesFromJson(jsonContent, duplicateStrategy, includeVariables);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       result.errors.push(`Failed to fetch URL: ${errorMessage}`);
@@ -338,6 +340,7 @@ export class WebTemplateImportExportAdapter implements TemplateImportExportAdapt
   private async importSingleTemplate(
     templateData: TemplateExport,
     duplicateStrategy: DuplicateStrategy,
+    includeVariables: boolean,
     result: ImportResult
   ): Promise<void> {
     // Check if template with same name exists
@@ -374,9 +377,10 @@ export class WebTemplateImportExportAdapter implements TemplateImportExportAdapt
       name: templateData.name,
       description: templateData.description,
       schemaXml: templateData.schema_xml,
-      variables: templateData.variables || {},
-      variableValidation: templateData.variable_validation || {},
+      variables: includeVariables ? (templateData.variables || {}) : {},
+      variableValidation: includeVariables ? (templateData.variable_validation || {}) : {},
       iconColor: templateData.icon_color,
+      tags: templateData.tags || [],
     });
 
     result.imported.push(templateData.name);
