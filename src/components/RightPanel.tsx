@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store/appStore";
+import { api } from "../lib/api";
 import {
   FolderPlusIcon,
   CheckIcon,
@@ -8,7 +8,7 @@ import {
   AlertCircleIcon,
 } from "./Icons";
 import { DiffPreviewModal } from "./DiffPreviewModal";
-import type { CreateResult, ResultSummary, ValidationError, ValidationRule, DiffResult } from "../types/schema";
+import type { CreateResult, ResultSummary, ValidationRule } from "../types/schema";
 
 const WarningIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
   <svg
@@ -94,10 +94,7 @@ export const RightPanel = () => {
     setProgress({ status: "running", current: 0, total: 0 });
 
     try {
-      const errors = await invoke<ValidationError[]>("cmd_validate_variables", {
-        variables: varsMap,
-        rules: rulesMap,
-      });
+      const errors = await api.validation.validateVariables(varsMap, rulesMap);
 
       if (errors.length > 0) {
         setValidationErrors(errors);
@@ -143,17 +140,15 @@ export const RightPanel = () => {
       let result: CreateResult;
 
       if (schemaContent) {
-        result = await invoke<CreateResult>("cmd_create_structure", {
-          content: schemaContent,
-          outputPath,
+        result = await api.structureCreator.createStructure(schemaContent, {
+          outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
           overwrite,
         });
       } else if (schemaTree) {
-        result = await invoke<CreateResult>("cmd_create_structure_from_tree", {
-          tree: schemaTree,
-          outputPath,
+        result = await api.structureCreator.createStructureFromTree(schemaTree, {
+          outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
           overwrite,
@@ -223,12 +218,12 @@ export const RightPanel = () => {
       setShowDiffModal(true);
 
       try {
-        const result = await invoke<DiffResult>("cmd_generate_diff_preview", {
-          tree: schemaTree,
-          outputPath,
-          variables: varsMap,
-          overwrite,
-        });
+        const result = await api.structureCreator.generateDiffPreview(
+          schemaTree,
+          outputPath!,
+          varsMap,
+          overwrite
+        );
         setDiffResult(result);
       } catch (e) {
         console.error("Failed to generate diff preview:", e);
