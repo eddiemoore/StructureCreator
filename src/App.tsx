@@ -7,13 +7,14 @@ import { SettingsModal } from "./components/SettingsModal";
 import { useAppStore } from "./store/appStore";
 import { api } from "./lib/api";
 import type { Settings, ThemeMode, AccentColor } from "./types/schema";
-import { DEFAULT_SETTINGS, ACCENT_COLORS } from "./types/schema";
+import { DEFAULT_SETTINGS } from "./types/schema";
+import { applyTheme, applyAccentColor } from "./utils/theme";
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const { settings, setSettings, setOutputPath, setProjectName, createNewSchema } = useAppStore();
+  const { setSettings, setOutputPath, setProjectName, createNewSchema } = useAppStore();
 
   // Initialize the API and load settings on mount
   useEffect(() => {
@@ -65,12 +66,6 @@ function App() {
     };
   }, [createNewSchema]);
 
-  // Apply theme and accent color when settings change
-  useEffect(() => {
-    applyTheme(settings.theme);
-    applyAccentColor(settings.accentColor);
-  }, [settings.theme, settings.accentColor]);
-
   const loadSettings = async () => {
     try {
       const savedSettings = await api.database.getAllSettings();
@@ -84,6 +79,10 @@ function App() {
 
       setSettings(newSettings);
 
+      // Apply theme and accent color
+      applyTheme(newSettings.theme);
+      applyAccentColor(newSettings.accentColor);
+
       // Apply defaults to current session
       if (newSettings.defaultOutputPath) {
         setOutputPath(newSettings.defaultOutputPath);
@@ -94,23 +93,6 @@ function App() {
     } catch (e) {
       console.error("Failed to load settings:", e);
     }
-  };
-
-  const applyTheme = (theme: ThemeMode) => {
-    const root = document.documentElement;
-    root.classList.remove("theme-light", "theme-dark");
-
-    if (theme === "light") {
-      root.classList.add("theme-light");
-    } else if (theme === "dark") {
-      root.classList.add("theme-dark");
-    }
-    // "system" = no class, uses media query
-  };
-
-  const applyAccentColor = (accentColor: AccentColor) => {
-    const color = ACCENT_COLORS[accentColor];
-    document.documentElement.style.setProperty("--color-accent", color);
   };
 
   // Show loading state while initializing

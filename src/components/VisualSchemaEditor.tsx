@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useId } from "react";
+import { useState, useRef, useEffect, useId, useCallback } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import {
@@ -84,33 +84,25 @@ const EditableTreeItem = ({
   const [isEditingRepeatAs, setIsEditingRepeatAs] = useState(false);
   const [repeatAsValue, setRepeatAsValue] = useState(node.repeat_as || DEFAULT_REPEAT_AS);
 
-  // Sync local state when node props change (e.g., from undo/redo or external updates)
-  useEffect(() => {
-    if (!isEditing) setEditValue(node.name);
-  }, [node.name, isEditing]);
-
-  useEffect(() => {
-    if (!isEditingCondition) setConditionValue(node.condition_var || "");
-  }, [node.condition_var, isEditingCondition]);
-
-  useEffect(() => {
-    if (!isEditingRepeatCount) setRepeatCountValue(node.repeat_count || DEFAULT_REPEAT_COUNT);
-  }, [node.repeat_count, isEditingRepeatCount]);
-
-  useEffect(() => {
-    if (!isEditingRepeatAs) setRepeatAsValue(node.repeat_as || DEFAULT_REPEAT_AS);
-  }, [node.repeat_as, isEditingRepeatAs]);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
   const [isExpanded, setIsExpanded] = useState(true);
   const [sanitizationMessage, setSanitizationMessage] = useState("");
   const [repeatCountError, setRepeatCountError] = useState<string | null>(null);
   const [repeatAsError, setRepeatAsError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Refs for inputs that need to be accessed in handlers (e.g., for reading value after datalist selection)
   const conditionInputRef = useRef<HTMLInputElement>(null);
-  const repeatCountInputRef = useRef<HTMLInputElement>(null);
-  const repeatAsInputRef = useRef<HTMLInputElement>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  // Ref callback to auto-focus and select input content when mounted
+  // Wrapped in useCallback to keep it stable across renders and prevent re-selecting
+  const focusAndSelectRef = useCallback((el: HTMLInputElement | null) => {
+    if (el) {
+      el.focus();
+      el.select();
+    }
+  }, []);
 
   // Cleanup animation frame on unmount
   useEffect(() => {
@@ -147,33 +139,15 @@ const EditableTreeItem = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+  // Ref callback for condition input - stores ref AND auto-focuses/selects
+  // Wrapped in useCallback to keep it stable across renders and prevent re-selecting
+  const setConditionInputRef = useCallback((el: HTMLInputElement | null) => {
+    (conditionInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+    if (el) {
+      el.focus();
+      el.select();
     }
-  }, [isEditing]);
-
-  useEffect(() => {
-    if (isEditingCondition && conditionInputRef.current) {
-      conditionInputRef.current.focus();
-      conditionInputRef.current.select();
-    }
-  }, [isEditingCondition]);
-
-  useEffect(() => {
-    if (isEditingRepeatCount && repeatCountInputRef.current) {
-      repeatCountInputRef.current.focus();
-      repeatCountInputRef.current.select();
-    }
-  }, [isEditingRepeatCount]);
-
-  useEffect(() => {
-    if (isEditingRepeatAs && repeatAsInputRef.current) {
-      repeatAsInputRef.current.focus();
-      repeatAsInputRef.current.select();
-    }
-  }, [isEditingRepeatAs]);
+  }, []);
 
   const handleDoubleClick = () => {
     // For if/else/repeat nodes, don't allow name editing via double-click
@@ -445,7 +419,7 @@ const EditableTreeItem = ({
                 isEditingCondition ? (
                   <>
                     <input
-                      ref={conditionInputRef}
+                      ref={setConditionInputRef}
                       type="text"
                       value={conditionValue}
                       onChange={(e) => {
@@ -512,7 +486,7 @@ const EditableTreeItem = ({
               {isEditingRepeatCount ? (
                 <>
                   <input
-                    ref={repeatCountInputRef}
+                    ref={focusAndSelectRef}
                     type="text"
                     value={repeatCountValue}
                     onChange={handleRepeatCountChange}
@@ -569,7 +543,7 @@ const EditableTreeItem = ({
               {isEditingRepeatAs ? (
                 <>
                   <input
-                    ref={repeatAsInputRef}
+                    ref={focusAndSelectRef}
                     type="text"
                     value={repeatAsValue}
                     onChange={handleRepeatAsChange}
@@ -630,7 +604,7 @@ const EditableTreeItem = ({
             </div>
           ) : isEditing ? (
             <input
-              ref={inputRef}
+              ref={focusAndSelectRef}
               type="text"
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}

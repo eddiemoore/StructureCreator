@@ -404,8 +404,9 @@ export const RightPanel = () => {
         </div>
       </div>
 
-      {/* Diff Preview Modal */}
+      {/* Diff Preview Modal - key forces remount to reset state on new diffResult */}
       <DiffPreviewModal
+        key={diffResult?.root.id ?? "no-diff"}
         isOpen={showDiffModal}
         onClose={handleCloseDiffModal}
         diffResult={diffResult}

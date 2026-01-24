@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { XIcon, FolderIcon } from "./Icons";
 import type { ThemeMode, AccentColor, Settings } from "../types/schema";
 import { ACCENT_COLORS, DEFAULT_SETTINGS } from "../types/schema";
+import { applyTheme, applyAccentColor } from "../utils/theme";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,36 +26,19 @@ const ACCENT_OPTIONS: { value: AccentColor; label: string }[] = [
 ];
 
 export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
-  const { settings, updateSetting, setSettings } = useAppStore();
-
-  // Load settings from backend on mount
-  useEffect(() => {
-    if (isOpen) {
-      loadSettings();
-    }
-  }, [isOpen]);
-
-  const loadSettings = async () => {
-    try {
-      const savedSettings = await api.database.getAllSettings();
-
-      const newSettings: Settings = {
-        defaultOutputPath: savedSettings.defaultOutputPath || null,
-        defaultProjectName: savedSettings.defaultProjectName || DEFAULT_SETTINGS.defaultProjectName,
-        theme: (savedSettings.theme as ThemeMode) || DEFAULT_SETTINGS.theme,
-        accentColor: (savedSettings.accentColor as AccentColor) || DEFAULT_SETTINGS.accentColor,
-      };
-
-      setSettings(newSettings);
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-    }
-  };
+  const { settings, updateSetting } = useAppStore();
 
   const saveSetting = async (key: keyof Settings, value: string | null) => {
     try {
       await api.database.setSetting(key, value === null ? "" : value);
       updateSetting(key, value as Settings[typeof key]);
+
+      // Apply theme/accent immediately when changed
+      if (key === "theme") {
+        applyTheme(value as ThemeMode);
+      } else if (key === "accentColor") {
+        applyAccentColor(value as AccentColor);
+      }
     } catch (e) {
       console.error("Failed to save setting:", e);
     }
