@@ -137,6 +137,9 @@ const MONTHS_SHORT = [
 /**
  * Format a date string using the specified format.
  * Supports: YYYY, YY, MMMM, MMM, MM, DD, D
+ *
+ * Uses a single-pass regex replacement to avoid edge cases where
+ * shorter tokens could match within already-replaced longer tokens.
  */
 const formatDate = (dateStr: string, format: string): string => {
   // Try to parse the date
@@ -149,18 +152,22 @@ const formatDate = (dateStr: string, format: string): string => {
   const month = date.getMonth(); // 0-indexed
   const day = date.getDate();
 
-  let result = format;
+  // Token values - order in regex matters (longer tokens first)
+  const tokens: Record<string, string> = {
+    "YYYY": year.toString(),
+    "MMMM": MONTHS_LONG[month],
+    "MMM": MONTHS_SHORT[month],
+    "MM": (month + 1).toString().padStart(2, "0"),
+    "DD": day.toString().padStart(2, "0"),
+    "YY": (year % 100).toString().padStart(2, "0"),
+    "D": day.toString(),
+  };
 
-  // Replace tokens (order matters - longer tokens first)
-  result = result.replace("YYYY", year.toString());
-  result = result.replace("YY", (year % 100).toString().padStart(2, "0"));
-  result = result.replace("MMMM", MONTHS_LONG[month]);
-  result = result.replace("MMM", MONTHS_SHORT[month]);
-  result = result.replace("MM", (month + 1).toString().padStart(2, "0"));
-  result = result.replace("DD", day.toString().padStart(2, "0"));
-  result = result.replace("D", day.toString());
+  // Single-pass replacement using regex with alternation
+  // Order: longest tokens first to ensure greedy matching works correctly
+  const tokenPattern = /YYYY|MMMM|MMM|MM|DD|YY|D/g;
 
-  return result;
+  return format.replace(tokenPattern, (match) => tokens[match] ?? match);
 };
 
 // ============================================================================
@@ -249,6 +256,48 @@ export const substituteVariables = (
 // ============================================================================
 
 /**
+ * Maximum length for values being validated against regex patterns.
+ * Prevents ReDoS attacks by limiting input size.
+ */
+const MAX_REGEX_INPUT_LENGTH = 1000;
+
+/**
+ * Maximum length for regex patterns from imported templates.
+ * Excessively long patterns are more likely to be malicious.
+ */
+const MAX_REGEX_PATTERN_LENGTH = 500;
+
+/**
+ * Detect potentially dangerous regex patterns that could cause ReDoS.
+ * Looks for nested quantifiers and other problematic constructs.
+ */
+const isPotentiallyDangerousRegex = (pattern: string): boolean => {
+  // Reject excessively long patterns
+  if (pattern.length > MAX_REGEX_PATTERN_LENGTH) {
+    return true;
+  }
+
+  // Detect nested quantifiers: (a+)+, (a*)+, (a+)*, (a?)+, etc.
+  // These are the most common cause of catastrophic backtracking
+  if (/\([^)]*[+*][^)]*\)[+*]/.test(pattern)) {
+    return true;
+  }
+
+  // Detect overlapping alternations with quantifiers: (a|a)+, (a|ab)+
+  // Simplified check: alternation inside a quantified group
+  if (/\([^)]*\|[^)]*\)[+*]/.test(pattern)) {
+    return true;
+  }
+
+  // Detect repeated capturing groups with backreferences
+  if (/\([^)]+\)[+*].*\\1/.test(pattern)) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Validate variables against their rules.
  */
 export const validateVariables = (
@@ -299,9 +348,22 @@ export const validateVariables = (
 
     // Check pattern
     if (rule.pattern) {
+      // Check for potentially dangerous regex patterns (ReDoS prevention)
+      if (isPotentiallyDangerousRegex(rule.pattern)) {
+        errors.push({
+          variable_name: cleanName,
+          message: `Validation pattern for ${cleanName} was rejected for security reasons`,
+        });
+        continue;
+      }
+
       try {
         const regex = new RegExp(rule.pattern);
-        if (!regex.test(value)) {
+        // Limit input length for regex testing to prevent ReDoS
+        const testValue = value.length > MAX_REGEX_INPUT_LENGTH
+          ? value.slice(0, MAX_REGEX_INPUT_LENGTH)
+          : value;
+        if (!regex.test(testValue)) {
           errors.push({
             variable_name: cleanName,
             message: `${cleanName} does not match pattern: ${rule.pattern}`,

@@ -5,6 +5,7 @@
 
 import JSZip from "jszip";
 import type { SchemaTree, SchemaNode } from "../../../types/schema";
+import { isTextFile, MAX_SCHEMA_DEPTH, MAX_ZIP_ENTRIES, calculateSchemaStats } from "./constants";
 
 /**
  * Scan a ZIP file and convert to SchemaTree.
@@ -20,7 +21,7 @@ export const scanZipToSchema = async (
   const root = await buildSchemaFromZip(zip, rootName);
 
   // Calculate stats
-  const stats = calculateStats(root);
+  const stats = calculateSchemaStats(root);
 
   return {
     root,
@@ -43,7 +44,16 @@ const buildSchemaFromZip = async (
   };
 
   // Get all file paths and sort them
-  const paths = Object.keys(zip.files).sort();
+  const paths = Object.keys(zip.files);
+
+  // Check entry count to prevent resource exhaustion
+  if (paths.length > MAX_ZIP_ENTRIES) {
+    throw new Error(
+      `ZIP file has too many entries (${paths.length}). Maximum allowed is ${MAX_ZIP_ENTRIES}.`
+    );
+  }
+
+  paths.sort();
 
   for (const path of paths) {
     const file = zip.files[path];
@@ -108,9 +118,13 @@ const ensurePath = (root: SchemaNode, parts: string[]): SchemaNode => {
 
 /**
  * Sort children: folders first, then files, alphabetically.
+ * Includes depth limiting to prevent stack overflow.
  */
-const sortChildren = (node: SchemaNode): void => {
+const sortChildren = (node: SchemaNode, depth: number = 0): void => {
   if (!node.children) return;
+
+  // Stop recursion if depth exceeds limit
+  if (depth >= MAX_SCHEMA_DEPTH) return;
 
   node.children.sort((a, b) => {
     if (a.type === "folder" && b.type !== "folder") return -1;
@@ -119,34 +133,8 @@ const sortChildren = (node: SchemaNode): void => {
   });
 
   for (const child of node.children) {
-    sortChildren(child);
+    sortChildren(child, depth + 1);
   }
-};
-
-/**
- * Calculate statistics for a schema tree.
- */
-const calculateStats = (
-  node: SchemaNode
-): { folders: number; files: number; downloads: number } => {
-  let folders = 0;
-  let files = 0;
-  let downloads = 0;
-
-  const traverse = (n: SchemaNode) => {
-    if (n.type === "folder") {
-      folders++;
-    } else if (n.type === "file") {
-      files++;
-      if (n.url) {
-        downloads++;
-      }
-    }
-    n.children?.forEach(traverse);
-  };
-
-  traverse(node);
-  return { folders, files, downloads };
 };
 
 // ============================================================================
@@ -202,9 +190,8 @@ export const processOfficeDocument = async (
         const content = await file.async("string");
         const processed = substituteVarsInXml(content, substituteVars);
         zip.file(path, processed);
-      } catch (e) {
-        // Skip files that can't be processed
-        console.warn(`Failed to process ${path}:`, e);
+      } catch {
+        // Skip files that can't be processed (binary or malformed)
       }
     }
   }
@@ -361,6 +348,8 @@ const reassembleAndSubstitute = (
             result = newXml;
             offset += lengthDiff;
           }
+          // Skip past the matches we've already processed
+          i = endIndex;
           break;
         }
       }
@@ -371,11 +360,14 @@ const reassembleAndSubstitute = (
 };
 
 /**
- * Check if text contains complete variable(s) - matching % pairs.
+ * Check if text contains only complete variable(s) - all % signs are paired.
+ * Returns true if there are no unpaired % signs that would indicate a split variable.
  */
 const isCompleteVariable = (text: string): boolean => {
-  const percentCount = (text.match(/%/g) || []).length;
-  return percentCount % 2 === 0;
+  // Remove all complete variables (%NAME% or %NAME:transform%)
+  const withoutVars = text.replace(/%[A-Z_][A-Z0-9_]*(?::[^%]+)?%/gi, "");
+  // If any % remains, we have an incomplete variable
+  return !withoutVars.includes("%");
 };
 
 /**
@@ -449,8 +441,8 @@ export const processEpub = async (
           const processed = substituteVars(content);
           zip.file(path, processed);
         }
-      } catch (e) {
-        console.warn(`Failed to process EPUB file ${path}:`, e);
+      } catch {
+        // Skip files that can't be processed (binary or encoding issues)
       }
     }
   }
@@ -476,62 +468,13 @@ export const processZipWithVariables = async (
 ): Promise<Uint8Array> => {
   const zip = await JSZip.loadAsync(data);
 
-  // Text file extensions to process
-  const textExtensions = [
-    ".txt",
-    ".md",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".xml",
-    ".html",
-    ".htm",
-    ".css",
-    ".js",
-    ".ts",
-    ".jsx",
-    ".tsx",
-    ".vue",
-    ".svelte",
-    ".py",
-    ".rb",
-    ".php",
-    ".java",
-    ".c",
-    ".cpp",
-    ".h",
-    ".hpp",
-    ".cs",
-    ".go",
-    ".rs",
-    ".swift",
-    ".kt",
-    ".scala",
-    ".sh",
-    ".bash",
-    ".zsh",
-    ".fish",
-    ".ps1",
-    ".bat",
-    ".cmd",
-    ".sql",
-    ".graphql",
-    ".gql",
-    ".env",
-    ".ini",
-    ".toml",
-    ".conf",
-    ".cfg",
-    ".properties",
-  ];
-
   const allFiles = Object.keys(zip.files);
 
   for (const path of allFiles) {
     const file = zip.files[path];
     if (file && !file.dir) {
-      const ext = "." + path.split(".").pop()?.toLowerCase();
-      if (textExtensions.includes(ext)) {
+      const filename = path.split("/").pop() || path;
+      if (isTextFile(filename)) {
         try {
           const content = await zip.file(path)!.async("string");
           if (content.includes("%")) {

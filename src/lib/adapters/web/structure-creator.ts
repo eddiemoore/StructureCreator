@@ -3,12 +3,6 @@
  * Creates file/folder structures using the File System Access API.
  */
 
-/** Maximum number of iterations allowed in a repeat block to prevent DoS */
-const MAX_REPEAT_COUNT = 10000;
-
-/** Default timeout for fetch operations in milliseconds */
-const FETCH_TIMEOUT_MS = 30000;
-
 import type {
   SchemaTree,
   SchemaNode,
@@ -28,6 +22,16 @@ import {
   processEpub,
   processZipWithVariables,
 } from "./zip-utils";
+import { isValidPublicUrl } from "./url-validation";
+import {
+  isTextFile,
+  MAX_REPEAT_COUNT,
+  FETCH_TIMEOUT_MS,
+  MAX_SCHEMA_DEPTH,
+  MAX_DOWNLOAD_SIZE_BYTES,
+  MAX_DIFF_FILE_READ_BYTES,
+  validatePathComponent,
+} from "./constants";
 
 /**
  * Process a downloaded file, applying variable substitution where applicable.
@@ -44,9 +48,9 @@ const processDownloadedFile = async (
   if (officeType) {
     try {
       return await processOfficeDocument(data, officeType, substituteVars);
-    } catch (e) {
-      console.warn(`Failed to process Office document ${filename}:`, e);
-      return data; // Return original on error
+    } catch {
+      // Failed to process Office document - return original unchanged
+      return data;
     }
   }
 
@@ -54,8 +58,8 @@ const processDownloadedFile = async (
   if (isEpub(filename)) {
     try {
       return await processEpub(data, substituteVars);
-    } catch (e) {
-      console.warn(`Failed to process EPUB ${filename}:`, e);
+    } catch {
+      // Failed to process EPUB - return original unchanged
       return data;
     }
   }
@@ -64,25 +68,14 @@ const processDownloadedFile = async (
   if (filename.toLowerCase().endsWith(".zip")) {
     try {
       return await processZipWithVariables(data, substituteVars);
-    } catch (e) {
-      console.warn(`Failed to process ZIP ${filename}:`, e);
+    } catch {
+      // Failed to process ZIP - return original unchanged
       return data;
     }
   }
 
   // For text files, try to apply variable substitution
-  const textExtensions = [
-    ".txt", ".md", ".json", ".yaml", ".yml", ".xml", ".html", ".htm",
-    ".css", ".js", ".ts", ".jsx", ".tsx", ".vue", ".svelte",
-    ".py", ".rb", ".php", ".java", ".c", ".cpp", ".h", ".hpp",
-    ".cs", ".go", ".rs", ".swift", ".kt", ".scala",
-    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd",
-    ".sql", ".graphql", ".gql", ".env", ".ini", ".toml", ".conf",
-    ".cfg", ".properties", ".csv",
-  ];
-
-  const ext = "." + filename.split(".").pop()?.toLowerCase();
-  if (textExtensions.includes(ext)) {
+  if (isTextFile(filename)) {
     try {
       const text = new TextDecoder().decode(data);
       if (text.includes("%")) {
@@ -107,6 +100,11 @@ interface CreationContext {
   summary: ResultSummary;
   // Track if previous sibling was an if that evaluated to true
   ifWasTrue: boolean;
+  // In dry run, tracks if we're in a virtual subtree (parent folder doesn't exist)
+  // When true, skip file existence checks since the folder doesn't exist yet
+  inVirtualSubtree: boolean;
+  // Current recursion depth to prevent stack overflow
+  depth: number;
 }
 
 /**
@@ -135,6 +133,8 @@ export const createStructureFromTree = async (
       hooks_failed: 0,
     },
     ifWasTrue: false,
+    inVirtualSubtree: false,
+    depth: 0,
   };
 
   // Create the root structure
@@ -165,22 +165,38 @@ const processNode = async (
   context: CreationContext,
   currentPath: string
 ): Promise<void> => {
-  switch (node.type) {
-    case "folder":
-      await processFolder(node, parentHandle, context, currentPath);
-      break;
-    case "file":
-      await processFile(node, parentHandle, context, currentPath);
-      break;
-    case "if":
-      await processIf(node, parentHandle, context, currentPath);
-      break;
-    case "else":
-      await processElse(node, parentHandle, context, currentPath);
-      break;
-    case "repeat":
-      await processRepeat(node, parentHandle, context, currentPath);
-      break;
+  // Check recursion depth to prevent stack overflow
+  if (context.depth >= MAX_SCHEMA_DEPTH) {
+    context.logs.push({
+      log_type: "error",
+      message: `Maximum schema depth (${MAX_SCHEMA_DEPTH}) exceeded at: ${currentPath}`,
+      details: "Schema nesting is too deep. This may indicate a malformed schema.",
+    });
+    context.summary.errors++;
+    return;
+  }
+  context.depth++;
+
+  try {
+    switch (node.type) {
+      case "folder":
+        await processFolder(node, parentHandle, context, currentPath);
+        break;
+      case "file":
+        await processFile(node, parentHandle, context, currentPath);
+        break;
+      case "if":
+        await processIf(node, parentHandle, context, currentPath);
+        break;
+      case "else":
+        await processElse(node, parentHandle, context, currentPath);
+        break;
+      case "repeat":
+        await processRepeat(node, parentHandle, context, currentPath);
+        break;
+    }
+  } finally {
+    context.depth--;
   }
 };
 
@@ -194,10 +210,25 @@ const processFolder = async (
   currentPath: string
 ): Promise<void> => {
   const folderName = substituteVariables(node.name, context.variables);
+
+  // Validate folder name to prevent path traversal
+  try {
+    validatePathComponent(folderName);
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    context.logs.push({
+      log_type: "error",
+      message: `Invalid folder name after variable substitution: ${folderName}`,
+      details: errorMessage,
+    });
+    context.summary.errors++;
+    return;
+  }
+
   const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
 
   try {
-    let folderHandle: FileSystemDirectoryHandle;
+    let folderHandle: FileSystemDirectoryHandle | null = null;
 
     if (context.dryRun) {
       context.logs.push({
@@ -205,13 +236,13 @@ const processFolder = async (
         message: `Would create folder: ${folderPath}`,
       });
       context.summary.folders_created++;
-      // For dry run, we don't actually create, but we need to continue processing children
-      // Try to get existing handle or skip children processing
+      // For dry run, try to get existing handle (for checking file existence)
+      // but don't fail if it doesn't exist - we still need to count children
       try {
         folderHandle = await parentHandle.getDirectoryHandle(folderName);
       } catch {
-        // Folder doesn't exist, skip children in dry run
-        return;
+        // Folder doesn't exist - that's fine for dry run, we'll still process children
+        folderHandle = null;
       }
     } else {
       folderHandle = await parentHandle.getDirectoryHandle(folderName, {
@@ -226,15 +257,24 @@ const processFolder = async (
 
     // Process children
     if (node.children) {
-      // Reset ifWasTrue for each child level
+      // Save and reset state for child level
       const savedIfWasTrue = context.ifWasTrue;
+      const savedInVirtualSubtree = context.inVirtualSubtree;
       context.ifWasTrue = false;
 
+      // In dry run, if folder doesn't exist, mark children as being in a virtual subtree
+      // This prevents incorrect file existence checks
+      if (context.dryRun && !folderHandle) {
+        context.inVirtualSubtree = true;
+      }
+
+      const handleForChildren = folderHandle || parentHandle;
       for (const child of node.children) {
-        await processNode(child, folderHandle, context, folderPath);
+        await processNode(child, handleForChildren, context, folderPath);
       }
 
       context.ifWasTrue = savedIfWasTrue;
+      context.inVirtualSubtree = savedInVirtualSubtree;
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -257,16 +297,33 @@ const processFile = async (
   currentPath: string
 ): Promise<void> => {
   const fileName = substituteVariables(node.name, context.variables);
+
+  // Validate file name to prevent path traversal
+  try {
+    validatePathComponent(fileName);
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    context.logs.push({
+      log_type: "error",
+      message: `Invalid file name after variable substitution: ${fileName}`,
+      details: errorMessage,
+    });
+    context.summary.errors++;
+    return;
+  }
+
   const filePath = currentPath ? `${currentPath}/${fileName}` : fileName;
 
   try {
-    // Check if file exists
+    // Check if file exists (skip if in virtual subtree - folder doesn't exist yet)
     let fileExists = false;
-    try {
-      await parentHandle.getFileHandle(fileName);
-      fileExists = true;
-    } catch {
-      fileExists = false;
+    if (!context.inVirtualSubtree) {
+      try {
+        await parentHandle.getFileHandle(fileName);
+        fileExists = true;
+      } catch {
+        fileExists = false;
+      }
     }
 
     if (fileExists && !context.overwrite) {
@@ -287,6 +344,18 @@ const processFile = async (
       isDownload = true;
       const url = substituteVariables(node.url, context.variables);
 
+      // Validate URL to prevent SSRF attacks
+      const urlValidation = isValidPublicUrl(url);
+      if (!urlValidation.valid) {
+        context.logs.push({
+          log_type: "error",
+          message: `Invalid URL for: ${filePath}`,
+          details: urlValidation.error,
+        });
+        context.summary.errors++;
+        return;
+      }
+
       if (context.dryRun) {
         context.logs.push({
           log_type: "info",
@@ -302,6 +371,7 @@ const processFile = async (
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+        let rawContent: Uint8Array;
         try {
           const response = await fetch(url, { signal: controller.signal });
           clearTimeout(timeoutId);
@@ -309,8 +379,21 @@ const processFile = async (
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
+
+          // Check Content-Length header if available
+          const contentLength = response.headers.get("content-length");
+          if (contentLength && parseInt(contentLength) > MAX_DOWNLOAD_SIZE_BYTES) {
+            throw new Error(`File too large (max ${MAX_DOWNLOAD_SIZE_BYTES / 1024 / 1024}MB)`);
+          }
+
           const arrayBuffer = await response.arrayBuffer();
-          var rawContent = new Uint8Array(arrayBuffer);
+
+          // Verify actual size after download (Content-Length can be spoofed or omitted)
+          if (arrayBuffer.byteLength > MAX_DOWNLOAD_SIZE_BYTES) {
+            throw new Error(`Downloaded file too large (max ${MAX_DOWNLOAD_SIZE_BYTES / 1024 / 1024}MB)`);
+          }
+
+          rawContent = new Uint8Array(arrayBuffer);
         } catch (e) {
           clearTimeout(timeoutId);
           if (e instanceof Error && e.name === "AbortError") {
@@ -361,14 +444,17 @@ const processFile = async (
     });
     const writable = await fileHandle.createWritable();
 
-    if (typeof content === "string") {
-      await writable.write(content);
-    } else {
-      // Convert to ArrayBuffer for type compatibility with File System API
-      const buffer = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
-      await writable.write(buffer);
+    try {
+      if (typeof content === "string") {
+        await writable.write(content);
+      } else {
+        // Convert to ArrayBuffer for type compatibility with File System API
+        const buffer = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
+        await writable.write(buffer);
+      }
+    } finally {
+      await writable.close();
     }
-    await writable.close();
 
     context.logs.push({
       log_type: "success",
@@ -484,6 +570,8 @@ const processRepeat = async (
     };
 
     // Create scoped context - ifWasTrue is reset for each iteration
+    // Note: logs, summary, and warnings are shared by reference (shallow spread),
+    // so mutations in child processing automatically reflect in the parent context
     const scopedContext: CreationContext = {
       ...context,
       variables: scopedVars,
@@ -495,10 +583,6 @@ const processRepeat = async (
         await processNode(child, parentHandle, scopedContext, currentPath);
       }
     }
-
-    // Merge back the summary and logs (but NOT ifWasTrue - it's scoped to iteration)
-    context.logs = scopedContext.logs;
-    context.summary = scopedContext.summary;
   }
 };
 
@@ -512,6 +596,11 @@ interface DiffContext {
   overwrite: boolean;
   warnings: string[];
   ifWasTrue: boolean;
+  // Tracks if we're in a virtual subtree (parent folder doesn't exist)
+  // When true, skip file existence checks since the folder doesn't exist yet
+  inVirtualSubtree: boolean;
+  // Current recursion depth to prevent stack overflow
+  depth: number;
 }
 
 /**
@@ -529,6 +618,8 @@ export const generateDiffPreview = async (
     overwrite,
     warnings: [],
     ifWasTrue: false,
+    inVirtualSubtree: false,
+    depth: 0,
   };
 
   let idCounter = 0;
@@ -560,17 +651,35 @@ const generateDiffNode = async (
   currentPath: string,
   generateId: () => string
 ): Promise<DiffNode> => {
-  switch (node.type) {
-    case "folder":
-      return generateDiffFolder(node, parentHandle, context, currentPath, generateId);
-    case "file":
-      return generateDiffFile(node, parentHandle, context, currentPath, generateId);
-    case "if":
-      return generateDiffIf(node, parentHandle, context, currentPath, generateId);
-    case "else":
-      return generateDiffElse(node, parentHandle, context, currentPath, generateId);
-    case "repeat":
-      return generateDiffRepeat(node, parentHandle, context, currentPath, generateId);
+  // Check recursion depth to prevent stack overflow
+  if (context.depth >= MAX_SCHEMA_DEPTH) {
+    context.warnings.push(`Maximum schema depth (${MAX_SCHEMA_DEPTH}) exceeded at: ${currentPath}`);
+    return {
+      id: generateId(),
+      node_type: "folder",
+      name: "[depth exceeded]",
+      path: currentPath,
+      action: "skip",
+      is_binary: false,
+    };
+  }
+  context.depth++;
+
+  try {
+    switch (node.type) {
+      case "folder":
+        return await generateDiffFolder(node, parentHandle, context, currentPath, generateId);
+      case "file":
+        return await generateDiffFile(node, parentHandle, context, currentPath, generateId);
+      case "if":
+        return await generateDiffIf(node, parentHandle, context, currentPath, generateId);
+      case "else":
+        return await generateDiffElse(node, parentHandle, context, currentPath, generateId);
+      case "repeat":
+        return await generateDiffRepeat(node, parentHandle, context, currentPath, generateId);
+    }
+  } finally {
+    context.depth--;
   }
 };
 
@@ -582,6 +691,22 @@ const generateDiffFolder = async (
   generateId: () => string
 ): Promise<DiffNode> => {
   const folderName = substituteVariables(node.name, context.variables);
+
+  // Validate folder name to prevent path traversal
+  try {
+    validatePathComponent(folderName);
+  } catch (e) {
+    context.warnings.push(`Invalid folder name: ${folderName} - ${e instanceof Error ? e.message : String(e)}`);
+    return {
+      id: generateId(),
+      node_type: "folder",
+      name: `[invalid: ${folderName}]`,
+      path: currentPath,
+      action: "skip",
+      is_binary: false,
+    };
+  }
+
   const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
 
   let exists = false;
@@ -601,7 +726,14 @@ const generateDiffFolder = async (
   if (node.children) {
     const childHandle = folderHandle || parentHandle;
     const savedIfWasTrue = context.ifWasTrue;
+    const savedInVirtualSubtree = context.inVirtualSubtree;
     context.ifWasTrue = false;
+
+    // If folder doesn't exist, mark children as being in a virtual subtree
+    // This prevents incorrect file existence checks
+    if (!folderHandle) {
+      context.inVirtualSubtree = true;
+    }
 
     for (const child of node.children) {
       const childDiff = await generateDiffNode(
@@ -615,6 +747,7 @@ const generateDiffFolder = async (
     }
 
     context.ifWasTrue = savedIfWasTrue;
+    context.inVirtualSubtree = savedInVirtualSubtree;
   }
 
   return {
@@ -636,24 +769,48 @@ const generateDiffFile = async (
   generateId: () => string
 ): Promise<DiffNode> => {
   const fileName = substituteVariables(node.name, context.variables);
+
+  // Validate file name to prevent path traversal
+  try {
+    validatePathComponent(fileName);
+  } catch (e) {
+    context.warnings.push(`Invalid file name: ${fileName} - ${e instanceof Error ? e.message : String(e)}`);
+    return {
+      id: generateId(),
+      node_type: "file",
+      name: `[invalid: ${fileName}]`,
+      path: currentPath,
+      action: "skip",
+      is_binary: false,
+    };
+  }
+
   const filePath = currentPath ? `${currentPath}/${fileName}` : fileName;
 
   let exists = false;
   let existingContent: string | undefined;
 
-  try {
-    const fileHandle = await parentHandle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    exists = true;
-
-    // Try to read as text
+  // Skip file existence check if in virtual subtree (parent folder doesn't exist)
+  if (!context.inVirtualSubtree) {
     try {
-      existingContent = await file.text();
+      const fileHandle = await parentHandle.getFileHandle(fileName);
+      const file = await fileHandle.getFile();
+      exists = true;
+
+      // Try to read as text, but only if file is not too large
+      try {
+        if (file.size <= MAX_DIFF_FILE_READ_BYTES) {
+          existingContent = await file.text();
+        } else {
+          // File too large for diff preview
+          existingContent = `[File too large for diff preview: ${(file.size / 1024 / 1024).toFixed(1)}MB]`;
+        }
+      } catch {
+        existingContent = undefined;
+      }
     } catch {
-      existingContent = undefined;
+      exists = false;
     }
-  } catch {
-    exists = false;
   }
 
   let action: DiffAction;
@@ -669,6 +826,12 @@ const generateDiffFile = async (
 
   if (node.url) {
     isBinary = true; // URLs are treated as binary (no text diff)
+    // Validate URL to warn about invalid URLs in preview
+    const url = substituteVariables(node.url, context.variables);
+    const urlValidation = isValidPublicUrl(url);
+    if (!urlValidation.valid) {
+      context.warnings.push(`Invalid URL for ${fileName}: ${urlValidation.error}`);
+    }
   } else if (node.content) {
     newContent = substituteVariables(node.content, context.variables);
   }

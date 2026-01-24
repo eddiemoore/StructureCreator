@@ -1,6 +1,27 @@
 /**
  * IndexedDB wrapper for web mode storage.
  * Provides template and settings storage similar to SQLite in Tauri.
+ *
+ * ## Database Migration Strategy
+ *
+ * IndexedDB uses version numbers to trigger migrations via `onupgradeneeded`.
+ * When you need to modify the database schema:
+ *
+ * 1. Increment `DB_VERSION`
+ * 2. Add migration logic in `onupgradeneeded` that checks `event.oldVersion`
+ * 3. Migrations run automatically when users open the app with old data
+ *
+ * Example migration (if adding a new index in version 2):
+ * ```
+ * if (oldVersion < 2) {
+ *   const transaction = (event.target as IDBOpenDBRequest).transaction!;
+ *   const store = transaction.objectStore(TEMPLATES_STORE);
+ *   store.createIndex("new_field", "new_field", { unique: false });
+ * }
+ * ```
+ *
+ * Note: IndexedDB migrations cannot modify existing records automatically.
+ * For data migrations, you may need to read and rewrite records after open.
  */
 
 import type { Template } from "../../../types/schema";
@@ -17,6 +38,7 @@ const SETTINGS_STORE = "settings";
 
 /**
  * Open or create the IndexedDB database.
+ * Handles schema migrations via `onupgradeneeded`.
  */
 const openDatabase = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -32,27 +54,35 @@ const openDatabase = (): Promise<IDBDatabase> => {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const oldVersion = event.oldVersion;
 
-      // Create templates store
-      if (!db.objectStoreNames.contains(TEMPLATES_STORE)) {
-        const templatesStore = db.createObjectStore(TEMPLATES_STORE, {
-          keyPath: "id",
-        });
-        templatesStore.createIndex("name", "name", { unique: false });
-        templatesStore.createIndex("name_lower", "name_lower", { unique: true });
-        templatesStore.createIndex("is_favorite", "is_favorite", {
-          unique: false,
-        });
-        templatesStore.createIndex("use_count", "use_count", { unique: false });
-        templatesStore.createIndex("updated_at", "updated_at", {
-          unique: false,
-        });
+      // Version 0 -> 1: Initial schema creation
+      if (oldVersion < 1) {
+        // Create templates store
+        if (!db.objectStoreNames.contains(TEMPLATES_STORE)) {
+          const templatesStore = db.createObjectStore(TEMPLATES_STORE, {
+            keyPath: "id",
+          });
+          templatesStore.createIndex("name", "name", { unique: false });
+          templatesStore.createIndex("name_lower", "name_lower", { unique: true });
+          templatesStore.createIndex("is_favorite", "is_favorite", {
+            unique: false,
+          });
+          templatesStore.createIndex("use_count", "use_count", { unique: false });
+          templatesStore.createIndex("updated_at", "updated_at", {
+            unique: false,
+          });
+        }
+
+        // Create settings store
+        if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
+          db.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
+        }
       }
 
-      // Create settings store
-      if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
-        db.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
-      }
+      // Future migrations would go here:
+      // if (oldVersion < 2) { ... }
+      // if (oldVersion < 3) { ... }
     };
   });
 };
@@ -69,6 +99,15 @@ const generateUUID = (): string => {
  */
 const now = (): string => {
   return new Date().toISOString();
+};
+
+/**
+ * Strip internal fields (like name_lower) from a template record.
+ * Returns a clean Template object for external use.
+ */
+const stripInternalFields = (record: Template & { name_lower?: string }): Template => {
+  const { name_lower, ...template } = record;
+  return template;
 };
 
 /**
@@ -101,7 +140,9 @@ export class IndexedDBAdapter implements DatabaseAdapter {
       const request = store.getAll();
 
       request.onsuccess = () => {
-        const templates = request.result as Template[];
+        const rawTemplates = request.result as (Template & { name_lower?: string })[];
+        // Strip internal fields and sort
+        const templates = rawTemplates.map(stripInternalFields);
         // Sort: favorites first, then by use_count desc, then by updated_at desc
         templates.sort((a, b) => {
           if (a.is_favorite !== b.is_favorite) {
@@ -132,7 +173,8 @@ export class IndexedDBAdapter implements DatabaseAdapter {
       const request = store.get(id);
 
       request.onsuccess = () => {
-        resolve(request.result ?? null);
+        const result = request.result;
+        resolve(result ? stripInternalFields(result) : null);
       };
 
       request.onerror = () => {
@@ -151,7 +193,8 @@ export class IndexedDBAdapter implements DatabaseAdapter {
       const request = index.get(name.toLowerCase());
 
       request.onsuccess = () => {
-        resolve(request.result ?? null);
+        const result = request.result;
+        resolve(result ? stripInternalFields(result) : null);
       };
 
       request.onerror = () => {
@@ -205,34 +248,47 @@ export class IndexedDBAdapter implements DatabaseAdapter {
   }
 
   async updateTemplate(id: string, input: UpdateTemplateInput): Promise<void> {
-    const existing = await this.getTemplate(id);
-    if (!existing) {
-      throw new Error(`Template with id "${id}" not found`);
-    }
-
     const db = this.getDb();
-
-    const updated = {
-      ...existing,
-      name_lower: (input.name ?? existing.name).toLowerCase(),
-      ...(input.name !== undefined && { name: input.name }),
-      ...(input.description !== undefined && { description: input.description }),
-      ...(input.iconColor !== undefined && { icon_color: input.iconColor }),
-      updated_at: now(),
-    };
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(TEMPLATES_STORE, "readwrite");
       const store = transaction.objectStore(TEMPLATES_STORE);
-      const request = store.put(updated);
 
-      request.onsuccess = () => {
-        resolve();
+      // Read and write in same transaction to prevent race conditions
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const existing = getRequest.result;
+        if (!existing) {
+          reject(new Error(`Template with id "${id}" not found`));
+          return;
+        }
+
+        const updated = {
+          ...existing,
+          name_lower: (input.name ?? existing.name).toLowerCase(),
+          ...(input.name !== undefined && { name: input.name }),
+          ...(input.description !== undefined && { description: input.description }),
+          ...(input.iconColor !== undefined && { icon_color: input.iconColor }),
+          updated_at: now(),
+        };
+
+        const putRequest = store.put(updated);
+
+        putRequest.onsuccess = () => {
+          resolve();
+        };
+
+        putRequest.onerror = () => {
+          reject(
+            new Error(`Failed to update template: ${putRequest.error?.message}`)
+          );
+        };
       };
 
-      request.onerror = () => {
+      getRequest.onerror = () => {
         reject(
-          new Error(`Failed to update template: ${request.error?.message}`)
+          new Error(`Failed to get template: ${getRequest.error?.message}`)
         );
       };
     });
@@ -244,79 +300,124 @@ export class IndexedDBAdapter implements DatabaseAdapter {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(TEMPLATES_STORE, "readwrite");
       const store = transaction.objectStore(TEMPLATES_STORE);
-      const request = store.delete(id);
 
-      request.onsuccess = () => {
-        resolve(true);
+      // First check if the record exists
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        if (!getRequest.result) {
+          // Record doesn't exist
+          resolve(false);
+          return;
+        }
+
+        // Record exists, proceed with deletion
+        const deleteRequest = store.delete(id);
+
+        deleteRequest.onsuccess = () => {
+          resolve(true);
+        };
+
+        deleteRequest.onerror = () => {
+          reject(
+            new Error(`Failed to delete template: ${deleteRequest.error?.message}`)
+          );
+        };
       };
 
-      request.onerror = () => {
+      getRequest.onerror = () => {
         reject(
-          new Error(`Failed to delete template: ${request.error?.message}`)
+          new Error(`Failed to check template existence: ${getRequest.error?.message}`)
         );
       };
     });
   }
 
   async toggleFavorite(id: string): Promise<void> {
-    const existing = await this.getTemplate(id);
-    if (!existing) {
-      throw new Error(`Template with id "${id}" not found`);
-    }
-
     const db = this.getDb();
-
-    const updated = {
-      ...existing,
-      name_lower: existing.name.toLowerCase(),
-      is_favorite: !existing.is_favorite,
-      updated_at: now(),
-    };
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(TEMPLATES_STORE, "readwrite");
       const store = transaction.objectStore(TEMPLATES_STORE);
-      const request = store.put(updated);
 
-      request.onsuccess = () => {
-        resolve();
+      // Read and write in same transaction to prevent race conditions
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const existing = getRequest.result;
+        if (!existing) {
+          reject(new Error(`Template with id "${id}" not found`));
+          return;
+        }
+
+        const updated = {
+          ...existing,
+          name_lower: existing.name.toLowerCase(),
+          is_favorite: !existing.is_favorite,
+          updated_at: now(),
+        };
+
+        const putRequest = store.put(updated);
+
+        putRequest.onsuccess = () => {
+          resolve();
+        };
+
+        putRequest.onerror = () => {
+          reject(
+            new Error(`Failed to toggle favorite: ${putRequest.error?.message}`)
+          );
+        };
       };
 
-      request.onerror = () => {
+      getRequest.onerror = () => {
         reject(
-          new Error(`Failed to toggle favorite: ${request.error?.message}`)
+          new Error(`Failed to get template: ${getRequest.error?.message}`)
         );
       };
     });
   }
 
   async incrementUseCount(id: string): Promise<void> {
-    const existing = await this.getTemplate(id);
-    if (!existing) {
-      throw new Error(`Template with id "${id}" not found`);
-    }
-
     const db = this.getDb();
-
-    const updated = {
-      ...existing,
-      name_lower: existing.name.toLowerCase(),
-      use_count: existing.use_count + 1,
-      updated_at: now(),
-    };
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(TEMPLATES_STORE, "readwrite");
       const store = transaction.objectStore(TEMPLATES_STORE);
-      const request = store.put(updated);
 
-      request.onsuccess = () => {
-        resolve();
+      // Read and write in same transaction to prevent race conditions
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const existing = getRequest.result;
+        if (!existing) {
+          reject(new Error(`Template with id "${id}" not found`));
+          return;
+        }
+
+        const updated = {
+          ...existing,
+          name_lower: existing.name.toLowerCase(),
+          use_count: existing.use_count + 1,
+          updated_at: now(),
+        };
+
+        const putRequest = store.put(updated);
+
+        putRequest.onsuccess = () => {
+          resolve();
+        };
+
+        putRequest.onerror = () => {
+          reject(
+            new Error(`Failed to increment use count: ${putRequest.error?.message}`)
+          );
+        };
       };
 
-      request.onerror = () => {
+      getRequest.onerror = () => {
         reject(
-          new Error(`Failed to increment use count: ${request.error?.message}`)
+          new Error(`Failed to get template: ${getRequest.error?.message}`)
         );
       };
     });

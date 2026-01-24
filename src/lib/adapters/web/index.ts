@@ -32,6 +32,51 @@ import { WebTemplateImportExportAdapter } from "./template-io";
 import { scanZipToSchema } from "./zip-utils";
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+// Shared DOMParser instance (stateless, safe to reuse)
+const domParser = new DOMParser();
+
+/**
+ * Extract the base template name from an XML schema's <extends> element.
+ * Uses DOM parser for robust extraction (handles edge cases like > in attributes).
+ * Returns undefined if no extends element is found.
+ */
+const extractExtendsFromXml = (xmlContent: string): string | undefined => {
+  try {
+    const doc = domParser.parseFromString(xmlContent, "application/xml");
+
+    // Check for parsing errors
+    const parseError = doc.querySelector("parsererror");
+    if (parseError) {
+      return undefined;
+    }
+
+    // Find the extends element
+    const extendsElement = doc.querySelector("extends");
+    if (!extendsElement) {
+      return undefined;
+    }
+
+    // Get base name from template attribute or element content
+    const templateAttr = extendsElement.getAttribute("template");
+    if (templateAttr && templateAttr.trim()) {
+      return templateAttr.trim();
+    }
+
+    const textContent = extendsElement.textContent?.trim();
+    if (textContent) {
+      return textContent;
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+// ============================================================================
 // Web Schema Adapter
 // ============================================================================
 
@@ -48,58 +93,54 @@ class WebSchemaAdapter implements SchemaAdapter {
     // Parse the schema first
     const tree = parseSchema(content);
 
-    // Check for extends
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(content, "application/xml");
-    const extendsElement = doc.querySelector("extends");
+    // Use DOM parser to find extends element (more robust than regex)
+    const baseName = extractExtendsFromXml(content);
 
     let mergedVariables: Record<string, string> = {};
     let mergedVariableValidation: Record<string, ValidationRule> = {};
     const baseTemplates: string[] = [];
 
-    if (extendsElement) {
-      const baseName = extendsElement.getAttribute("template") || extendsElement.textContent?.trim();
+    if (baseName) {
+      // Track visited templates to detect circular inheritance
+      const visited = new Set<string>();
 
-      if (baseName) {
-        // Recursively resolve base templates
-        const resolveBase = async (
-          templateName: string
-        ): Promise<void> => {
-          const baseTemplate = await this.database.getTemplateByName(templateName);
-          if (!baseTemplate) {
-            throw new Error(`Base template not found: ${templateName}`);
-          }
+      // Recursively resolve base templates
+      const resolveBase = async (
+        templateName: string
+      ): Promise<void> => {
+        // Check for circular inheritance
+        if (visited.has(templateName)) {
+          throw new Error(`Circular template inheritance detected: "${templateName}"`);
+        }
+        visited.add(templateName);
 
-          baseTemplates.push(templateName);
+        const baseTemplate = await this.database.getTemplateByName(templateName);
+        if (!baseTemplate) {
+          throw new Error(`Base template not found: "${templateName}"`);
+        }
 
-          // Check if base also extends another template
-          const baseDoc = parser.parseFromString(
-            baseTemplate.schema_xml,
-            "application/xml"
-          );
-          const baseExtends = baseDoc.querySelector("extends");
-          if (baseExtends) {
-            const grandBaseName =
-              baseExtends.getAttribute("template") ||
-              baseExtends.textContent?.trim();
-            if (grandBaseName) {
-              await resolveBase(grandBaseName);
-            }
-          }
+        baseTemplates.push(templateName);
 
-          // Merge variables (base values, child overrides)
-          mergedVariables = {
-            ...baseTemplate.variables,
-            ...mergedVariables,
-          };
-          mergedVariableValidation = {
-            ...baseTemplate.variable_validation,
-            ...mergedVariableValidation,
-          };
+        // Check if base also extends another template using DOM parser
+        const grandBaseName = extractExtendsFromXml(baseTemplate.schema_xml);
+        if (grandBaseName) {
+          await resolveBase(grandBaseName);
+        }
+
+        // Merge variables: start with accumulated values, then overlay this base's values
+        // Since we resolve deepest first, each base overwrites the deeper ones
+        // Child's own variables are merged after this function returns
+        mergedVariables = {
+          ...mergedVariables,
+          ...baseTemplate.variables,
         };
+        mergedVariableValidation = {
+          ...mergedVariableValidation,
+          ...baseTemplate.variable_validation,
+        };
+      };
 
-        await resolveBase(baseName);
-      }
+      await resolveBase(baseName);
     }
 
     return {
@@ -120,7 +161,7 @@ class WebSchemaAdapter implements SchemaAdapter {
         return scanDirectoryToSchema(rootHandle, folderPath);
       }
       throw new Error(
-        `Directory handle not found for path: ${folderPath}. ` +
+        `Directory handle not found for path: "${folderPath}". ` +
           "Please select a directory first using the file picker."
       );
     }

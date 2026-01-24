@@ -146,6 +146,7 @@ export interface TemplateExport {
   description: string | null;
   schema_xml: string;
   variables?: Record<string, string>;
+  variable_validation?: Record<string, ValidationRule>;
   icon_color: string | null;
 }
 

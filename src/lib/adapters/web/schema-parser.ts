@@ -3,26 +3,38 @@
  * Port of the Rust schema.rs parsing functionality.
  */
 
+/// <reference path="./file-system-api.d.ts" />
+
 import type {
   SchemaTree,
   SchemaNode,
   SchemaHooks,
   NodeType,
 } from "../../../types/schema";
+import { MAX_DIRECTORY_SCAN_DEPTH, MAX_SCHEMA_DEPTH, validatePathComponent, calculateSchemaStats } from "./constants";
 
-// Extend FileSystemDirectoryHandle to include async iterator methods (for TS compatibility)
-declare global {
-  interface FileSystemDirectoryHandle {
-    values(): AsyncIterableIterator<FileSystemHandle>;
-  }
-}
+/**
+ * Validate a repeat_as variable name.
+ * Must be a valid identifier: starts with letter/underscore, contains only letters/numbers/underscores.
+ */
+const isValidRepeatAs = (value: string): boolean => {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+};
+
+// Shared DOMParser instance (stateless, safe to reuse)
+const domParser = new DOMParser();
+
+// Counter for generating unique placeholder names for invalid nodes within a single parse
+let invalidNameCounter = 0;
 
 /**
  * Parse XML content into a SchemaTree.
  */
 export const parseSchema = (content: string): SchemaTree => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(content, "application/xml");
+  // Reset counter for each parse to ensure predictable placeholder names
+  invalidNameCounter = 0;
+
+  const doc = domParser.parseFromString(content, "application/xml");
 
   // Check for parsing errors
   const parseError = doc.querySelector("parsererror");
@@ -39,11 +51,11 @@ export const parseSchema = (content: string): SchemaTree => {
   // Parse hooks if present
   const hooks = parseHooks(rootElement);
 
-  // Parse the root node
-  const root = parseNode(rootElement);
+  // Parse the root node with depth tracking
+  const root = parseNode(rootElement, 0);
 
   // Calculate stats
-  const stats = calculateStats(root);
+  const stats = calculateSchemaStats(root);
 
   return {
     root,
@@ -75,11 +87,34 @@ const parseHooks = (element: Element): SchemaHooks | undefined => {
 };
 
 /**
- * Parse a single node from an XML element.
+ * Parse a single node from an XML element with depth limiting.
  */
-const parseNode = (element: Element): SchemaNode => {
+const parseNode = (element: Element, depth: number): SchemaNode => {
+  // Check recursion depth to prevent stack overflow from malicious schemas
+  if (depth >= MAX_SCHEMA_DEPTH) {
+    return {
+      type: "file",
+      name: `[max depth ${MAX_SCHEMA_DEPTH} exceeded]`,
+    };
+  }
+
   const tagName = element.tagName.toLowerCase();
-  const name = element.getAttribute("name") || tagName;
+  let name = element.getAttribute("name") || tagName;
+
+  // Validate name for file/folder nodes to prevent path traversal
+  // Skip validation for control structures (if/else/repeat) which use internal names
+  if (!["if", "else", "repeat", "hooks", "extends"].includes(tagName)) {
+    try {
+      // Only validate if name doesn't contain variables (those are validated at runtime)
+      if (!name.includes("%")) {
+        validatePathComponent(name);
+      }
+    } catch {
+      // Replace invalid name with a unique safe placeholder
+      invalidNameCounter++;
+      name = `[invalid-name-${tagName}-${invalidNameCounter}]`;
+    }
+  }
 
   // Determine node type
   let type: NodeType;
@@ -145,8 +180,9 @@ const parseNode = (element: Element): SchemaNode => {
   if (type === "repeat") {
     // Get repeat count
     node.repeat_count = element.getAttribute("count") || "1";
-    // Get repeat variable name
-    node.repeat_as = element.getAttribute("as") || "i";
+    // Get repeat variable name (validate it's a proper identifier)
+    const repeatAs = element.getAttribute("as") || "i";
+    node.repeat_as = isValidRepeatAs(repeatAs) ? repeatAs : "i";
   }
 
   // Parse children (skip hooks and extends elements)
@@ -154,7 +190,7 @@ const parseNode = (element: Element): SchemaNode => {
   for (const child of element.children) {
     const childTag = child.tagName.toLowerCase();
     if (childTag !== "hooks" && childTag !== "extends") {
-      children.push(parseNode(child));
+      children.push(parseNode(child, depth + 1));
     }
   }
 
@@ -180,40 +216,25 @@ const getTextContent = (element: Element): string | undefined => {
 };
 
 /**
- * Calculate statistics for a schema tree.
- */
-const calculateStats = (
-  node: SchemaNode
-): { folders: number; files: number; downloads: number } => {
-  let folders = 0;
-  let files = 0;
-  let downloads = 0;
-
-  const traverse = (n: SchemaNode) => {
-    if (n.type === "folder") {
-      folders++;
-    } else if (n.type === "file") {
-      files++;
-      if (n.url) {
-        downloads++;
-      }
-    }
-    // if/else/repeat are control structures, not counted
-    n.children?.forEach(traverse);
-  };
-
-  traverse(node);
-  return { folders, files, downloads };
-};
-
-/**
  * Export a SchemaTree back to XML.
  */
 export const exportSchemaXml = (tree: SchemaTree): string => {
   const lines: string[] = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
 
-  const nodeToXml = (node: SchemaNode, indent: number): void => {
+  const nodeToXml = (
+    node: SchemaNode,
+    indent: number,
+    depth: number,
+    hooks?: SchemaHooks
+  ): void => {
+    // Check depth to prevent stack overflow from malformed trees
+    if (depth >= MAX_SCHEMA_DEPTH) {
+      const pad = "  ".repeat(indent);
+      lines.push(`${pad}<!-- max depth ${MAX_SCHEMA_DEPTH} exceeded -->`);
+      return;
+    }
+
     const pad = "  ".repeat(indent);
     const tagName = node.type === "folder" ? "folder" : node.type;
 
@@ -245,11 +266,25 @@ export const exportSchemaXml = (tree: SchemaTree): string => {
     }
 
     const attrStr = attrs.join(" ");
+    const hasChildren = node.children && node.children.length > 0;
+    const hasHooks = hooks && hooks.post_create.length > 0;
+    const hasContent = hasChildren || hasHooks;
 
-    if (node.children && node.children.length > 0) {
+    if (hasContent) {
       lines.push(`${pad}<${tagName} ${attrStr}>`);
-      for (const child of node.children) {
-        nodeToXml(child, indent + 1);
+      // Add children
+      if (node.children) {
+        for (const child of node.children) {
+          nodeToXml(child, indent + 1, depth + 1);
+        }
+      }
+      // Add hooks if this is the root node
+      if (hasHooks) {
+        lines.push(`${pad}  <hooks>`);
+        for (const cmd of hooks.post_create) {
+          lines.push(`${pad}    <post_create>${escapeXml(cmd)}</post_create>`);
+        }
+        lines.push(`${pad}  </hooks>`);
       }
       lines.push(`${pad}</${tagName}>`);
     } else if (node.content) {
@@ -259,24 +294,8 @@ export const exportSchemaXml = (tree: SchemaTree): string => {
     }
   };
 
-  nodeToXml(tree.root, 0);
-
-  // Add hooks if present
-  if (tree.hooks && tree.hooks.post_create.length > 0) {
-    const lastLine = lines[lines.length - 1];
-    const rootCloseTag = `</${tree.root.type === "folder" ? "folder" : tree.root.type}>`;
-
-    if (lastLine.endsWith(rootCloseTag)) {
-      // Insert hooks before closing root tag
-      lines.pop();
-      lines.push("  <hooks>");
-      for (const cmd of tree.hooks.post_create) {
-        lines.push(`    <post_create>${escapeXml(cmd)}</post_create>`);
-      }
-      lines.push("  </hooks>");
-      lines.push(lastLine);
-    }
-  }
+  // Pass hooks to root node so they're included inside the root element
+  nodeToXml(tree.root, 0, 0, tree.hooks);
 
   return lines.join("\n");
 };
@@ -300,8 +319,8 @@ export const scanDirectoryToSchema = async (
   handle: FileSystemDirectoryHandle,
   name?: string
 ): Promise<SchemaTree> => {
-  const root = await scanDirectoryNode(handle, name || handle.name);
-  const stats = calculateStats(root);
+  const root = await scanDirectoryNode(handle, name || handle.name, 0);
+  const stats = calculateSchemaStats(root);
 
   return {
     root,
@@ -310,18 +329,33 @@ export const scanDirectoryToSchema = async (
 };
 
 /**
- * Recursively scan a directory handle.
+ * Recursively scan a directory handle with depth limiting.
  */
 const scanDirectoryNode = async (
   handle: FileSystemDirectoryHandle,
-  name: string
+  name: string,
+  depth: number
 ): Promise<SchemaNode> => {
+  // Check recursion depth to prevent stack overflow
+  if (depth >= MAX_DIRECTORY_SCAN_DEPTH) {
+    return {
+      type: "folder",
+      name,
+      children: [
+        {
+          type: "file",
+          name: `[max depth ${MAX_DIRECTORY_SCAN_DEPTH} exceeded]`,
+        },
+      ],
+    };
+  }
+
   const children: SchemaNode[] = [];
 
   for await (const entry of handle.values()) {
     if (entry.kind === "directory") {
       const childHandle = await handle.getDirectoryHandle(entry.name);
-      const childNode = await scanDirectoryNode(childHandle, entry.name);
+      const childNode = await scanDirectoryNode(childHandle, entry.name, depth + 1);
       children.push(childNode);
     } else {
       children.push({

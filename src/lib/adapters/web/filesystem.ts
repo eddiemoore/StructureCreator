@@ -6,56 +6,20 @@
  * This adapter maintains a handle registry to map "virtual paths" to handles.
  */
 
+/// <reference path="./file-system-api.d.ts" />
+
 import type { FileSystemAdapter, FileFilter } from "../types";
 
-// Type definitions for File System Access API (not yet in all TS lib versions)
-declare global {
-  interface Window {
-    showOpenFilePicker?: (
-      options?: OpenFilePickerOptions
-    ) => Promise<FileSystemFileHandle[]>;
-    showDirectoryPicker?: (
-      options?: DirectoryPickerOptions
-    ) => Promise<FileSystemDirectoryHandle>;
-    showSaveFilePicker?: (
-      options?: SaveFilePickerOptions
-    ) => Promise<FileSystemFileHandle>;
-  }
-
-  interface OpenFilePickerOptions {
-    multiple?: boolean;
-    excludeAcceptAllOption?: boolean;
-    types?: FilePickerAcceptType[];
-  }
-
-  interface DirectoryPickerOptions {
-    id?: string;
-    mode?: "read" | "readwrite";
-    startIn?: FileSystemHandle | "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos";
-  }
-
-  interface SaveFilePickerOptions {
-    excludeAcceptAllOption?: boolean;
-    suggestedName?: string;
-    types?: FilePickerAcceptType[];
-  }
-
-  interface FilePickerAcceptType {
-    description?: string;
-    accept: Record<string, string[]>;
-  }
-
-  // Extend FileSystemDirectoryHandle to include async iterator methods
-  interface FileSystemDirectoryHandle {
-    values(): AsyncIterableIterator<FileSystemHandle>;
-    keys(): AsyncIterableIterator<string>;
-    entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
-  }
-}
+/**
+ * Maximum number of handles to keep in each registry map.
+ * Prevents unbounded memory growth during long sessions.
+ */
+const MAX_HANDLES_PER_TYPE = 1000;
 
 /**
  * Registry to map virtual paths to File System handles.
  * This allows us to maintain a path-like interface while using handles internally.
+ * Implements LRU-style eviction to prevent memory bloat during long sessions.
  */
 class HandleRegistry {
   private fileHandles: Map<string, FileSystemFileHandle> = new Map();
@@ -63,10 +27,29 @@ class HandleRegistry {
   private rootHandle: FileSystemDirectoryHandle | null = null;
 
   /**
+   * Evict oldest entries if a map exceeds the maximum size.
+   * Map iteration order is insertion order, so we delete from the beginning.
+   */
+  private evictIfNeeded<T>(map: Map<string, T>, maxSize: number): void {
+    if (map.size >= maxSize) {
+      // Delete oldest 10% of entries to avoid frequent evictions
+      const deleteCount = Math.max(1, Math.floor(maxSize * 0.1));
+      const iterator = map.keys();
+      for (let i = 0; i < deleteCount; i++) {
+        const key = iterator.next().value;
+        if (key !== undefined) {
+          map.delete(key);
+        }
+      }
+    }
+  }
+
+  /**
    * Register a file handle and return a virtual path.
    */
   registerFileHandle(handle: FileSystemFileHandle, basePath?: string): string {
     const path = basePath ? `${basePath}/${handle.name}` : handle.name;
+    this.evictIfNeeded(this.fileHandles, MAX_HANDLES_PER_TYPE);
     this.fileHandles.set(path, handle);
     return path;
   }
@@ -79,6 +62,7 @@ class HandleRegistry {
     basePath?: string
   ): string {
     const path = basePath ? `${basePath}/${handle.name}` : handle.name;
+    this.evictIfNeeded(this.directoryHandles, MAX_HANDLES_PER_TYPE);
     this.directoryHandles.set(path, handle);
     return path;
   }
@@ -88,6 +72,7 @@ class HandleRegistry {
    */
   setRootHandle(handle: FileSystemDirectoryHandle, path: string): void {
     this.rootHandle = handle;
+    this.evictIfNeeded(this.directoryHandles, MAX_HANDLES_PER_TYPE);
     this.directoryHandles.set(path, handle);
   }
 
@@ -236,7 +221,7 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
   async readTextFile(path: string): Promise<string> {
     const handle = handleRegistry.getFileHandle(path);
     if (!handle) {
-      throw new Error(`File handle not found for path: ${path}`);
+      throw new Error(`File handle not found for path: "${path}"`);
     }
 
     const file = await handle.getFile();
@@ -246,7 +231,7 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
   async readBinaryFile(path: string): Promise<Uint8Array> {
     const handle = handleRegistry.getFileHandle(path);
     if (!handle) {
-      throw new Error(`File handle not found for path: ${path}`);
+      throw new Error(`File handle not found for path: "${path}"`);
     }
 
     const file = await handle.getFile();
@@ -263,8 +248,11 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
     }
 
     const writable = await handle.createWritable();
-    await writable.write(content);
-    await writable.close();
+    try {
+      await writable.write(content);
+    } finally {
+      await writable.close();
+    }
   }
 
   async writeBinaryFile(path: string, data: Uint8Array): Promise<void> {
@@ -276,10 +264,13 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
     }
 
     const writable = await handle.createWritable();
-    // Convert to ArrayBuffer for type compatibility with File System API
-    const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-    await writable.write(buffer);
-    await writable.close();
+    try {
+      // Convert to ArrayBuffer for type compatibility with File System API
+      const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      await writable.write(buffer);
+    } finally {
+      await writable.close();
+    }
   }
 
   /**
@@ -297,16 +288,18 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
     const parts = path.split("/").filter(Boolean);
     const fileName = parts.pop();
     if (!fileName) {
-      throw new Error(`Invalid file path: ${path}`);
+      throw new Error(`Invalid file path: "${path}"`);
     }
 
-    // Navigate/create directory structure
+    // Navigate/create directory structure, tracking the full path
     let currentDir = rootHandle;
+    let currentPath = "";
     for (const dirName of parts) {
+      currentPath = currentPath ? `${currentPath}/${dirName}` : dirName;
       currentDir = await currentDir.getDirectoryHandle(dirName, {
         create: true,
       });
-      handleRegistry.registerDirectoryHandle(currentDir, dirName);
+      handleRegistry.registerDirectoryHandle(currentDir, currentPath);
     }
 
     // Create the file
@@ -354,6 +347,12 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
 
     try {
       const parts = path.split("/").filter(Boolean);
+
+      // Empty path means root directory, which exists if we have a root handle
+      if (parts.length === 0) {
+        return true;
+      }
+
       let currentDir = rootHandle;
 
       for (let i = 0; i < parts.length - 1; i++) {
@@ -365,17 +364,32 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
       try {
         await currentDir.getFileHandle(lastName);
         return true;
-      } catch {
-        // Try as directory
-        try {
-          await currentDir.getDirectoryHandle(lastName);
-          return true;
-        } catch {
-          return false;
+      } catch (e) {
+        // Only treat NotFoundError as "doesn't exist", rethrow others
+        if (e instanceof DOMException && e.name === "NotFoundError") {
+          // Try as directory
+          try {
+            await currentDir.getDirectoryHandle(lastName);
+            return true;
+          } catch (e2) {
+            if (e2 instanceof DOMException && e2.name === "NotFoundError") {
+              return false;
+            }
+            throw e2;
+          }
         }
+        // TypeMismatchError means it exists but is a directory
+        if (e instanceof DOMException && e.name === "TypeMismatchError") {
+          return true;
+        }
+        throw e;
       }
-    } catch {
-      return false;
+    } catch (e) {
+      // NotFoundError in directory traversal means path doesn't exist
+      if (e instanceof DOMException && e.name === "NotFoundError") {
+        return false;
+      }
+      throw e;
     }
   }
 
@@ -391,6 +405,12 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
 
     try {
       const parts = path.split("/").filter(Boolean);
+
+      // Empty path is the root directory, not a file
+      if (parts.length === 0) {
+        return false;
+      }
+
       let currentDir = rootHandle;
 
       for (let i = 0; i < parts.length - 1; i++) {
@@ -400,8 +420,12 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
       const lastName = parts[parts.length - 1];
       await currentDir.getFileHandle(lastName);
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+      // NotFoundError or TypeMismatchError means it's not a file
+      if (e instanceof DOMException && (e.name === "NotFoundError" || e.name === "TypeMismatchError")) {
+        return false;
+      }
+      throw e;
     }
   }
 
@@ -423,8 +447,12 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
         currentDir = await currentDir.getDirectoryHandle(part);
       }
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+      // NotFoundError or TypeMismatchError means it's not a directory
+      if (e instanceof DOMException && (e.name === "NotFoundError" || e.name === "TypeMismatchError")) {
+        return false;
+      }
+      throw e;
     }
   }
 
@@ -436,7 +464,7 @@ export class WebFileSystemAdapter implements FileSystemAdapter {
     if (!handle) {
       const rootHandle = handleRegistry.getRootHandle();
       if (!rootHandle) {
-        throw new Error(`Directory handle not found for path: ${path}`);
+        throw new Error(`Directory handle not found for path: "${path}"`);
       }
 
       // Navigate to the directory
