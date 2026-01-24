@@ -986,7 +986,7 @@ export const LeftPanel = () => {
                 value={localSearchQuery}
                 onChange={(e) => setLocalSearchQuery(e.target.value)}
                 placeholder="Search templates..."
-                className="w-full mac-input pl-8 pr-8 text-mac-sm"
+                className="w-full mac-input pl-10 pr-8 text-mac-sm"
                 aria-label="Search templates"
               />
               {localSearchQuery && (
