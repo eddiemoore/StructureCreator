@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
@@ -168,6 +168,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   templates: [],
   templatesLoading: false,
 
+  // Recent Projects
+  recentProjects: [],
+  recentProjectsLoading: false,
+
   // Template filtering
   templateSearchQuery: "",
   templateFilterTags: [],
@@ -281,6 +285,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTemplates: (templates: Template[]) => set({ templates }),
 
   setTemplatesLoading: (templatesLoading: boolean) => set({ templatesLoading }),
+
+  setRecentProjects: (recentProjects: RecentProject[]) => set({ recentProjects }),
+
+  setRecentProjectsLoading: (recentProjectsLoading: boolean) => set({ recentProjectsLoading }),
 
   // Template filtering actions
   setTemplateSearchQuery: (templateSearchQuery: string) => set({ templateSearchQuery }),

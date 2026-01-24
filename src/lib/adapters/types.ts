@@ -13,6 +13,7 @@ import type {
   ImportResult,
   DuplicateStrategy,
   ParseWithInheritanceResult,
+  RecentProject,
 } from "../../types/schema";
 
 // ============================================================================
@@ -113,6 +114,18 @@ export interface UpdateTemplateInput {
   iconColor?: string | null;
 }
 
+export interface CreateRecentProjectInput {
+  projectName: string;
+  outputPath: string;
+  schemaXml: string;
+  variables: Record<string, string>;
+  variableValidation: Record<string, ValidationRule>;
+  templateId: string | null;
+  templateName: string | null;
+  foldersCreated: number;
+  filesCreated: number;
+}
+
 export interface DatabaseAdapter {
   /**
    * Initialize the database (create tables, run migrations).
@@ -137,6 +150,13 @@ export interface DatabaseAdapter {
   getAllSettings(): Promise<Record<string, string>>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+
+  // Recent projects operations
+  listRecentProjects(): Promise<RecentProject[]>;
+  getRecentProject(id: string): Promise<RecentProject | null>;
+  addRecentProject(input: CreateRecentProjectInput): Promise<RecentProject>;
+  deleteRecentProject(id: string): Promise<boolean>;
+  clearRecentProjects(): Promise<number>;
 }
 
 // ============================================================================

@@ -32,6 +32,7 @@ export const RightPanel = () => {
   const {
     schemaTree,
     schemaContent,
+    schemaPath,
     outputPath,
     projectName,
     variables,
@@ -52,6 +53,7 @@ export const RightPanel = () => {
     addLog,
     clearLogs,
     setValidationErrors,
+    setRecentProjects,
   } = useAppStore();
 
   const [summary, setSummary] = useState<ResultSummary | null>(null);
@@ -126,7 +128,7 @@ export const RightPanel = () => {
 
   // Execute the actual structure creation
   const executeCreate = async (isDryRun: boolean) => {
-    const { varsMap } = buildVariableMaps();
+    const { varsMap, rulesMap } = buildVariableMaps();
 
     setProgress({
       status: "running",
@@ -188,6 +190,43 @@ export const RightPanel = () => {
           successParts.push(`${result.summary.hooks_executed} hook(s) executed.`);
         }
         addLog({ type: "success", message: successParts.join(" ") });
+
+        // Record to history for non-dry-run successful creations
+        if (!isDryRun) {
+          try {
+            // Get schema XML - use schemaContent if available, or export from tree
+            let schemaXml = schemaContent || "";
+            if (!schemaXml && schemaTree) {
+              schemaXml = await api.schema.exportSchemaXml(schemaTree);
+            }
+
+            // Extract template info from schemaPath if it was loaded from a template
+            let templateId: string | null = null;
+            let templateName: string | null = null;
+            if (schemaPath?.startsWith("template:")) {
+              templateName = schemaPath.slice("template:".length);
+            }
+
+            await api.database.addRecentProject({
+              projectName,
+              outputPath: outputPath!,
+              schemaXml,
+              variables: varsMap,
+              variableValidation: rulesMap,
+              templateId,
+              templateName,
+              foldersCreated: result.summary.folders_created,
+              filesCreated: result.summary.files_created,
+            });
+
+            // Refresh the recent projects list
+            const projects = await api.database.listRecentProjects();
+            setRecentProjects(projects);
+          } catch (historyError) {
+            // Don't fail the creation if history recording fails
+            console.warn("Failed to record project to history:", historyError);
+          }
+        }
       }
     } catch (e) {
       console.error("Failed to create structure:", e);

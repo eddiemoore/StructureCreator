@@ -28,6 +28,7 @@ import type {
   CreateTemplateInput,
   UpdateTemplateInput,
   CreateStructureOptions,
+  CreateRecentProjectInput,
 } from "../types";
 
 import type {
@@ -40,7 +41,40 @@ import type {
   ImportResult,
   DuplicateStrategy,
   ParseWithInheritanceResult,
+  RecentProject,
 } from "../../../types/schema";
+
+// Rust returns snake_case fields, this interface matches the Rust struct
+interface RustRecentProject {
+  id: string;
+  project_name: string;
+  output_path: string;
+  schema_xml: string;
+  variables: Record<string, string>;
+  variable_validation: Record<string, ValidationRule>;
+  template_id: string | null;
+  template_name: string | null;
+  folders_created: number;
+  files_created: number;
+  created_at: string;
+}
+
+/** Convert Rust snake_case RecentProject to TypeScript camelCase */
+function toRecentProject(p: RustRecentProject): RecentProject {
+  return {
+    id: p.id,
+    projectName: p.project_name,
+    outputPath: p.output_path,
+    schemaXml: p.schema_xml,
+    variables: p.variables,
+    variableValidation: p.variable_validation,
+    templateId: p.template_id,
+    templateName: p.template_name,
+    foldersCreated: p.folders_created,
+    filesCreated: p.files_created,
+    createdAt: p.created_at,
+  };
+}
 
 // ============================================================================
 // File System Adapter (Tauri)
@@ -215,6 +249,41 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
 
   async setSetting(key: string, value: string): Promise<void> {
     await invoke("cmd_set_setting", { key, value });
+  }
+
+  // Recent projects operations
+
+  async listRecentProjects(): Promise<RecentProject[]> {
+    const projects = await invoke<RustRecentProject[]>("cmd_list_recent_projects");
+    return projects.map(toRecentProject);
+  }
+
+  async getRecentProject(id: string): Promise<RecentProject | null> {
+    const p = await invoke<RustRecentProject | null>("cmd_get_recent_project", { id });
+    return p ? toRecentProject(p) : null;
+  }
+
+  async addRecentProject(input: CreateRecentProjectInput): Promise<RecentProject> {
+    const p = await invoke<RustRecentProject>("cmd_add_recent_project", {
+      projectName: input.projectName,
+      outputPath: input.outputPath,
+      schemaXml: input.schemaXml,
+      variables: input.variables,
+      variableValidation: input.variableValidation,
+      templateId: input.templateId,
+      templateName: input.templateName,
+      foldersCreated: input.foldersCreated,
+      filesCreated: input.filesCreated,
+    });
+    return toRecentProject(p);
+  }
+
+  async deleteRecentProject(id: string): Promise<boolean> {
+    return invoke<boolean>("cmd_delete_recent_project", { id });
+  }
+
+  async clearRecentProjects(): Promise<number> {
+    return invoke<number>("cmd_clear_recent_projects");
   }
 }
 

@@ -24,18 +24,21 @@
  * For data migrations, you may need to read and rewrite records after open.
  */
 
-import type { Template } from "../../../types/schema";
+import type { Template, RecentProject } from "../../../types/schema";
 import type {
   DatabaseAdapter,
   CreateTemplateInput,
   UpdateTemplateInput,
+  CreateRecentProjectInput,
 } from "../types";
 import { MAX_TAG_LENGTH, MAX_TAGS_PER_TEMPLATE, TAG_REGEX } from "../../../constants/tags";
 
 const DB_NAME = "structure-creator";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const TEMPLATES_STORE = "templates";
 const SETTINGS_STORE = "settings";
+const RECENT_PROJECTS_STORE = "recent_projects";
+const MAX_RECENT_PROJECTS = 20;
 
 /**
  * Validate and sanitize a list of tags.
@@ -122,9 +125,15 @@ const openDatabase = (): Promise<IDBDatabase> => {
         }
       }
 
-      // Future migrations would go here:
-      // if (oldVersion < 2) { ... }
-      // if (oldVersion < 3) { ... }
+      // Version 1 -> 2: Add recent projects store
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains(RECENT_PROJECTS_STORE)) {
+          const recentStore = db.createObjectStore(RECENT_PROJECTS_STORE, {
+            keyPath: "id",
+          });
+          recentStore.createIndex("createdAt", "createdAt", { unique: false });
+        }
+      }
     };
   });
 };
@@ -599,6 +608,157 @@ export class IndexedDBAdapter implements DatabaseAdapter {
 
       request.onerror = () => {
         reject(new Error(`Failed to set setting: ${request.error?.message}`));
+      };
+    });
+  }
+
+  // ============================================================================
+  // Recent Projects Operations
+  // ============================================================================
+
+  async listRecentProjects(): Promise<RecentProject[]> {
+    const db = this.getDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(RECENT_PROJECTS_STORE, "readonly");
+      const store = transaction.objectStore(RECENT_PROJECTS_STORE);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const projects = request.result as RecentProject[];
+        // Sort by createdAt descending (newest first)
+        projects.sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        resolve(projects);
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Failed to list recent projects: ${request.error?.message}`));
+      };
+    });
+  }
+
+  async getRecentProject(id: string): Promise<RecentProject | null> {
+    const db = this.getDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(RECENT_PROJECTS_STORE, "readonly");
+      const store = transaction.objectStore(RECENT_PROJECTS_STORE);
+      const request = store.get(id);
+
+      request.onsuccess = () => {
+        resolve(request.result ?? null);
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Failed to get recent project: ${request.error?.message}`));
+      };
+    });
+  }
+
+  async addRecentProject(input: CreateRecentProjectInput): Promise<RecentProject> {
+    const db = this.getDb();
+    const timestamp = now();
+
+    const project: RecentProject = {
+      id: generateUUID(),
+      projectName: input.projectName,
+      outputPath: input.outputPath,
+      schemaXml: input.schemaXml,
+      variables: input.variables,
+      variableValidation: input.variableValidation,
+      templateId: input.templateId,
+      templateName: input.templateName,
+      foldersCreated: input.foldersCreated,
+      filesCreated: input.filesCreated,
+      createdAt: timestamp,
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(RECENT_PROJECTS_STORE, "readwrite");
+      const store = transaction.objectStore(RECENT_PROJECTS_STORE);
+      const addRequest = store.add(project);
+
+      addRequest.onsuccess = () => {
+        // Auto-cleanup: get all and delete oldest if over limit
+        const getAllRequest = store.getAll();
+        getAllRequest.onsuccess = () => {
+          const all = getAllRequest.result as RecentProject[];
+          if (all.length > MAX_RECENT_PROJECTS) {
+            // Sort by createdAt ascending to find oldest
+            all.sort((a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+            // Delete oldest entries
+            const toDelete = all.slice(0, all.length - MAX_RECENT_PROJECTS);
+            for (const old of toDelete) {
+              store.delete(old.id);
+            }
+          }
+          resolve(project);
+        };
+        getAllRequest.onerror = () => {
+          // Still resolve with the project even if cleanup fails
+          resolve(project);
+        };
+      };
+
+      addRequest.onerror = () => {
+        reject(new Error(`Failed to add recent project: ${addRequest.error?.message}`));
+      };
+    });
+  }
+
+  async deleteRecentProject(id: string): Promise<boolean> {
+    const db = this.getDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(RECENT_PROJECTS_STORE, "readwrite");
+      const store = transaction.objectStore(RECENT_PROJECTS_STORE);
+
+      // First check if record exists
+      const getRequest = store.get(id);
+      getRequest.onsuccess = () => {
+        if (!getRequest.result) {
+          resolve(false);
+          return;
+        }
+
+        const deleteRequest = store.delete(id);
+        deleteRequest.onsuccess = () => resolve(true);
+        deleteRequest.onerror = () => {
+          reject(new Error(`Failed to delete recent project: ${deleteRequest.error?.message}`));
+        };
+      };
+
+      getRequest.onerror = () => {
+        reject(new Error(`Failed to check recent project: ${getRequest.error?.message}`));
+      };
+    });
+  }
+
+  async clearRecentProjects(): Promise<number> {
+    const db = this.getDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(RECENT_PROJECTS_STORE, "readwrite");
+      const store = transaction.objectStore(RECENT_PROJECTS_STORE);
+
+      // First count existing records
+      const countRequest = store.count();
+      countRequest.onsuccess = () => {
+        const count = countRequest.result;
+
+        const clearRequest = store.clear();
+        clearRequest.onsuccess = () => resolve(count);
+        clearRequest.onerror = () => {
+          reject(new Error(`Failed to clear recent projects: ${clearRequest.error?.message}`));
+        };
+      };
+
+      countRequest.onerror = () => {
+        reject(new Error(`Failed to count recent projects: ${countRequest.error?.message}`));
       };
     });
   }

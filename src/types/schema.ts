@@ -142,6 +142,20 @@ export interface Template {
   tags: string[];
 }
 
+export interface RecentProject {
+  id: string;
+  projectName: string;
+  outputPath: string;
+  schemaXml: string;
+  variables: Record<string, string>;
+  variableValidation: Record<string, ValidationRule>;
+  templateId: string | null;
+  templateName: string | null;
+  foldersCreated: number;
+  filesCreated: number;
+  createdAt: string;
+}
+
 export type TemplateSortOption =
   | "default"
   | "name_asc"
@@ -352,6 +366,10 @@ export interface AppState {
   templates: Template[];
   templatesLoading: boolean;
 
+  // Recent Projects
+  recentProjects: RecentProject[];
+  recentProjectsLoading: boolean;
+
   // Template filtering
   templateSearchQuery: string;
   templateFilterTags: string[];
@@ -392,6 +410,8 @@ export interface AppState {
   setValidationErrors: (errors: ValidationError[]) => void;
   setTemplates: (templates: Template[]) => void;
   setTemplatesLoading: (loading: boolean) => void;
+  setRecentProjects: (projects: RecentProject[]) => void;
+  setRecentProjectsLoading: (loading: boolean) => void;
 
   // Template filtering actions
   setTemplateSearchQuery: (query: string) => void;
