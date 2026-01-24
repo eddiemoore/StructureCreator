@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "../lib/api";
 import {
   XIcon,
   ImportIcon,
@@ -34,7 +32,6 @@ export const ImportExportModal = ({
   onComplete,
 }: ImportExportModalProps) => {
   // Export state
-  const [includeVariables, setIncludeVariables] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     selectedTemplateId ? new Set([selectedTemplateId]) : new Set(templates.map((t) => t.id))
   );
@@ -43,7 +40,6 @@ export const ImportExportModal = ({
   const [importTab, setImportTab] = useState<ImportTab>("file");
   const [importUrl, setImportUrl] = useState("");
   const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>("skip");
-  const [importIncludeVariables, setImportIncludeVariables] = useState(true);
 
   // Status state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -68,8 +64,6 @@ export const ImportExportModal = ({
       setImportUrl("");
       setImportTab("file");
       setDuplicateStrategy("skip");
-      setImportIncludeVariables(true);
-      setIncludeVariables(true);
       setSelectedIds(
         selectedTemplateId
           ? new Set([selectedTemplateId])
@@ -153,33 +147,32 @@ export const ImportExportModal = ({
 
       if (mode === "export" && selectedTemplateId) {
         // Single template export
-        jsonContent = await invoke<string>("cmd_export_template", {
-          templateId: selectedTemplateId,
-          includeVariables,
-        });
         const template = templates.find((t) => t.id === selectedTemplateId);
+        if (template) {
+          jsonContent = await api.templateImportExport.exportTemplate(template);
+        } else {
+          throw new Error("Template not found");
+        }
         defaultFilename = `${sanitizeFilename(template?.name || "template")}.sct`;
         exportedCount = 1;
       } else {
         // Bulk export
         const ids = Array.from(selectedIds);
-        jsonContent = await invoke<string>("cmd_export_templates_bulk", {
-          templateIds: ids,
-          includeVariables,
-        });
+        const selectedTemplates = templates.filter((t) => ids.includes(t.id));
+        jsonContent = await api.templateImportExport.exportTemplatesBulk(selectedTemplates);
         defaultFilename = ids.length === 1
           ? `${sanitizeFilename(templates.find((t) => t.id === ids[0])?.name || "template")}.sct`
           : `templates-bundle.sct`;
         exportedCount = ids.length;
       }
 
-      const savePath = await save({
+      const savePath = await api.fileSystem.saveFilePicker({
         filters: [{ name: "Structure Creator Template", extensions: ["sct"] }],
         defaultPath: defaultFilename,
       });
 
       if (savePath) {
-        await writeTextFile(savePath, jsonContent);
+        await api.fileSystem.writeTextFile(savePath, jsonContent);
         onComplete();
         // Show success message
         setExportSuccess(
@@ -201,18 +194,17 @@ export const ImportExportModal = ({
     setResult(null);
 
     try {
-      const selected = await open({
+      const selected = await api.fileSystem.openFilePicker({
         multiple: false,
         filters: [{ name: "Structure Creator Template", extensions: ["sct", "json"] }],
       });
 
       if (selected) {
-        const jsonContent = await readTextFile(selected as string);
-        const importResult = await invoke<ImportResult>("cmd_import_templates_from_json", {
+        const jsonContent = await api.fileSystem.readTextFile(selected);
+        const importResult = await api.templateImportExport.importTemplatesFromJson(
           jsonContent,
-          duplicateStrategy,
-          includeVariables: importIncludeVariables,
-        });
+          duplicateStrategy
+        );
         setResult(importResult);
         onComplete();
       }
@@ -242,11 +234,10 @@ export const ImportExportModal = ({
     lastUrlImportTime.current = now;
 
     try {
-      const importResult = await invoke<ImportResult>("cmd_import_templates_from_url", {
-        url: importUrl.trim(),
-        duplicateStrategy,
-        includeVariables: importIncludeVariables,
-      });
+      const importResult = await api.templateImportExport.importTemplatesFromUrl(
+        importUrl.trim(),
+        duplicateStrategy
+      );
       setResult(importResult);
       onComplete();
     } catch (e) {
@@ -371,16 +362,6 @@ export const ImportExportModal = ({
             </div>
           </div>
         )}
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeVariables}
-            onChange={(e) => setIncludeVariables(e.target.checked)}
-            className="w-4 h-4 rounded border-border-default text-accent focus:ring-accent"
-          />
-          <span className="text-mac-sm text-text-secondary">Include variable values</span>
-        </label>
 
         <div className="flex justify-end gap-2 pt-2">
           <button
@@ -537,17 +518,6 @@ export const ImportExportModal = ({
             </div>
           </div>
         </div>
-
-        {/* Include Variables */}
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={importIncludeVariables}
-            onChange={(e) => setImportIncludeVariables(e.target.checked)}
-            className="w-4 h-4 rounded border-border-default text-accent focus:ring-accent"
-          />
-          <span className="text-mac-sm text-text-secondary">Import variable values</span>
-        </label>
 
         {error && (
           <div className="p-3 bg-system-red/10 border border-system-red/20 rounded-mac text-system-red text-mac-sm">

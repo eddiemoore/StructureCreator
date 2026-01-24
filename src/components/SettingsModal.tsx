@@ -1,7 +1,6 @@
 import { useEffect, useCallback } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store/appStore";
+import { api } from "../lib/api";
 import { XIcon, FolderIcon } from "./Icons";
 import type { ThemeMode, AccentColor, Settings } from "../types/schema";
 import { ACCENT_COLORS, DEFAULT_SETTINGS } from "../types/schema";
@@ -37,7 +36,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   const loadSettings = async () => {
     try {
-      const savedSettings = await invoke<Record<string, string>>("cmd_get_settings");
+      const savedSettings = await api.database.getAllSettings();
 
       const newSettings: Settings = {
         defaultOutputPath: savedSettings.defaultOutputPath || null,
@@ -54,10 +53,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   const saveSetting = async (key: keyof Settings, value: string | null) => {
     try {
-      await invoke("cmd_set_setting", {
-        key,
-        value: value === null ? "" : value
-      });
+      await api.database.setSetting(key, value === null ? "" : value);
       updateSetting(key, value as Settings[typeof key]);
     } catch (e) {
       console.error("Failed to save setting:", e);
@@ -66,13 +62,10 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   const handleSelectOutputPath = async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-      });
+      const selected = await api.fileSystem.openDirectoryPicker();
 
       if (selected) {
-        saveSetting("defaultOutputPath", selected as string);
+        saveSetting("defaultOutputPath", selected);
       }
     } catch (e) {
       console.error("Failed to select folder:", e);

@@ -1,6 +1,11 @@
 import { useAppStore } from "../store/appStore";
+import { api } from "../lib/api";
 
-export const Footer = () => {
+interface FooterProps {
+  onOpenSettings?: () => void;
+}
+
+export const Footer = ({ onOpenSettings }: FooterProps) => {
   const { progress } = useAppStore();
 
   const statusColor =
@@ -17,6 +22,8 @@ export const Footer = () => {
       ? "Error"
       : "Ready";
 
+  const platformLabel = api.isTauri() ? "Tauri 2.0" : "Web";
+
   return (
     <footer className="bg-mac-bg-secondary px-4 py-2 flex items-center justify-between text-mac-xs text-text-muted border-t border-border-muted">
       <div className="flex items-center gap-4">
@@ -25,8 +32,16 @@ export const Footer = () => {
           {statusText}
         </div>
         <span className="text-text-placeholder">v1.0.0</span>
+        {onOpenSettings && !api.isTauri() && (
+          <button
+            onClick={onOpenSettings}
+            className="text-text-muted hover:text-accent transition-colors"
+          >
+            Settings
+          </button>
+        )}
       </div>
-      <span className="text-text-placeholder">Tauri 2.0</span>
+      <span className="text-text-placeholder">{platformLabel}</span>
     </footer>
   );
 };

@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, readFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../store/appStore";
+import { api } from "../lib/api";
 import { useClickAwayEscape } from "../hooks";
 import {
   CheckIcon,
@@ -18,7 +16,7 @@ import {
   ExportIcon,
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
-import type { SchemaTree, Template, ValidationRule, ParseWithInheritanceResult } from "../types/schema";
+import type { Template, ValidationRule } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import type { ReactNode } from "react";
 
@@ -170,7 +168,7 @@ export const LeftPanel = () => {
   const loadTemplates = async () => {
     setTemplatesLoading(true);
     try {
-      const templates = await invoke<Template[]>("cmd_list_templates");
+      const templates = await api.database.listTemplates();
       setTemplates(templates);
     } catch (e) {
       console.error("Failed to load templates:", e);
@@ -193,7 +191,7 @@ export const LeftPanel = () => {
         }
       }
 
-      await invoke("cmd_create_template", {
+      await api.database.createTemplate({
         name: newTemplateName.trim(),
         description: newTemplateDescription.trim() || null,
         schemaXml: schemaContent,
@@ -213,17 +211,14 @@ export const LeftPanel = () => {
   const handleLoadTemplate = async (template: Template) => {
     try {
       // Increment use count
-      await invoke("cmd_use_template", { id: template.id });
+      await api.database.incrementUseCount(template.id);
 
       // Load the schema
       setSchemaPath(`template:${template.name}`);
       setSchemaContent(template.schema_xml);
 
       // Use inheritance-aware parsing to resolve any base templates
-      const result = await invoke<ParseWithInheritanceResult>(
-        "cmd_parse_schema_with_inheritance",
-        { content: template.schema_xml }
-      );
+      const result = await api.schema.parseSchemaWithInheritance(template.schema_xml);
       setSchemaTree(result.tree);
 
       // Log info about inheritance if base templates were resolved
@@ -262,7 +257,7 @@ export const LeftPanel = () => {
   const handleToggleFavorite = async (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
     try {
-      await invoke("cmd_toggle_favorite", { id: templateId });
+      await api.database.toggleFavorite(templateId);
       loadTemplates();
     } catch (e) {
       console.error("Failed to toggle favorite:", e);
@@ -272,7 +267,7 @@ export const LeftPanel = () => {
   const handleDeleteTemplate = async (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
     try {
-      await invoke("cmd_delete_template", { id: templateId });
+      await api.database.deleteTemplate(templateId);
       loadTemplates();
     } catch (e) {
       console.error("Failed to delete template:", e);
@@ -287,7 +282,7 @@ export const LeftPanel = () => {
 
   const handleSelectSchema = async () => {
     try {
-      const selected = await open({
+      const selected = await api.fileSystem.openFilePicker({
         multiple: false,
         filters: [
           { name: "Schema Files", extensions: ["xml", "zip"] },
@@ -297,22 +292,19 @@ export const LeftPanel = () => {
       });
 
       if (selected) {
-        const path = selected as string;
+        const path = selected;
         setSchemaPath(path);
 
         const isZip = path.toLowerCase().endsWith(".zip");
 
         if (isZip) {
           // Handle ZIP file - read as binary and scan
-          const data = await readFile(path);
+          const data = await api.fileSystem.readBinaryFile(path);
           const filename = path.split("/").pop() || path.split("\\").pop() || "archive.zip";
           setSchemaContent(null); // ZIP doesn't have text content
 
           try {
-            const tree = await invoke<SchemaTree>("cmd_scan_zip", {
-              data: Array.from(data),
-              filename,
-            });
+            const tree = await api.schema.scanZip(data, filename);
             setSchemaTree(tree);
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e);
@@ -324,15 +316,12 @@ export const LeftPanel = () => {
           }
         } else {
           // Handle XML file
-          const content = await readTextFile(path);
+          const content = await api.fileSystem.readTextFile(path);
           setSchemaContent(content);
 
           try {
             // Use inheritance-aware parsing to resolve any extends attributes
-            const result = await invoke<ParseWithInheritanceResult>(
-              "cmd_parse_schema_with_inheritance",
-              { content }
-            );
+            const result = await api.schema.parseSchemaWithInheritance(content);
             setSchemaTree(result.tree);
 
             // Log info about inheritance if base templates were resolved
@@ -370,18 +359,15 @@ export const LeftPanel = () => {
 
   const handleSelectFolder = async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-      });
+      const selected = await api.fileSystem.openDirectoryPicker();
 
       if (selected) {
-        const path = selected as string;
+        const path = selected;
         setSchemaPath(path);
         setSchemaContent(null);
 
         try {
-          const tree = await invoke<SchemaTree>("cmd_scan_folder", { folderPath: path });
+          const tree = await api.schema.scanFolder(path);
           setSchemaTree(tree);
         } catch (e: unknown) {
           const errorMessage = e instanceof Error ? e.message : String(e);
@@ -402,15 +388,15 @@ export const LeftPanel = () => {
 
     setIsExporting(true);
     try {
-      const xml = await invoke<string>("cmd_export_schema_xml", { tree: schemaTree });
+      const xml = await api.schema.exportSchemaXml(schemaTree);
 
-      const savePath = await save({
+      const savePath = await api.fileSystem.saveFilePicker({
         filters: [{ name: "XML", extensions: ["xml"] }],
         defaultPath: `${schemaTree.root.name}-schema.xml`,
       });
 
       if (savePath) {
-        await writeTextFile(savePath, xml);
+        await api.fileSystem.writeTextFile(savePath, xml);
         setSchemaContent(xml);
       }
     } catch (e) {
@@ -422,13 +408,10 @@ export const LeftPanel = () => {
 
   const handleSelectOutput = async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-      });
+      const selected = await api.fileSystem.openDirectoryPicker();
 
       if (selected) {
-        setOutputPath(selected as string);
+        setOutputPath(selected);
       }
     } catch (e) {
       console.error("Failed to select output folder:", e);

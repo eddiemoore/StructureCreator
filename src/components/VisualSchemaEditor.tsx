@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect, useId } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useAppStore } from "../store/appStore";
+import { api } from "../lib/api";
 import {
   DndContext,
   closestCenter,
@@ -979,19 +977,19 @@ export const VisualSchemaEditor = () => {
 
     setIsSaving(true);
     try {
-      const xml = await invoke<string>("cmd_export_schema_xml", { tree: schemaTree });
+      const xml = await api.schema.exportSchemaXml(schemaTree);
 
       const defaultName = schemaTree.root.name === "%BASE%"
         ? `${projectName}-schema.xml`
         : `${schemaTree.root.name}-schema.xml`;
 
-      const savePath = await save({
+      const savePath = await api.fileSystem.saveFilePicker({
         filters: [{ name: "XML", extensions: ["xml"] }],
         defaultPath: defaultName,
       });
 
       if (savePath) {
-        await writeTextFile(savePath, xml);
+        await api.fileSystem.writeTextFile(savePath, xml);
         setSchemaContent(xml);
       }
     } catch (e) {
