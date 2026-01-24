@@ -30,11 +30,53 @@ import type {
   CreateTemplateInput,
   UpdateTemplateInput,
 } from "../types";
+import { MAX_TAG_LENGTH, MAX_TAGS_PER_TEMPLATE, TAG_REGEX } from "../../../constants/tags";
 
 const DB_NAME = "structure-creator";
 const DB_VERSION = 1;
 const TEMPLATES_STORE = "templates";
 const SETTINGS_STORE = "settings";
+
+/**
+ * Validate and sanitize a list of tags.
+ * Returns sanitized tags (lowercase, trimmed, deduplicated).
+ */
+const validateTags = (tags: string[]): string[] => {
+  if (tags.length > MAX_TAGS_PER_TEMPLATE) {
+    console.warn(`Too many tags (max ${MAX_TAGS_PER_TEMPLATE}), truncating`);
+    tags = tags.slice(0, MAX_TAGS_PER_TEMPLATE);
+  }
+
+  const seen = new Set<string>();
+  const validated: string[] = [];
+
+  for (const tag of tags) {
+    const normalized = tag.trim().toLowerCase();
+
+    if (normalized.length === 0) {
+      continue; // Skip empty tags
+    }
+
+    if ([...normalized].length > MAX_TAG_LENGTH) {
+      // Use spread to safely handle surrogate pairs in preview
+      const preview = [...normalized].slice(0, 20).join("");
+      console.warn(`Tag "${preview}..." exceeds max length, skipping`);
+      continue;
+    }
+
+    if (!TAG_REGEX.test(normalized)) {
+      console.warn(`Tag "${normalized}" is invalid, skipping`);
+      continue;
+    }
+
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      validated.push(normalized);
+    }
+  }
+
+  return validated;
+};
 
 /**
  * Open or create the IndexedDB database.
@@ -222,6 +264,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
       use_count: 0,
       created_at: timestamp,
       updated_at: timestamp,
+      tags: validateTags(input.tags ?? []),
     };
 
     return new Promise((resolve, reject) => {
@@ -411,6 +454,81 @@ export class IndexedDBAdapter implements DatabaseAdapter {
         putRequest.onerror = () => {
           reject(
             new Error(`Failed to increment use count: ${putRequest.error?.message}`)
+          );
+        };
+      };
+
+      getRequest.onerror = () => {
+        reject(
+          new Error(`Failed to get template: ${getRequest.error?.message}`)
+        );
+      };
+    });
+  }
+
+  // ============================================================================
+  // Tag Operations
+  // ============================================================================
+
+  async getAllTags(): Promise<string[]> {
+    const db = this.getDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(TEMPLATES_STORE, "readonly");
+      const store = transaction.objectStore(TEMPLATES_STORE);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const templates = request.result as (Template & { name_lower?: string })[];
+        const tagSet = new Set<string>();
+        for (const template of templates) {
+          for (const tag of template.tags ?? []) {
+            tagSet.add(tag);
+          }
+        }
+        const sortedTags = Array.from(tagSet).sort();
+        resolve(sortedTags);
+      };
+
+      request.onerror = () => {
+        reject(new Error(`Failed to get all tags: ${request.error?.message}`));
+      };
+    });
+  }
+
+  async updateTemplateTags(id: string, tags: string[]): Promise<void> {
+    const db = this.getDb();
+    const validatedTags = validateTags(tags);
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(TEMPLATES_STORE, "readwrite");
+      const store = transaction.objectStore(TEMPLATES_STORE);
+
+      const getRequest = store.get(id);
+
+      getRequest.onsuccess = () => {
+        const existing = getRequest.result;
+        if (!existing) {
+          reject(new Error(`Template with id "${id}" not found`));
+          return;
+        }
+
+        const updated = {
+          ...existing,
+          name_lower: existing.name.toLowerCase(),
+          tags: validatedTags,
+          updated_at: now(),
+        };
+
+        const putRequest = store.put(updated);
+
+        putRequest.onsuccess = () => {
+          resolve();
+        };
+
+        putRequest.onerror = () => {
+          reject(
+            new Error(`Failed to update template tags: ${putRequest.error?.message}`)
           );
         };
       };

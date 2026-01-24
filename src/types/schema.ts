@@ -139,7 +139,19 @@ export interface Template {
   use_count: number;
   created_at: string;
   updated_at: string;
+  tags: string[];
 }
+
+export type TemplateSortOption =
+  | "default"
+  | "name_asc"
+  | "name_desc"
+  | "created_asc"
+  | "created_desc"
+  | "updated_asc"
+  | "updated_desc"
+  | "usage_asc"
+  | "usage_desc";
 
 export interface TemplateExport {
   name: string;
@@ -148,6 +160,7 @@ export interface TemplateExport {
   variables?: Record<string, string>;
   variable_validation?: Record<string, ValidationRule>;
   icon_color: string | null;
+  tags?: string[];
 }
 
 export interface TemplateExportFile {
@@ -339,6 +352,12 @@ export interface AppState {
   templates: Template[];
   templatesLoading: boolean;
 
+  // Template filtering
+  templateSearchQuery: string;
+  templateFilterTags: string[];
+  templateSortOption: TemplateSortOption;
+  allTags: string[];
+
   // Settings
   settings: Settings;
   settingsLoading: boolean;
@@ -373,6 +392,16 @@ export interface AppState {
   setValidationErrors: (errors: ValidationError[]) => void;
   setTemplates: (templates: Template[]) => void;
   setTemplatesLoading: (loading: boolean) => void;
+
+  // Template filtering actions
+  setTemplateSearchQuery: (query: string) => void;
+  setTemplateFilterTags: (tags: string[]) => void;
+  addTemplateFilterTag: (tag: string) => void;
+  removeTemplateFilterTag: (tag: string) => void;
+  clearTemplateFilters: () => void;
+  setTemplateSortOption: (option: TemplateSortOption) => void;
+  setAllTags: (tags: string[]) => void;
+  getFilteredTemplates: () => Template[];
   setSettings: (settings: Settings) => void;
   setSettingsLoading: (loading: boolean) => void;
   updateSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => void;

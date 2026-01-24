@@ -1,8 +1,62 @@
+use regex::Regex;
 use rusqlite::{Connection, Result as SqliteResult, Row};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::LazyLock;
+
+/// Maximum length for a single tag
+const MAX_TAG_LENGTH: usize = 50;
+
+/// Maximum number of tags per template
+const MAX_TAGS_PER_TEMPLATE: usize = 20;
+
+/// Regex pattern for valid tags: starts with alphanumeric, contains only lowercase alphanumeric, hyphens, underscores
+static TAG_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[a-z0-9][a-z0-9\-_]*$").unwrap()
+});
+
+/// Validate and sanitize a list of tags.
+/// Returns sanitized tags (lowercase, trimmed, deduplicated).
+/// Invalid tags are skipped with a warning rather than causing an error.
+fn validate_tags(tags: &[String]) -> Vec<String> {
+    let mut validated: Vec<String> = Vec::with_capacity(tags.len().min(MAX_TAGS_PER_TEMPLATE));
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for tag in tags {
+        // Stop if we've reached the maximum
+        if validated.len() >= MAX_TAGS_PER_TEMPLATE {
+            eprintln!("Warning: Too many tags (max {}), ignoring remaining", MAX_TAGS_PER_TEMPLATE);
+            break;
+        }
+
+        let normalized = tag.trim().to_lowercase();
+
+        if normalized.is_empty() {
+            continue; // Skip empty tags silently
+        }
+
+        if normalized.chars().count() > MAX_TAG_LENGTH {
+            // Use chars().take() for safe UTF-8 truncation in preview
+            let preview: String = normalized.chars().take(20).collect();
+            eprintln!("Warning: Tag '{}...' exceeds maximum length, skipping", preview);
+            continue;
+        }
+
+        if !TAG_REGEX.is_match(&normalized) {
+            eprintln!("Warning: Tag '{}' is invalid, skipping", normalized);
+            continue;
+        }
+
+        // Deduplicate
+        if seen.insert(normalized.clone()) {
+            validated.push(normalized);
+        }
+    }
+
+    validated
+}
 
 /// Validation rule for a variable
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -28,10 +82,12 @@ pub struct Template {
     pub use_count: i32,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// Helper function to construct a Template from a database row.
-/// Expects columns in order: id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at
+/// Expects columns in order: id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
 fn row_to_template(row: &Row) -> rusqlite::Result<Template> {
     let variables_json: String = row.get(4)?;
     let variables: HashMap<String, String> = serde_json::from_str(&variables_json)
@@ -53,6 +109,17 @@ fn row_to_template(row: &Row) -> rusqlite::Result<Template> {
         })
         .unwrap_or_default();
 
+    // tags may be NULL for older templates
+    let tags_json: Option<String> = row.get(11)?;
+    let tags: Vec<String> = tags_json
+        .map(|json| {
+            serde_json::from_str(&json).unwrap_or_else(|e| {
+                eprintln!("Warning: Failed to parse tags JSON, using empty: {}", e);
+                Vec::new()
+            })
+        })
+        .unwrap_or_default();
+
     Ok(Template {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -65,6 +132,7 @@ fn row_to_template(row: &Row) -> rusqlite::Result<Template> {
         use_count: row.get(8)?,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        tags,
     })
 }
 
@@ -79,6 +147,8 @@ pub struct CreateTemplateInput {
     pub icon_color: Option<String>,
     #[serde(default)]
     pub is_favorite: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,6 +229,17 @@ impl Database {
             }
         }
 
+        // Migration: Add tags column (JSON array)
+        if let Err(e) = conn.execute(
+            "ALTER TABLE templates ADD COLUMN tags TEXT DEFAULT '[]'",
+            [],
+        ) {
+            let err_msg = e.to_string();
+            if !err_msg.contains("duplicate column") {
+                eprintln!("Warning: Migration failed (tags column): {}", err_msg);
+            }
+        }
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -174,7 +255,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at
+            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
              FROM templates
              ORDER BY is_favorite DESC, use_count DESC, updated_at DESC",
         )?;
@@ -187,7 +268,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at
+            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
              FROM templates
              WHERE id = ?",
         )?;
@@ -204,7 +285,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at
+            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
              FROM templates
              WHERE LOWER(name) = LOWER(?)",
         )?;
@@ -219,15 +300,19 @@ impl Database {
     pub fn create_template(&self, input: CreateTemplateInput) -> SqliteResult<Template> {
         let conn = self.conn.lock().unwrap();
 
+        // Validate and sanitize tags
+        let validated_tags = validate_tags(&input.tags);
+
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
         let variables_json = serde_json::to_string(&input.variables).unwrap_or_else(|_| "{}".to_string());
         let validation_json = serde_json::to_string(&input.variable_validation).unwrap_or_else(|_| "{}".to_string());
+        let tags_json = serde_json::to_string(&validated_tags).unwrap_or_else(|_| "[]".to_string());
         let is_favorite_int = if input.is_favorite { 1 } else { 0 };
 
         conn.execute(
-            "INSERT INTO templates (id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+            "INSERT INTO templates (id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
             rusqlite::params![
                 &id,
                 &input.name,
@@ -239,6 +324,7 @@ impl Database {
                 is_favorite_int,
                 &now,
                 &now,
+                &tags_json,
             ],
         )?;
 
@@ -254,6 +340,7 @@ impl Database {
             use_count: 0,
             created_at: now.clone(),
             updated_at: now,
+            tags: validated_tags,
         })
     }
 
@@ -420,6 +507,54 @@ impl Database {
         }
         Ok(template)
     }
+
+    /// Get all unique tags across all templates (for autocomplete)
+    pub fn get_all_tags(&self) -> SqliteResult<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare("SELECT tags FROM templates WHERE tags IS NOT NULL AND tags != '[]'")?;
+        let rows = stmt.query_map([], |row| {
+            let tags_json: String = row.get(0)?;
+            Ok(tags_json)
+        })?;
+
+        let mut all_tags: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for row_result in rows {
+            if let Ok(tags_json) = row_result {
+                if let Ok(tags) = serde_json::from_str::<Vec<String>>(&tags_json) {
+                    for tag in tags {
+                        all_tags.insert(tag);
+                    }
+                }
+            }
+        }
+
+        let mut sorted_tags: Vec<String> = all_tags.into_iter().collect();
+        sorted_tags.sort();
+        Ok(sorted_tags)
+    }
+
+    /// Update tags for a template
+    pub fn update_template_tags(&self, id: &str, tags: Vec<String>) -> SqliteResult<Option<Template>> {
+        // Validate and sanitize tags
+        let validated_tags = validate_tags(&tags);
+
+        let conn = self.conn.lock().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        let tags_json = serde_json::to_string(&validated_tags).unwrap_or_else(|_| "[]".to_string());
+
+        let rows_affected = conn.execute(
+            "UPDATE templates SET tags = ?, updated_at = ? WHERE id = ?",
+            rusqlite::params![&tags_json, &now, id],
+        )?;
+
+        if rows_affected == 0 {
+            return Ok(None);
+        }
+
+        drop(conn);
+        self.get_template(id)
+    }
 }
 
 #[cfg(test)]
@@ -443,6 +578,7 @@ mod tests {
             variable_validation: HashMap::new(),
             icon_color: Some("#ff0000".to_string()),
             is_favorite: false,
+            tags: Vec::new(),
         }
     }
 
@@ -574,6 +710,108 @@ mod tests {
 
             assert!(db.get_template_by_name("camelcase").unwrap().is_some());
             assert!(db.get_template_by_name("CAMELCASE").unwrap().is_some());
+        }
+    }
+
+    mod validate_tags_tests {
+        use super::*;
+
+        #[test]
+        fn returns_empty_for_empty_input() {
+            let tags: Vec<String> = vec![];
+            let result = validate_tags(&tags);
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn accepts_valid_tags() {
+            let tags = vec!["react".to_string(), "typescript".to_string(), "web-app".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["react", "typescript", "web-app"]);
+        }
+
+        #[test]
+        fn normalizes_to_lowercase() {
+            let tags = vec!["React".to_string(), "TypeScript".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["react", "typescript"]);
+        }
+
+        #[test]
+        fn trims_whitespace() {
+            let tags = vec!["  react  ".to_string(), "\ttypescript\n".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["react", "typescript"]);
+        }
+
+        #[test]
+        fn removes_empty_tags() {
+            let tags = vec!["react".to_string(), "".to_string(), "  ".to_string(), "typescript".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["react", "typescript"]);
+        }
+
+        #[test]
+        fn deduplicates_tags() {
+            let tags = vec!["react".to_string(), "React".to_string(), "REACT".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["react"]);
+        }
+
+        #[test]
+        fn truncates_too_many_tags() {
+            let tags: Vec<String> = (0..25).map(|i| format!("tag{}", i)).collect();
+            let result = validate_tags(&tags);
+            // Should keep only the first MAX_TAGS_PER_TEMPLATE (20) tags
+            assert_eq!(result.len(), MAX_TAGS_PER_TEMPLATE);
+            assert_eq!(result[0], "tag0");
+            assert_eq!(result[19], "tag19");
+        }
+
+        #[test]
+        fn skips_tag_exceeding_max_length() {
+            let long_tag = "a".repeat(51);
+            let tags = vec!["valid".to_string(), long_tag, "also-valid".to_string()];
+            let result = validate_tags(&tags);
+            // Long tag is skipped, valid ones are kept
+            assert_eq!(result, vec!["valid", "also-valid"]);
+        }
+
+        #[test]
+        fn skips_invalid_characters() {
+            let tags = vec!["valid".to_string(), "invalid@tag".to_string(), "also-valid".to_string()];
+            let result = validate_tags(&tags);
+            // Invalid tag is skipped, valid ones are kept
+            assert_eq!(result, vec!["valid", "also-valid"]);
+        }
+
+        #[test]
+        fn skips_tag_starting_with_hyphen() {
+            let tags = vec!["valid".to_string(), "-invalid".to_string(), "also-valid".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["valid", "also-valid"]);
+        }
+
+        #[test]
+        fn accepts_tags_with_hyphens_and_underscores() {
+            let tags = vec!["my-tag".to_string(), "my_tag".to_string(), "my-tag_2".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["my-tag", "my_tag", "my-tag_2"]);
+        }
+
+        #[test]
+        fn accepts_numeric_tags() {
+            let tags = vec!["123".to_string(), "v2".to_string(), "2024".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["123", "v2", "2024"]);
+        }
+
+        #[test]
+        fn skips_unicode_safely() {
+            // UTF-8 characters should be skipped by the regex, not panic
+            let tags = vec!["valid".to_string(), "日本語".to_string(), "also-valid".to_string()];
+            let result = validate_tags(&tags);
+            assert_eq!(result, vec!["valid", "also-valid"]);
         }
     }
 }

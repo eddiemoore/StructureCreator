@@ -2035,6 +2035,9 @@ pub struct TemplateExport {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub variable_validation: HashMap<String, ValidationRule>,
     pub icon_color: Option<String>,
+    /// Tags for categorizing templates (optional, for backwards compatibility)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 /// Type of export file - single template or bundle
@@ -2205,6 +2208,7 @@ fn cmd_create_template(
     variables: HashMap<String, String>,
     variable_validation: Option<HashMap<String, ValidationRule>>,
     icon_color: Option<String>,
+    tags: Option<Vec<String>>,
 ) -> Result<Template, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state
@@ -2217,6 +2221,7 @@ fn cmd_create_template(
             variable_validation: variable_validation.unwrap_or_default(),
             icon_color,
             is_favorite: false,
+            tags: tags.unwrap_or_default(),
         })
         .map_err(|e| e.to_string())
 }
@@ -2264,6 +2269,24 @@ fn cmd_use_template(state: State<Mutex<AppState>>, id: String) -> Result<Option<
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.increment_use_count(&id).map_err(|e| e.to_string())?;
     state.db.get_template(&id).map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_get_all_tags(state: State<Mutex<AppState>>) -> Result<Vec<String>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.get_all_tags().map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_update_template_tags(
+    state: State<Mutex<AppState>>,
+    id: String,
+    tags: Vec<String>,
+) -> Result<Option<Template>, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    state.db.update_template_tags(&id, tags).map_err(|e| e.to_string())
 }
 
 /// Check if an IPv4 address is private/internal
@@ -2440,6 +2463,7 @@ fn import_templates_from_json_internal(
             variable_validation,
             icon_color: template_export.icon_color,
             is_favorite: false,
+            tags: template_export.tags,
         };
 
         match db.create_template(input) {
@@ -2471,6 +2495,7 @@ fn cmd_export_template(
         variables: if include_variables { Some(template.variables) } else { None },
         variable_validation: if include_variables { template.variable_validation } else { HashMap::new() },
         icon_color: template.icon_color,
+        tags: template.tags,
     };
 
     let export_file = TemplateExportFile {
@@ -2516,6 +2541,7 @@ fn cmd_export_templates_bulk(
             variables: if include_variables { Some(t.variables) } else { None },
             variable_validation: if include_variables { t.variable_validation } else { HashMap::new() },
             icon_color: t.icon_color,
+            tags: t.tags,
         })
         .collect();
 
@@ -3289,6 +3315,8 @@ pub fn run() {
             cmd_delete_template,
             cmd_toggle_favorite,
             cmd_use_template,
+            cmd_get_all_tags,
+            cmd_update_template_tags,
             cmd_export_template,
             cmd_export_templates_bulk,
             cmd_import_templates_from_json,
@@ -3569,6 +3597,7 @@ mod tests {
                     variables: None,
                     variable_validation: HashMap::new(),
                     icon_color: None,
+                    tags: Vec::new(),
                 }),
                 templates: None,
             };

@@ -164,6 +164,7 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
       variables: input.variables,
       variableValidation: input.variableValidation,
       iconColor: input.iconColor,
+      tags: input.tags,
     });
     // Return the created template by fetching by name
     const template = await this.getTemplateByName(input.name);
@@ -193,6 +194,14 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
 
   async incrementUseCount(id: string): Promise<void> {
     await invoke("cmd_use_template", { id });
+  }
+
+  async getAllTags(): Promise<string[]> {
+    return invoke<string[]>("cmd_get_all_tags");
+  }
+
+  async updateTemplateTags(id: string, tags: string[]): Promise<void> {
+    await invoke("cmd_update_template_tags", { id, tags });
   }
 
   async getAllSettings(): Promise<Record<string, string>> {
@@ -311,30 +320,40 @@ class TauriValidationAdapter implements ValidationAdapter {
 
 class TauriTemplateImportExportAdapter implements TemplateImportExportAdapter {
   async exportTemplate(template: Template): Promise<string> {
-    return invoke<string>("cmd_export_template", { template });
+    return invoke<string>("cmd_export_template", {
+      templateId: template.id,
+      includeVariables: true,
+    });
   }
 
   async exportTemplatesBulk(templates: Template[]): Promise<string> {
-    return invoke<string>("cmd_export_templates_bulk", { templates });
+    return invoke<string>("cmd_export_templates_bulk", {
+      templateIds: templates.map((t) => t.id),
+      includeVariables: true,
+    });
   }
 
   async importTemplatesFromJson(
     jsonContent: string,
-    duplicateStrategy: DuplicateStrategy
+    duplicateStrategy: DuplicateStrategy,
+    includeVariables: boolean = true
   ): Promise<ImportResult> {
     return invoke<ImportResult>("cmd_import_templates_from_json", {
       jsonContent,
       duplicateStrategy,
+      includeVariables,
     });
   }
 
   async importTemplatesFromUrl(
     url: string,
-    duplicateStrategy: DuplicateStrategy
+    duplicateStrategy: DuplicateStrategy,
+    includeVariables: boolean = true
   ): Promise<ImportResult> {
     return invoke<ImportResult>("cmd_import_templates_from_url", {
       url,
       duplicateStrategy,
+      includeVariables,
     });
   }
 }
