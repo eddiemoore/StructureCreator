@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import {
@@ -9,6 +9,7 @@ import {
 } from "./Icons";
 import { DiffPreviewModal } from "./DiffPreviewModal";
 import type { CreateResult, ResultSummary, ValidationRule } from "../types/schema";
+import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
 
 const WarningIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
   <svg
@@ -60,6 +61,23 @@ export const RightPanel = () => {
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
 
   const canExecute = schemaTree && outputPath && projectName;
+
+  // Ref to hold the create handler for keyboard shortcut
+  const handleCreateRef = useRef<(() => void) | null>(null);
+
+  // Listen for keyboard shortcut event
+  useEffect(() => {
+    const handleShortcut = () => {
+      if (handleCreateRef.current) {
+        handleCreateRef.current();
+      }
+    };
+
+    window.addEventListener(SHORTCUT_EVENTS.CREATE_STRUCTURE, handleShortcut);
+    return () => {
+      window.removeEventListener(SHORTCUT_EVENTS.CREATE_STRUCTURE, handleShortcut);
+    };
+  }, []);
 
   const toggleErrorDetails = (id: string) => {
     setExpandedErrors((prev) => {
@@ -279,6 +297,18 @@ export const RightPanel = () => {
     await executeCreate(false);
   };
 
+  // Update ref so keyboard shortcut can trigger create
+  // Using useLayoutEffect to ensure ref is updated synchronously after render
+  // before any effects that might use it. Empty deps intentional - we want this
+  // to run on every render to capture the latest function references.
+  useLayoutEffect(() => {
+    handleCreateRef.current = () => {
+      if (canExecute && progress.status !== "running") {
+        handleCreate();
+      }
+    };
+  });
+
   // Handle proceeding from diff preview
   const handleProceedFromDiff = async () => {
     setShowDiffModal(false);
@@ -308,6 +338,7 @@ export const RightPanel = () => {
           onClick={handleCreate}
           disabled={!canExecute || progress.status === "running"}
           className="mac-button-primary w-full py-3 flex items-center justify-center gap-2 text-mac-base"
+          title={`Create Structure (${getShortcutLabel("CREATE_STRUCTURE")})`}
         >
           <FolderPlusIcon size={18} />
           Create Structure
