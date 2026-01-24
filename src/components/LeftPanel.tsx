@@ -979,14 +979,15 @@ export const LeftPanel = () => {
             <div className="relative">
               <SearchIcon
                 size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
               />
               <input
                 type="text"
                 value={localSearchQuery}
                 onChange={(e) => setLocalSearchQuery(e.target.value)}
                 placeholder="Search templates..."
-                className="w-full mac-input pl-10 pr-8 text-mac-sm"
+                className="w-full mac-input pr-8 text-mac-sm"
+                style={{ paddingLeft: "2.25rem" }}
                 aria-label="Search templates"
               />
               {localSearchQuery && (
