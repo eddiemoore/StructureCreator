@@ -15,6 +15,7 @@ import {
   ImportIcon,
   ExportIcon,
   SearchIcon,
+  WandIcon,
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
 import { TagInput } from "./TagInput";
@@ -148,6 +149,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
     addLog,
     setRecentProjects,
     setRecentProjectsLoading,
+    openWizard,
   } = useAppStore();
 
   // State declarations
@@ -1056,6 +1058,13 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
         <div className="flex items-center justify-between mb-2">
           <SectionTitle>Templates</SectionTitle>
           <div className="flex items-center gap-1">
+            <button
+              onClick={openWizard}
+              className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-system-purple hover:bg-system-purple/10 transition-colors"
+              title="Template Wizard - Create project step by step"
+            >
+              <WandIcon size={14} />
+            </button>
             <button
               onClick={() => setImportExportMode("import")}
               className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"

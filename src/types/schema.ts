@@ -342,11 +342,40 @@ export interface CreationProgress {
   logs: LogEntry[];
 }
 
+// ============================================================================
+// Template Wizard Types
+// ============================================================================
+
+export type WizardStep = 1 | 2 | 3 | 4 | 5;
+
+export interface WizardState {
+  isOpen: boolean;
+  currentStep: WizardStep;
+  selectedTemplateId: string | null;
+  /** Schema tree being built in the wizard (separate from main app tree) */
+  wizardSchemaTree: SchemaTree | null;
+  /** Schema XML content being built in the wizard */
+  wizardSchemaContent: string | null;
+  /** Variables for the wizard (separate from main app variables) */
+  wizardVariables: Variable[];
+  /** Output path for the wizard */
+  wizardOutputPath: string | null;
+  /** Project name for the wizard */
+  wizardProjectName: string;
+  /** Whether creation is in progress */
+  isCreating: boolean;
+  /** Creation result summary */
+  creationResult: ResultSummary | null;
+}
+
 export interface AppState {
   // Schema
   schemaPath: string | null;
   schemaContent: string | null;
   schemaTree: SchemaTree | null;
+
+  // Template Wizard
+  wizard: WizardState;
 
   // Schema editing
   isEditMode: boolean;
@@ -449,4 +478,19 @@ export interface AppState {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+
+  // Template Wizard actions
+  openWizard: () => void;
+  closeWizard: () => void;
+  setWizardStep: (step: WizardStep) => void;
+  setWizardSelectedTemplate: (templateId: string | null) => void;
+  setWizardSchemaTree: (tree: SchemaTree | null) => void;
+  setWizardSchemaContent: (content: string | null) => void;
+  setWizardVariables: (variables: Variable[]) => void;
+  updateWizardVariable: (name: string, value: string) => void;
+  setWizardOutputPath: (path: string | null) => void;
+  setWizardProjectName: (name: string) => void;
+  setWizardIsCreating: (isCreating: boolean) => void;
+  setWizardCreationResult: (result: ResultSummary | null) => void;
+  resetWizard: () => void;
 }

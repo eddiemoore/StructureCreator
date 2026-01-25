@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, WizardState, WizardStep, ResultSummary } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
@@ -8,6 +8,19 @@ const initialProgress: CreationProgress = {
   total: 0,
   status: "idle",
   logs: [],
+};
+
+const initialWizardState: WizardState = {
+  isOpen: false,
+  currentStep: 1,
+  selectedTemplateId: null,
+  wizardSchemaTree: null,
+  wizardSchemaContent: null,
+  wizardVariables: [],
+  wizardOutputPath: null,
+  wizardProjectName: "my-project",
+  isCreating: false,
+  creationResult: null,
 };
 
 // Helper: Generate unique ID for nodes
@@ -194,6 +207,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   diffLoading: false,
   diffError: null,
   showDiffModal: false,
+
+  // Template Wizard
+  wizard: initialWizardState,
 
   // Actions
   setSchemaPath: (path: string | null) => set({ schemaPath: path }),
@@ -696,4 +712,61 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     return state.schemaHistoryIndex < state.schemaHistory.length - 1;
   },
+
+  // Template Wizard actions
+  openWizard: () => set((state) => ({
+    wizard: { ...initialWizardState, isOpen: true, wizardProjectName: state.projectName, wizardOutputPath: state.outputPath },
+  })),
+
+  closeWizard: () => set({ wizard: initialWizardState }),
+
+  setWizardStep: (step: WizardStep) => set((state) => ({
+    wizard: { ...state.wizard, currentStep: step },
+  })),
+
+  setWizardSelectedTemplate: (templateId: string | null) => set((state) => ({
+    wizard: { ...state.wizard, selectedTemplateId: templateId },
+  })),
+
+  setWizardSchemaTree: (tree: SchemaTree | null) => set((state) => ({
+    wizard: {
+      ...state.wizard,
+      wizardSchemaTree: tree ? { ...tree, root: ensureNodeIds(tree.root) } : null,
+    },
+  })),
+
+  setWizardSchemaContent: (content: string | null) => set((state) => ({
+    wizard: { ...state.wizard, wizardSchemaContent: content },
+  })),
+
+  setWizardVariables: (variables: Variable[]) => set((state) => ({
+    wizard: { ...state.wizard, wizardVariables: variables },
+  })),
+
+  updateWizardVariable: (name: string, value: string) => set((state) => ({
+    wizard: {
+      ...state.wizard,
+      wizardVariables: state.wizard.wizardVariables.map((v) =>
+        v.name === name ? { ...v, value } : v
+      ),
+    },
+  })),
+
+  setWizardOutputPath: (path: string | null) => set((state) => ({
+    wizard: { ...state.wizard, wizardOutputPath: path },
+  })),
+
+  setWizardProjectName: (name: string) => set((state) => ({
+    wizard: { ...state.wizard, wizardProjectName: name },
+  })),
+
+  setWizardIsCreating: (isCreating: boolean) => set((state) => ({
+    wizard: { ...state.wizard, isCreating },
+  })),
+
+  setWizardCreationResult: (result: ResultSummary | null) => set((state) => ({
+    wizard: { ...state.wizard, creationResult: result },
+  })),
+
+  resetWizard: () => set({ wizard: initialWizardState }),
 }));

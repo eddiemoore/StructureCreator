@@ -4,6 +4,7 @@ import { TreePreview } from "./components/TreePreview";
 import { RightPanel } from "./components/RightPanel";
 import { Footer } from "./components/Footer";
 import { SettingsModal } from "./components/SettingsModal";
+import { TemplateWizard } from "./components/TemplateWizard";
 import { useAppStore } from "./store/appStore";
 import { useKeyboardShortcuts } from "./hooks";
 import { api } from "./lib/api";
@@ -16,13 +17,13 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [importExportModalOpen, setImportExportModalOpen] = useState(false);
-  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent } = useAppStore();
+  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, wizard } = useAppStore();
 
   // Ref for search input (passed to LeftPanel)
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Check if any modal is open (used to disable shortcuts)
-  const isModalOpen = settingsOpen || showDiffModal || importExportModalOpen;
+  const isModalOpen = settingsOpen || showDiffModal || importExportModalOpen || wizard.isOpen;
 
   // Initialize keyboard shortcuts
   // Note: Escape key is handled by individual modals, not here
@@ -150,6 +151,7 @@ function App() {
       </div>
       <Footer onOpenSettings={() => setSettingsOpen(true)} />
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <TemplateWizard />
     </div>
   );
 }
