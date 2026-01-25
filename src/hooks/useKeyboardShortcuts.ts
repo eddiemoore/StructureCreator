@@ -8,6 +8,10 @@ interface UseKeyboardShortcutsOptions {
   isModalOpen: boolean;
   /** Whether a schema is currently loaded (for save template shortcut) */
   hasSchema: boolean;
+  /** Whether undo is available (for undo shortcut) */
+  canUndo?: boolean;
+  /** Whether redo is available (for redo shortcut) */
+  canRedo?: boolean;
 }
 
 /**
@@ -33,6 +37,8 @@ function isInputFocused(): boolean {
  * - Cmd+Enter → SHORTCUT_EVENTS.CREATE_STRUCTURE → RightPanel.handleCreateRef
  * - Cmd+O     → SHORTCUT_EVENTS.OPEN_FILE        → LeftPanel.handleSelectSchemaRef
  * - Cmd+S     → SHORTCUT_EVENTS.SAVE_TEMPLATE    → LeftPanel.setIsSavingTemplate
+ * - Cmd+Z     → SHORTCUT_EVENTS.UNDO             → appStore.undo
+ * - Cmd+Y/Cmd+Shift+Z → SHORTCUT_EVENTS.REDO    → appStore.redo
  * - Cmd+F     → (direct) searchInputRef.focus()   (no event, hence no FOCUS_SEARCH in SHORTCUT_EVENTS)
  *
  * Key comparison notes:
@@ -49,6 +55,8 @@ export function useKeyboardShortcuts({
   searchInputRef,
   isModalOpen,
   hasSchema,
+  canUndo = false,
+  canRedo = false,
 }: UseKeyboardShortcutsOptions): void {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -101,11 +109,32 @@ export function useKeyboardShortcuts({
         searchInputRef.current?.focus();
         return;
       }
+
+      // Cmd/Ctrl + Z: Undo (without Shift)
+      if (isMod && event.key.toLowerCase() === "z" && !event.shiftKey) {
+        if (canUndo) {
+          event.preventDefault();
+          window.dispatchEvent(new CustomEvent(SHORTCUT_EVENTS.UNDO));
+        }
+        return;
+      }
+
+      // Cmd/Ctrl + Y or Cmd/Ctrl + Shift + Z: Redo
+      if (
+        (isMod && event.key.toLowerCase() === "y") ||
+        (isMod && event.key.toLowerCase() === "z" && event.shiftKey)
+      ) {
+        if (canRedo) {
+          event.preventDefault();
+          window.dispatchEvent(new CustomEvent(SHORTCUT_EVENTS.REDO));
+        }
+        return;
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [searchInputRef, isModalOpen, hasSchema]);
+  }, [searchInputRef, isModalOpen, hasSchema, canUndo, canRedo]);
 }

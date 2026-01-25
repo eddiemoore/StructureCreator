@@ -673,6 +673,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
       foldersCreated: input.foldersCreated,
       filesCreated: input.filesCreated,
       createdAt: timestamp,
+      createdPaths: input.createdPaths,
     };
 
     return new Promise((resolve, reject) => {

@@ -34,6 +34,9 @@ pub struct CreateResult {
     pub summary: ResultSummary,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hook_results: Vec<HookResult>,
+    /// Paths that were created (for revert functionality)
+    #[serde(default)]
+    pub created_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,6 +272,82 @@ fn cmd_create_structure_from_tree(
     create_structure_from_tree(&tree, &output_path, &variables, dry_run, overwrite)
 }
 
+/// Result of reverting a structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevertResult {
+    pub files_deleted: usize,
+    pub folders_deleted: usize,
+    pub errors: Vec<String>,
+}
+
+/// Revert (delete) created structure paths
+/// Files are deleted first, then folders in reverse order (deepest first)
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_revert_structure(paths: Vec<String>) -> Result<RevertResult, String> {
+    revert_structure(&paths)
+}
+
+/// Revert created structure by deleting the paths
+pub fn revert_structure(paths: &[String]) -> Result<RevertResult, String> {
+    let mut files_deleted = 0;
+    let mut folders_deleted = 0;
+    let mut errors = Vec::new();
+
+    // Separate files and folders
+    let mut files: Vec<&str> = Vec::new();
+    let mut folders: Vec<&str> = Vec::new();
+
+    for path in paths {
+        let p = std::path::Path::new(path);
+        if p.is_file() {
+            files.push(path);
+        } else if p.is_dir() {
+            folders.push(path);
+        }
+        // Skip paths that don't exist (already deleted or never created)
+    }
+
+    // Delete files first
+    for path in &files {
+        match fs::remove_file(path) {
+            Ok(_) => files_deleted += 1,
+            Err(e) => errors.push(format!("Failed to delete file {}: {}", path, e)),
+        }
+    }
+
+    // Sort folders by path length (deepest first) to delete children before parents
+    folders.sort_by(|a, b| b.len().cmp(&a.len()));
+
+    // Delete folders (only if empty)
+    for path in &folders {
+        let p = std::path::Path::new(path);
+        // Only delete if the folder is empty (we already deleted files)
+        if p.exists() {
+            match fs::read_dir(path) {
+                Ok(entries) => {
+                    if entries.count() == 0 {
+                        match fs::remove_dir(path) {
+                            Ok(_) => folders_deleted += 1,
+                            Err(e) => errors.push(format!("Failed to delete folder {}: {}", path, e)),
+                        }
+                    } else {
+                        // Folder not empty - may contain files we didn't create
+                        errors.push(format!("Folder not empty, skipping: {}", path));
+                    }
+                }
+                Err(e) => errors.push(format!("Failed to read folder {}: {}", path, e)),
+            }
+        }
+    }
+
+    Ok(RevertResult {
+        files_deleted,
+        folders_deleted,
+        errors,
+    })
+}
+
 pub fn create_structure_from_tree(
     tree: &SchemaTree,
     output_path: &str,
@@ -288,9 +367,10 @@ pub fn create_structure_from_tree(
         hooks_failed: 0,
     };
     let mut hook_results: Vec<HookResult> = Vec::new();
+    let mut created_paths: Vec<String> = Vec::new();
 
     // Create structure recursively
-    create_node(&tree.root, &base_path, variables, dry_run, overwrite, &mut logs, &mut summary)?;
+    create_node(&tree.root, &base_path, variables, dry_run, overwrite, &mut logs, &mut summary, &mut created_paths)?;
 
     // Execute post-create hooks if present and not in dry-run mode
     if let Some(ref hooks) = tree.hooks {
@@ -349,7 +429,7 @@ pub fn create_structure_from_tree(
         }
     }
 
-    Ok(CreateResult { logs, summary, hook_results })
+    Ok(CreateResult { logs, summary, hook_results, created_paths })
 }
 
 /// Execute a hook command in the specified working directory
@@ -429,10 +509,11 @@ fn process_children(
     overwrite: bool,
     logs: &mut Vec<LogEntry>,
     summary: &mut ResultSummary,
+    created_paths: &mut Vec<String>,
 ) -> Result<(), String> {
     let mut child_last_if = None;
     for child in children {
-        create_node_internal(child, parent_path, variables, dry_run, overwrite, logs, summary, child_last_if)?;
+        create_node_internal(child, parent_path, variables, dry_run, overwrite, logs, summary, created_paths, child_last_if)?;
         // Track if results for else blocks
         // Only if nodes followed immediately by else nodes form a valid if/else chain
         // Any other node type (folder, file) breaks the chain
@@ -453,8 +534,9 @@ fn create_node(
     overwrite: bool,
     logs: &mut Vec<LogEntry>,
     summary: &mut ResultSummary,
+    created_paths: &mut Vec<String>,
 ) -> Result<(), String> {
-    create_node_internal(node, parent_path, variables, dry_run, overwrite, logs, summary, None)
+    create_node_internal(node, parent_path, variables, dry_run, overwrite, logs, summary, created_paths, None)
 }
 
 fn create_node_internal(
@@ -465,6 +547,7 @@ fn create_node_internal(
     overwrite: bool,
     logs: &mut Vec<LogEntry>,
     summary: &mut ResultSummary,
+    created_paths: &mut Vec<String>,
     last_if_result: Option<bool>,
 ) -> Result<(), String> {
     // Handle conditional and repeat nodes (if/else/repeat)
@@ -476,7 +559,7 @@ fn create_node_internal(
             // Process children if condition is met
             if condition_met {
                 if let Some(children) = &node.children {
-                    process_children(children, parent_path, variables, dry_run, overwrite, logs, summary)?;
+                    process_children(children, parent_path, variables, dry_run, overwrite, logs, summary, created_paths)?;
                 }
             }
 
@@ -500,7 +583,7 @@ fn create_node_internal(
 
             if should_execute {
                 if let Some(children) = &node.children {
-                    process_children(children, parent_path, variables, dry_run, overwrite, logs, summary)?;
+                    process_children(children, parent_path, variables, dry_run, overwrite, logs, summary, created_paths)?;
                 }
             }
 
@@ -617,7 +700,7 @@ fn create_node_internal(
                     scoped_vars.insert(var_0_key.clone(), i.to_string());
                     scoped_vars.insert(var_1_key.clone(), (i + 1).to_string());
 
-                    process_children(children, parent_path, &scoped_vars, dry_run, overwrite, logs, summary)?;
+                    process_children(children, parent_path, &scoped_vars, dry_run, overwrite, logs, summary, created_paths)?;
                 }
             }
 
@@ -644,6 +727,7 @@ fn create_node_internal(
                 match fs::create_dir_all(&current_path) {
                     Ok(_) => {
                         summary.folders_created += 1;
+                        created_paths.push(display_path.clone());
                         logs.push(LogEntry {
                             log_type: "success".to_string(),
                             message: format!("Created folder: {}", name),
@@ -670,7 +754,7 @@ fn create_node_internal(
 
             // Process children
             if let Some(children) = &node.children {
-                process_children(children, &current_path, variables, dry_run, overwrite, logs, summary)?;
+                process_children(children, &current_path, variables, dry_run, overwrite, logs, summary, created_paths)?;
             }
         }
         "file" => {
@@ -738,6 +822,7 @@ fn create_node_internal(
                                         match fs::write(&current_path, &processed_data) {
                                             Ok(_) => {
                                                 summary.files_downloaded += 1;
+                                                created_paths.push(display_path.clone());
                                                 logs.push(LogEntry {
                                                     log_type: "success".to_string(),
                                                     message: format!("Downloaded & processed: {}", name),
@@ -794,6 +879,7 @@ fn create_node_internal(
                                 match fs::write(&current_path, &processed) {
                                     Ok(_) => {
                                         summary.files_downloaded += 1;
+                                        created_paths.push(display_path.clone());
                                         logs.push(LogEntry {
                                             log_type: "success".to_string(),
                                             message: format!("Downloaded & processed: {}", name),
@@ -829,6 +915,7 @@ fn create_node_internal(
                                 match fs::write(&current_path, &file_content) {
                                     Ok(_) => {
                                         summary.files_downloaded += 1;
+                                        created_paths.push(display_path.clone());
                                         let details = if is_svg_file(&name) {
                                             format!("From: {} (SVG, variables replaced)", url)
                                         } else {
@@ -870,6 +957,7 @@ fn create_node_internal(
                     match fs::write(&current_path, &file_content) {
                         Ok(_) => {
                             summary.files_created += 1;
+                            created_paths.push(display_path.clone());
                             let has_content = node.content.is_some();
                             logs.push(LogEntry {
                                 log_type: "success".to_string(),
@@ -3366,6 +3454,7 @@ pub fn run() {
             cmd_export_schema_xml,
             cmd_create_structure,
             cmd_create_structure_from_tree,
+            cmd_revert_structure,
             cmd_list_templates,
             cmd_get_template,
             cmd_create_template,

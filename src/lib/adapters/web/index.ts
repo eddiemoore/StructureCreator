@@ -19,6 +19,7 @@ import type {
   ValidationError,
   ValidationRule,
   CreateResult,
+  RevertResult,
   DiffResult,
   ParseWithInheritanceResult,
 } from "../../../types/schema";
@@ -228,6 +229,15 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
     }
 
     return generateDiffPreview(tree, rootHandle, variables, overwrite);
+  }
+
+  async revertStructure(_paths: string[]): Promise<RevertResult> {
+    // Web mode doesn't support reverting structures due to File System Access API limitations
+    return {
+      files_deleted: 0,
+      folders_deleted: 0,
+      errors: ["Reverting structures is not supported in web mode. Please use the desktop app for this feature."],
+    };
   }
 }
 

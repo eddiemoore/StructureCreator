@@ -86,6 +86,9 @@ pub struct RecentProject {
     pub folders_created: i32,
     pub files_created: i32,
     pub created_at: String,
+    /// Paths that were created (for revert functionality)
+    #[serde(default)]
+    pub created_paths: Vec<String>,
 }
 
 /// Input for creating a recent project entry
@@ -101,6 +104,9 @@ pub struct CreateRecentProjectInput {
     pub template_name: Option<String>,
     pub folders_created: i32,
     pub files_created: i32,
+    /// Paths that were created (for revert functionality)
+    #[serde(default)]
+    pub created_paths: Vec<String>,
 }
 
 /// Helper to parse JSON variables with logging on failure
@@ -121,11 +127,22 @@ fn parse_validation_json(json: Option<String>, context: &str) -> HashMap<String,
     }).unwrap_or_default()
 }
 
+/// Helper to parse JSON array of paths with logging on failure
+fn parse_paths_json(json: Option<String>, context: &str) -> Vec<String> {
+    json.map(|j| {
+        serde_json::from_str(&j).unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to parse created_paths JSON for {}: {}", context, e);
+            Vec::new()
+        })
+    }).unwrap_or_default()
+}
+
 /// Helper to map a database row to RecentProject
 fn row_to_recent_project(row: &rusqlite::Row) -> rusqlite::Result<RecentProject> {
     let id: String = row.get(0)?;
     let variables_json: String = row.get(4)?;
     let validation_json: Option<String> = row.get(5)?;
+    let created_paths_json: Option<String> = row.get(11)?;
 
     Ok(RecentProject {
         id: id.clone(),
@@ -139,6 +156,7 @@ fn row_to_recent_project(row: &rusqlite::Row) -> rusqlite::Result<RecentProject>
         folders_created: row.get(8)?,
         files_created: row.get(9)?,
         created_at: row.get(10)?,
+        created_paths: parse_paths_json(created_paths_json, &id),
     })
 }
 
@@ -335,10 +353,22 @@ impl Database {
                 template_name TEXT,
                 folders_created INTEGER DEFAULT 0,
                 files_created INTEGER DEFAULT 0,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                created_paths TEXT DEFAULT '[]'
             )",
             [],
         )?;
+
+        // Migration: Add created_paths column for revert functionality
+        if let Err(e) = conn.execute(
+            "ALTER TABLE recent_projects ADD COLUMN created_paths TEXT DEFAULT '[]'",
+            [],
+        ) {
+            let err_msg = e.to_string();
+            if !err_msg.contains("duplicate column") {
+                eprintln!("Warning: Migration failed (created_paths column): {}", err_msg);
+            }
+        }
 
         Ok(())
     }
@@ -566,7 +596,7 @@ impl Database {
 
         let mut stmt = conn.prepare(
             "SELECT id, project_name, output_path, schema_xml, variables, variable_validation,
-                    template_id, template_name, folders_created, files_created, created_at
+                    template_id, template_name, folders_created, files_created, created_at, created_paths
              FROM recent_projects
              ORDER BY created_at DESC",
         )?;
@@ -581,7 +611,7 @@ impl Database {
 
         let mut stmt = conn.prepare(
             "SELECT id, project_name, output_path, schema_xml, variables, variable_validation,
-                    template_id, template_name, folders_created, files_created, created_at
+                    template_id, template_name, folders_created, files_created, created_at, created_paths
              FROM recent_projects
              WHERE id = ?",
         )?;
@@ -601,11 +631,12 @@ impl Database {
         let now = chrono::Utc::now().to_rfc3339();
         let variables_json = serde_json::to_string(&input.variables).unwrap_or_else(|_| "{}".to_string());
         let validation_json = serde_json::to_string(&input.variable_validation).unwrap_or_else(|_| "{}".to_string());
+        let created_paths_json = serde_json::to_string(&input.created_paths).unwrap_or_else(|_| "[]".to_string());
 
         conn.execute(
             "INSERT INTO recent_projects (id, project_name, output_path, schema_xml, variables, variable_validation,
-                                          template_id, template_name, folders_created, files_created, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                          template_id, template_name, folders_created, files_created, created_at, created_paths)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rusqlite::params![
                 &id,
                 &input.project_name,
@@ -618,6 +649,7 @@ impl Database {
                 input.folders_created,
                 input.files_created,
                 &now,
+                &created_paths_json,
             ],
         )?;
 
@@ -641,6 +673,7 @@ impl Database {
             folders_created: input.folders_created,
             files_created: input.files_created,
             created_at: now,
+            created_paths: input.created_paths,
         })
     }
 

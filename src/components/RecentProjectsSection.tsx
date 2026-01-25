@@ -7,6 +7,7 @@ import {
   FolderIcon,
   ClockIcon,
   UploadIcon,
+  UndoIcon,
 } from "./Icons";
 import type { RecentProject } from "../types/schema";
 
@@ -48,6 +49,8 @@ export const RecentProjectsSection = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [revertConfirmId, setRevertConfirmId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
 
   const handleLoad = useCallback(async (project: RecentProject) => {
@@ -101,6 +104,54 @@ export const RecentProjectsSection = () => {
       });
     } finally {
       setDeletingId(null);
+    }
+  }, [setRecentProjects, addLog]);
+
+  const handleRevert = useCallback(async (project: RecentProject) => {
+    setRevertingId(project.id);
+    setRevertConfirmId(null);
+    try {
+      // Check if there are paths to revert
+      if (!project.createdPaths || project.createdPaths.length === 0) {
+        addLog({
+          type: "warning",
+          message: `Cannot revert "${project.projectName}"`,
+          details: "No file paths were recorded for this project. This may be an older project or it was created in web mode.",
+        });
+        return;
+      }
+
+      // Call the revert API
+      const result = await api.structureCreator.revertStructure(project.createdPaths);
+
+      // Check for errors
+      if (result.errors.length > 0) {
+        addLog({
+          type: "warning",
+          message: `Partially reverted "${project.projectName}"`,
+          details: `Deleted ${result.files_deleted} files, ${result.folders_deleted} folders. Errors: ${result.errors.join(", ")}`,
+        });
+      } else {
+        addLog({
+          type: "success",
+          message: `Reverted "${project.projectName}"`,
+          details: `Deleted ${result.files_deleted} files and ${result.folders_deleted} folders.`,
+        });
+      }
+
+      // Remove the project from history after successful revert
+      await api.database.deleteRecentProject(project.id);
+      const currentProjects = useAppStore.getState().recentProjects;
+      setRecentProjects(currentProjects.filter(p => p.id !== project.id));
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addLog({
+        type: "error",
+        message: `Failed to revert "${project.projectName}"`,
+        details: errorMessage,
+      });
+    } finally {
+      setRevertingId(null);
     }
   }, [setRecentProjects, addLog]);
 
@@ -197,22 +248,60 @@ export const RecentProjectsSection = () => {
               <div
                 key={project.id}
                 className={`p-2.5 bg-card-bg border border-border-muted rounded-mac group hover:border-border-default transition-colors relative ${
-                  deletingId === project.id ? "opacity-50" : ""
+                  deletingId === project.id || revertingId === project.id ? "opacity-50" : ""
                 }`}
               >
+                {/* Revert confirmation */}
+                {revertConfirmId === project.id && (
+                  <div className="absolute inset-0 bg-card-bg/95 rounded-mac z-10 flex items-center justify-center p-2">
+                    <div className="text-center">
+                      <p className="text-mac-xs text-text-secondary mb-2">
+                        Delete all files created by this project?
+                      </p>
+                      <div className="flex gap-2 justify-center">
+                        <button
+                          onClick={() => setRevertConfirmId(null)}
+                          className="px-2 py-1 text-mac-xs text-text-secondary hover:bg-border-muted rounded transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleRevert(project)}
+                          className="px-2 py-1 text-mac-xs font-medium text-system-orange hover:bg-system-orange/10 rounded transition-colors"
+                        >
+                          Revert
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Action buttons - absolutely positioned, right side of title row */}
                 <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-card-bg">
                   <button
                     onClick={() => handleLoad(project)}
-                    disabled={deletingId === project.id}
+                    disabled={deletingId === project.id || revertingId === project.id}
                     className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
                     title="Load project settings"
                   >
                     <UploadIcon size={12} />
                   </button>
+                  {project.createdPaths && project.createdPaths.length > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRevertConfirmId(project.id);
+                      }}
+                      disabled={deletingId === project.id || revertingId === project.id}
+                      className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-orange hover:bg-system-orange/10 transition-colors disabled:opacity-50"
+                      title="Revert (delete created files)"
+                    >
+                      <UndoIcon size={12} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => handleDelete(e, project.id, project.projectName)}
-                    disabled={deletingId === project.id}
+                    disabled={deletingId === project.id || revertingId === project.id}
                     className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors disabled:opacity-50"
                     title="Delete from history"
                   >

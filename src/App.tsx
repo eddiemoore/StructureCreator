@@ -16,7 +16,7 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [importExportModalOpen, setImportExportModalOpen] = useState(false);
-  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent } = useAppStore();
+  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, undo, redo, canUndo, canRedo } = useAppStore();
 
   // Ref for search input (passed to LeftPanel)
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -30,7 +30,27 @@ function App() {
     searchInputRef,
     isModalOpen,
     hasSchema: !!schemaContent,
+    canUndo: canUndo(),
+    canRedo: canRedo(),
   });
+
+  // Listen for undo/redo shortcut events
+  useEffect(() => {
+    const handleUndo = () => {
+      if (canUndo()) undo();
+    };
+    const handleRedo = () => {
+      if (canRedo()) redo();
+    };
+
+    window.addEventListener("shortcut:undo", handleUndo);
+    window.addEventListener("shortcut:redo", handleRedo);
+
+    return () => {
+      window.removeEventListener("shortcut:undo", handleUndo);
+      window.removeEventListener("shortcut:redo", handleRedo);
+    };
+  }, [undo, redo, canUndo, canRedo]);
 
   // Initialize the API and load settings on mount
   useEffect(() => {

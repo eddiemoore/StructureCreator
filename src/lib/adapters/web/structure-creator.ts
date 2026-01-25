@@ -153,6 +153,8 @@ export const createStructureFromTree = async (
     logs: context.logs,
     summary: context.summary,
     hook_results: [],
+    // Web mode doesn't track created paths (File System Access API doesn't provide persistent paths)
+    created_paths: [],
   };
 };
 

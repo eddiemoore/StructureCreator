@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FolderIcon, FileIcon, PlusIcon, TrashIcon, SaveIcon, BranchIcon, GitMergeIcon, RepeatIcon } from "./Icons";
+import { getShortcutLabel } from "../constants/shortcuts";
 import type { SchemaNode, NodeType } from "../types/schema";
 import { findNode, findParent, canHaveChildren, INDENT_PX } from "../utils/schemaTree";
 import { sanitizeVariableName, validateVariableName, validateRepeatCount } from "../utils/validation";
@@ -90,6 +91,7 @@ const EditableTreeItem = ({
   const [sanitizationMessage, setSanitizationMessage] = useState("");
   const [repeatCountError, setRepeatCountError] = useState<string | null>(null);
   const [repeatAsError, setRepeatAsError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Refs for inputs that need to be accessed in handlers (e.g., for reading value after datalist selection)
   const conditionInputRef = useRef<HTMLInputElement>(null);
@@ -649,16 +651,42 @@ const EditableTreeItem = ({
                 </button>
               </>
             )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(node.id!);
-              }}
-              className="p-1 hover:bg-red-500/10 rounded"
-              title="Delete"
-            >
-              <TrashIcon size={12} className="text-red-500" />
-            </button>
+            {showDeleteConfirm ? (
+              <div className="flex items-center gap-1 bg-card-bg border border-border-muted rounded px-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(node.id!);
+                    setShowDeleteConfirm(false);
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] font-medium text-red-500 hover:bg-red-500/10 rounded"
+                  title="Confirm delete"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeleteConfirm(false);
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-mac-bg-hover rounded"
+                  title="Cancel"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDeleteConfirm(true);
+                }}
+                className="p-1 hover:bg-red-500/10 rounded"
+                title="Delete"
+              >
+                <TrashIcon size={12} className="text-red-500" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -776,8 +804,8 @@ const EditableTreeItem = ({
             <div className="border-t border-border-muted my-1" />
             <button
               onClick={() => {
-                onRemove(node.id!);
                 setShowContextMenu(false);
+                setShowDeleteConfirm(true);
               }}
               className="w-full text-left px-3 py-1.5 hover:bg-red-500/10 text-mac-sm text-red-500"
             >
@@ -974,26 +1002,18 @@ export const VisualSchemaEditor = () => {
     }
   };
 
+  // Note: Undo/redo shortcuts are now handled globally in useKeyboardShortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         handleSaveSchema();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        if (canUndo()) undo();
-      } else if (
-        (e.metaKey || e.ctrlKey) &&
-        (e.key === "y" || (e.key === "z" && e.shiftKey))
-      ) {
-        e.preventDefault();
-        if (canRedo()) redo();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canUndo, canRedo, undo, redo, schemaTree]);
+  }, [schemaTree]);
 
   if (!schemaTree) {
     return (
@@ -1018,7 +1038,7 @@ export const VisualSchemaEditor = () => {
             onClick={undo}
             disabled={!canUndo()}
             className="px-2 py-1 text-mac-xs rounded hover:bg-mac-bg-hover disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Undo (Cmd/Ctrl+Z)"
+            title={`Undo (${getShortcutLabel("UNDO")})`}
           >
             ↶ Undo
           </button>
@@ -1026,7 +1046,7 @@ export const VisualSchemaEditor = () => {
             onClick={redo}
             disabled={!canRedo()}
             className="px-2 py-1 text-mac-xs rounded hover:bg-mac-bg-hover disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Redo (Cmd/Ctrl+Y)"
+            title={`Redo (${getShortcutLabel("REDO")})`}
           >
             ↷ Redo
           </button>

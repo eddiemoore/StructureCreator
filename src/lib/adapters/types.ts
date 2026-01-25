@@ -9,6 +9,7 @@ import type {
   ValidationError,
   ValidationRule,
   CreateResult,
+  RevertResult,
   DiffResult,
   ImportResult,
   DuplicateStrategy,
@@ -124,6 +125,8 @@ export interface CreateRecentProjectInput {
   templateName: string | null;
   foldersCreated: number;
   filesCreated: number;
+  /** Paths that were created (for revert functionality) */
+  createdPaths: string[];
 }
 
 export interface DatabaseAdapter {
@@ -227,6 +230,11 @@ export interface StructureCreatorAdapter {
     variables: Record<string, string>,
     overwrite: boolean
   ): Promise<DiffResult>;
+
+  /**
+   * Revert (delete) previously created structure.
+   */
+  revertStructure(paths: string[]): Promise<RevertResult>;
 }
 
 // ============================================================================

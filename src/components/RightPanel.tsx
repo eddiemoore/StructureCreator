@@ -235,6 +235,7 @@ export const RightPanel = () => {
               templateName,
               foldersCreated: result.summary.folders_created,
               filesCreated: result.summary.files_created,
+              createdPaths: result.created_paths || [],
             });
 
             // Refresh the recent projects list

@@ -154,6 +154,8 @@ export interface RecentProject {
   foldersCreated: number;
   filesCreated: number;
   createdAt: string;
+  /** Paths that were created (for revert functionality) */
+  createdPaths: string[];
 }
 
 export type TemplateSortOption =
@@ -255,6 +257,14 @@ export interface CreateResult {
   logs: BackendLogEntry[];
   summary: ResultSummary;
   hook_results: HookResult[];
+  /** Paths that were created (for revert functionality) */
+  created_paths: string[];
+}
+
+export interface RevertResult {
+  files_deleted: number;
+  folders_deleted: number;
+  errors: string[];
 }
 
 // ============================================================================

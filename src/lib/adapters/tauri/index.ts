@@ -37,6 +37,7 @@ import type {
   ValidationError,
   ValidationRule,
   CreateResult,
+  RevertResult,
   DiffResult,
   ImportResult,
   DuplicateStrategy,
@@ -57,6 +58,7 @@ interface RustRecentProject {
   folders_created: number;
   files_created: number;
   created_at: string;
+  created_paths: string[];
 }
 
 /** Convert Rust snake_case RecentProject to TypeScript camelCase */
@@ -73,6 +75,7 @@ function toRecentProject(p: RustRecentProject): RecentProject {
     foldersCreated: p.folders_created,
     filesCreated: p.files_created,
     createdAt: p.created_at,
+    createdPaths: p.created_paths || [],
   };
 }
 
@@ -274,6 +277,7 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
       templateName: input.templateName,
       foldersCreated: input.foldersCreated,
       filesCreated: input.filesCreated,
+      createdPaths: input.createdPaths,
     });
     return toRecentProject(p);
   }
@@ -364,6 +368,10 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
       variables,
       overwrite,
     });
+  }
+
+  async revertStructure(paths: string[]): Promise<RevertResult> {
+    return invoke<RevertResult>("cmd_revert_structure", { paths });
   }
 }
 
