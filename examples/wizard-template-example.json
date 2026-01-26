@@ -1,0 +1,179 @@
+{
+  "version": "1.0",
+  "type": "template",
+  "exported_at": "2025-01-26T00:00:00Z",
+  "template": {
+    "name": "React Project Starter",
+    "description": "A customizable React project template with optional features",
+    "schema_xml": "<folder name=\"%PROJECT_NAME%\">\n  <file name=\"package.json\" />\n  <file name=\"README.md\" />\n  <file name=\".gitignore\" />\n  <folder name=\"src\">\n    <file name=\"index.tsx\" />\n    <file name=\"App.tsx\" />\n    <file name=\"App.css\" />\n    <if var=\"INCLUDE_COMPONENTS\">\n      <folder name=\"components\">\n        <file name=\"index.ts\" />\n      </folder>\n    </if>\n    <if var=\"INCLUDE_HOOKS\">\n      <folder name=\"hooks\">\n        <file name=\"index.ts\" />\n        <file name=\"useLocalStorage.ts\" />\n      </folder>\n    </if>\n    <if var=\"INCLUDE_UTILS\">\n      <folder name=\"utils\">\n        <file name=\"index.ts\" />\n      </folder>\n    </if>\n    <if var=\"STATE_ZUSTAND\">\n      <folder name=\"store\">\n        <file name=\"index.ts\" />\n        <file name=\"appStore.ts\" />\n      </folder>\n    </if>\n    <if var=\"STATE_REDUX\">\n      <folder name=\"store\">\n        <file name=\"index.ts\" />\n        <file name=\"store.ts\" />\n        <folder name=\"slices\">\n          <file name=\"index.ts\" />\n        </folder>\n      </folder>\n    </if>\n  </folder>\n  <if var=\"INCLUDE_TESTS\">\n    <folder name=\"tests\">\n      <file name=\"setup.ts\" />\n      <file name=\"App.test.tsx\" />\n    </folder>\n  </if>\n  <if var=\"INCLUDE_DOCKER\">\n    <file name=\"Dockerfile\" />\n    <file name=\"docker-compose.yml\" />\n    <file name=\".dockerignore\" />\n  </if>\n  <folder name=\"public\">\n    <file name=\"index.html\" />\n    <file name=\"favicon.ico\" />\n  </folder>\n</folder>",
+    "variables": {
+      "%PROJECT_NAME%": "my-react-app"
+    },
+    "variable_validation": {
+      "%PROJECT_NAME%": {
+        "required": true,
+        "minLength": 1,
+        "pattern": "^[a-z][a-z0-9-]*$"
+      }
+    },
+    "icon_color": "#61dafb",
+    "tags": ["react", "typescript", "frontend", "wizard"],
+    "wizard_config": {
+      "title": "Create React Project",
+      "description": "Configure your new React project with the features you need",
+      "steps": [
+        {
+          "id": "basics",
+          "title": "Project Basics",
+          "description": "Set up the basic project configuration",
+          "questions": [
+            {
+              "id": "project_name",
+              "type": "text",
+              "question": "What is your project name?",
+              "helpText": "Use lowercase letters, numbers, and hyphens only",
+              "placeholder": "my-react-app",
+              "defaultValue": "my-react-app",
+              "validation": {
+                "required": true,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9-]*$"
+              }
+            }
+          ]
+        },
+        {
+          "id": "structure",
+          "title": "Project Structure",
+          "description": "Choose which folders to include in your project",
+          "questions": [
+            {
+              "id": "include_components",
+              "type": "boolean",
+              "question": "Include a components folder?",
+              "helpText": "A dedicated folder for reusable React components",
+              "defaultValue": true
+            },
+            {
+              "id": "include_hooks",
+              "type": "boolean",
+              "question": "Include a hooks folder?",
+              "helpText": "A folder for custom React hooks with a useLocalStorage example",
+              "defaultValue": true
+            },
+            {
+              "id": "include_utils",
+              "type": "boolean",
+              "question": "Include a utils folder?",
+              "helpText": "A folder for utility functions and helpers",
+              "defaultValue": false
+            }
+          ]
+        },
+        {
+          "id": "state",
+          "title": "State Management",
+          "description": "Choose how to manage application state",
+          "questions": [
+            {
+              "id": "state_management",
+              "type": "single",
+              "question": "Which state management solution do you want to use?",
+              "choices": [
+                {
+                  "id": "none",
+                  "label": "None",
+                  "description": "Use React's built-in useState and useContext"
+                },
+                {
+                  "id": "zustand",
+                  "label": "Zustand",
+                  "description": "Lightweight and simple state management"
+                },
+                {
+                  "id": "redux",
+                  "label": "Redux Toolkit",
+                  "description": "Full-featured state management with Redux"
+                }
+              ],
+              "defaultValue": "none"
+            }
+          ]
+        },
+        {
+          "id": "extras",
+          "title": "Additional Features",
+          "description": "Add optional features to your project",
+          "questions": [
+            {
+              "id": "include_tests",
+              "type": "boolean",
+              "question": "Include testing setup?",
+              "helpText": "Adds a tests folder with Vitest configuration",
+              "defaultValue": true
+            },
+            {
+              "id": "include_docker",
+              "type": "boolean",
+              "question": "Include Docker configuration?",
+              "helpText": "Adds Dockerfile and docker-compose.yml for containerization",
+              "defaultValue": false
+            }
+          ]
+        }
+      ],
+      "schemaModifiers": [
+        {
+          "questionId": "project_name",
+          "action": "set_variable",
+          "variableName": "PROJECT_NAME"
+        },
+        {
+          "questionId": "include_components",
+          "action": "include",
+          "nodeConditionVar": "INCLUDE_COMPONENTS"
+        },
+        {
+          "questionId": "include_hooks",
+          "action": "include",
+          "nodeConditionVar": "INCLUDE_HOOKS"
+        },
+        {
+          "questionId": "include_utils",
+          "action": "include",
+          "nodeConditionVar": "INCLUDE_UTILS"
+        },
+        {
+          "questionId": "state_management",
+          "action": "include",
+          "nodeConditionVar": "STATE_ZUSTAND",
+          "valueMap": {
+            "zustand": "true",
+            "redux": "",
+            "none": ""
+          }
+        },
+        {
+          "questionId": "state_management",
+          "action": "include",
+          "nodeConditionVar": "STATE_REDUX",
+          "valueMap": {
+            "redux": "true",
+            "zustand": "",
+            "none": ""
+          }
+        },
+        {
+          "questionId": "include_tests",
+          "action": "include",
+          "nodeConditionVar": "INCLUDE_TESTS"
+        },
+        {
+          "questionId": "include_docker",
+          "action": "include",
+          "nodeConditionVar": "INCLUDE_DOCKER"
+        }
+      ]
+    }
+  }
+}

@@ -200,6 +200,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   diffError: null,
   showDiffModal: false,
 
+  // Wizard
+  wizardState: null,
+
   // Actions
   setSchemaPath: (path: string | null) => set({ schemaPath: path }),
 
@@ -710,4 +713,61 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     return state.schemaHistoryIndex < state.schemaHistory.length - 1;
   },
+
+  // Wizard actions
+  openWizard: (template: Template) => {
+    set({
+      wizardState: {
+        isOpen: true,
+        template,
+        currentStep: 0,
+        answers: {},
+        previewTree: null,
+      },
+    });
+  },
+
+  closeWizard: () => {
+    set({ wizardState: null });
+  },
+
+  setWizardStep: (step: number) => {
+    set((state) => {
+      if (!state.wizardState) return state;
+      return {
+        wizardState: {
+          ...state.wizardState,
+          currentStep: step,
+        },
+      };
+    });
+  },
+
+  updateWizardAnswer: (questionId: string, value: string | boolean | string[]) => {
+    set((state) => {
+      if (!state.wizardState) return state;
+      return {
+        wizardState: {
+          ...state.wizardState,
+          answers: {
+            ...state.wizardState.answers,
+            [questionId]: value,
+          },
+        },
+      };
+    });
+  },
+
+  setWizardPreviewTree: (tree: SchemaTree | null) => {
+    set((state) => {
+      if (!state.wizardState) return state;
+      return {
+        wizardState: {
+          ...state.wizardState,
+          previewTree: tree,
+        },
+      };
+    });
+  },
+
 }));

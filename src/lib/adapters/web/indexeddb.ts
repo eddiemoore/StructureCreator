@@ -274,6 +274,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
       created_at: timestamp,
       updated_at: timestamp,
       tags: validateTags(input.tags ?? []),
+      wizard_config: input.wizardConfig ?? null,
     };
 
     return new Promise((resolve, reject) => {
@@ -322,6 +323,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
           ...(input.name !== undefined && { name: input.name }),
           ...(input.description !== undefined && { description: input.description }),
           ...(input.iconColor !== undefined && { icon_color: input.iconColor }),
+          ...(input.wizardConfig !== undefined && { wizard_config: input.wizardConfig }),
           updated_at: now(),
         };
 

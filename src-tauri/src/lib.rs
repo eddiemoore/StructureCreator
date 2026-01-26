@@ -2046,6 +2046,9 @@ pub struct TemplateExport {
     /// Tags for categorizing templates (optional, for backwards compatibility)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// Wizard configuration for guided template setup (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wizard_config: Option<serde_json::Value>,
 }
 
 /// Type of export file - single template or bundle
@@ -2221,6 +2224,7 @@ fn cmd_create_template(
     variable_validation: Option<HashMap<String, ValidationRule>>,
     icon_color: Option<String>,
     tags: Option<Vec<String>>,
+    wizard_config: Option<serde_json::Value>,
 ) -> Result<Template, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state
@@ -2234,6 +2238,7 @@ fn cmd_create_template(
             icon_color,
             is_favorite: false,
             tags: tags.unwrap_or_default(),
+            wizard_config,
         })
         .map_err(|e| e.to_string())
 }
@@ -2246,6 +2251,7 @@ fn cmd_update_template(
     name: Option<String>,
     description: Option<String>,
     icon_color: Option<String>,
+    wizard_config: Option<serde_json::Value>,
 ) -> Result<Option<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state
@@ -2256,6 +2262,7 @@ fn cmd_update_template(
                 name,
                 description,
                 icon_color,
+                wizard_config,
             },
         )
         .map_err(|e| e.to_string())
@@ -2476,6 +2483,7 @@ fn import_templates_from_json_internal(
             icon_color: template_export.icon_color,
             is_favorite: false,
             tags: template_export.tags,
+            wizard_config: template_export.wizard_config,
         };
 
         match db.create_template(input) {
@@ -2508,6 +2516,7 @@ fn cmd_export_template(
         variable_validation: if include_variables { template.variable_validation } else { HashMap::new() },
         icon_color: template.icon_color,
         tags: template.tags,
+        wizard_config: template.wizard_config,
     };
 
     let export_file = TemplateExportFile {
@@ -2554,6 +2563,7 @@ fn cmd_export_templates_bulk(
             variable_validation: if include_variables { t.variable_validation } else { HashMap::new() },
             icon_color: t.icon_color,
             tags: t.tags,
+            wizard_config: t.wizard_config,
         })
         .collect();
 
@@ -3844,6 +3854,7 @@ mod tests {
                     variable_validation: HashMap::new(),
                     icon_color: None,
                     tags: Vec::new(),
+                    wizard_config: None,
                 }),
                 templates: None,
             };

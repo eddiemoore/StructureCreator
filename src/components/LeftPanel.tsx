@@ -148,6 +148,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
     addLog,
     setRecentProjects,
     setRecentProjectsLoading,
+    openWizard,
   } = useAppStore();
 
   // State declarations
@@ -284,6 +285,12 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
   };
 
   const handleLoadTemplate = useCallback(async (template: Template) => {
+    // Check if template has a wizard configuration
+    if (template.wizard_config) {
+      openWizard(template);
+      return;
+    }
+
     try {
       // Increment use count
       await api.database.incrementUseCount(template.id);
@@ -327,7 +334,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
         details: errorMessage,
       });
     }
-  }, [setSchemaPath, setSchemaContent, setSchemaTree, logInheritanceResolved, setVariables, loadData, addLog]);
+  }, [setSchemaPath, setSchemaContent, setSchemaTree, logInheritanceResolved, setVariables, loadData, addLog, openWizard]);
 
   const handleToggleFavorite = async (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
@@ -883,7 +890,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                                 ? minLength : maxLength,
                             });
                           }}
-                          className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 text-text-primary outline-none focus:border-accent"
+                          className="mac-input w-full text-mac-sm"
                           placeholder="0"
                         />
                       </label>
@@ -908,7 +915,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                                 ? maxLength : minLength,
                             });
                           }}
-                          className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 text-text-primary outline-none focus:border-accent"
+                          className="mac-input w-full text-mac-sm"
                           placeholder="None"
                         />
                       </label>
@@ -926,7 +933,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                             pattern: e.target.value || undefined,
                           })
                         }
-                        className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 font-mono text-text-primary outline-none focus:border-accent"
+                        className="mac-input w-full font-mono text-mac-sm"
                         placeholder="e.g., ^[a-z]+$"
                       />
                     </label>
@@ -1303,8 +1310,18 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                     <LayersIcon size={16} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-mac-sm font-medium text-text-primary truncate">
-                      {template.name}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-mac-sm font-medium text-text-primary truncate">
+                        {template.name}
+                      </span>
+                      {template.wizard_config && (
+                        <span
+                          className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-medium bg-system-purple/15 text-system-purple rounded-full"
+                          title="This template has a setup wizard"
+                        >
+                          Wizard
+                        </span>
+                      )}
                     </div>
                     <div className="text-mac-xs text-text-muted truncate">
                       {template.description || `Used ${template.use_count} times`}

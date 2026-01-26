@@ -201,6 +201,7 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
       variableValidation: input.variableValidation,
       iconColor: input.iconColor,
       tags: input.tags,
+      wizardConfig: input.wizardConfig,
     });
     // Return the created template by fetching by name
     const template = await this.getTemplateByName(input.name);
