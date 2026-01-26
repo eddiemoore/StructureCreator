@@ -62,7 +62,8 @@ export const RightPanel = () => {
   const handleCreateRef = useRef<(() => void) | null>(null);
 
   // Ref for the auto-create handler (used in watch mode callbacks)
-  const autoCreateHandlerRef = useRef<(() => Promise<void>) | null>(null);
+  // Accepts optional overrides for tree/content to use newly parsed values before state updates
+  const autoCreateHandlerRef = useRef<((overrides?: { tree?: typeof schemaTree; content?: string }) => Promise<void>) | null>(null);
 
   // Keyboard shortcut subscription
   useEffect(() => {
@@ -106,9 +107,10 @@ export const RightPanel = () => {
         addLog({ type: "success", message: "Schema reloaded successfully" });
 
         // Auto-create if enabled and we have a valid setup
+        // Pass the new tree/content directly since React state hasn't updated yet
         if (watchAutoCreate && autoCreateHandlerRef.current) {
           addLog({ type: "info", message: "Auto-creating structure..." });
-          await autoCreateHandlerRef.current();
+          await autoCreateHandlerRef.current({ tree, content });
         }
       } catch (e) {
         if (!mounted) return;
@@ -239,13 +241,20 @@ export const RightPanel = () => {
   };
 
   // Execute the actual structure creation
-  const executeCreate = async (isDryRun: boolean) => {
+  // Optional overrides allow watch mode to pass the newly parsed tree/content
+  // before React state has updated
+  const executeCreate = async (
+    isDryRun: boolean,
+    overrides?: { tree?: typeof schemaTree; content?: string }
+  ) => {
+    const effectiveTree = overrides?.tree ?? schemaTree;
+    const effectiveContent = overrides?.content ?? schemaContent;
     const { varsMap, rulesMap } = buildVariableMaps();
 
     setProgress({
       status: "running",
       current: 0,
-      total: schemaTree!.stats.folders + schemaTree!.stats.files,
+      total: effectiveTree!.stats.folders + effectiveTree!.stats.files,
     });
 
     try {
@@ -253,15 +262,15 @@ export const RightPanel = () => {
 
       let result: CreateResult;
 
-      if (schemaContent) {
-        result = await api.structureCreator.createStructure(schemaContent, {
+      if (effectiveContent) {
+        result = await api.structureCreator.createStructure(effectiveContent, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
           overwrite,
         });
-      } else if (schemaTree) {
-        result = await api.structureCreator.createStructureFromTree(schemaTree, {
+      } else if (effectiveTree) {
+        result = await api.structureCreator.createStructureFromTree(effectiveTree, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
@@ -306,10 +315,10 @@ export const RightPanel = () => {
         // Record to history for non-dry-run successful creations
         if (!isDryRun) {
           try {
-            // Get schema XML - use schemaContent if available, or export from tree
-            let schemaXml = schemaContent || "";
-            if (!schemaXml && schemaTree) {
-              schemaXml = await api.schema.exportSchemaXml(schemaTree);
+            // Get schema XML - use effectiveContent if available, or export from tree
+            let schemaXml = effectiveContent || "";
+            if (!schemaXml && effectiveTree) {
+              schemaXml = await api.schema.exportSchemaXml(effectiveTree);
             }
 
             // Extract template info from schemaPath if it was loaded from a template
@@ -403,8 +412,13 @@ export const RightPanel = () => {
     };
 
     // Auto-create handler for watch mode - skips validation UI and directly creates
-    autoCreateHandlerRef.current = async () => {
-      if (!canExecute || progress.status === "running") {
+    // Accepts optional overrides to use newly parsed tree/content before state updates
+    autoCreateHandlerRef.current = async (overrides) => {
+      // Check if we can execute - use override tree if provided for the check
+      const effectiveTree = overrides?.tree ?? schemaTree;
+      const canExecuteNow = effectiveTree && outputPath && projectName;
+
+      if (!canExecuteNow || progress.status === "running") {
         return;
       }
 
@@ -430,8 +444,8 @@ export const RightPanel = () => {
         return;
       }
 
-      // Execute creation (not dry run for watch mode)
-      await executeCreate(false);
+      // Execute creation (not dry run for watch mode), passing overrides
+      await executeCreate(false, overrides);
     };
   });
 
