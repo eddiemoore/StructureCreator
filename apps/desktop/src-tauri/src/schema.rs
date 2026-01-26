@@ -55,7 +55,7 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
     let mut reader = Reader::from_str(xml_content);
     reader.config_mut().trim_text(true);
 
-    let mut stack: Vec<SchemaNode> = Vec::new();
+    let mut stack: Vec<(SchemaNode, String)> = Vec::new();  // (node, accumulated_text)
     let mut root: Option<SchemaNode> = None;
     let mut hooks: Option<SchemaHooks> = None;
     let mut in_hooks = false;
@@ -75,12 +75,23 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
                 } else if in_hooks && tag_name == "post-create" {
                     current_hook_text.clear();
                 } else if let Some(node) = parse_element(e)? {
-                    stack.push(node);
+                    stack.push((node, String::new()));
                 }
             }
             Ok(Event::Text(ref e)) => {
                 if in_hooks {
                     current_hook_text.push_str(&e.unescape()?.into_owned());
+                } else if let Some((ref node, ref mut text)) = stack.last_mut() {
+                    if node.node_type == "file" {
+                        text.push_str(&e.unescape()?.into_owned());
+                    }
+                }
+            }
+            Ok(Event::CData(ref e)) => {
+                if let Some((ref node, ref mut text)) = stack.last_mut() {
+                    if node.node_type == "file" {
+                        text.push_str(&String::from_utf8_lossy(e));
+                    }
                 }
             }
             Ok(Event::Empty(ref e)) => {
@@ -94,7 +105,7 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
 
                 if let Some(node) = parse_element(e)? {
                     // Self-closing tag - add to parent
-                    if let Some(parent) = stack.last_mut() {
+                    if let Some((parent, _)) = stack.last_mut() {
                         parent.children.get_or_insert_with(Vec::new).push(node);
                     } else {
                         root = Some(node);
@@ -115,8 +126,12 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
                         }
                     }
                     current_hook_text.clear();
-                } else if let Some(node) = stack.pop() {
-                    if let Some(parent) = stack.last_mut() {
+                } else if let Some((mut node, text)) = stack.pop() {
+                    // Assign accumulated content to file nodes
+                    if node.node_type == "file" && !text.is_empty() {
+                        node.content = Some(text);
+                    }
+                    if let Some((parent, _)) = stack.last_mut() {
                         parent.children.get_or_insert_with(Vec::new).push(node);
                     } else {
                         root = Some(node);
@@ -403,6 +418,10 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
             if let Some(url) = &node.url {
                 xml.push_str(&format!("{}<file name=\"{}\" url=\"{}\" />\n",
                     indent_str, escape_xml(&node.name), escape_xml(url)));
+            } else if let Some(content) = &node.content {
+                xml.push_str(&format!("{}<file name=\"{}\">\n", indent_str, escape_xml(&node.name)));
+                xml.push_str(&format!("{}<![CDATA[{}]]>\n", indent_str, content));
+                xml.push_str(&format!("{}</file>\n", indent_str));
             } else {
                 xml.push_str(&format!("{}<file name=\"{}\" />\n", indent_str, escape_xml(&node.name)));
             }
@@ -846,7 +865,7 @@ fn parse_template_children(xml_content: &str) -> Result<(Vec<SchemaNode>, Option
     let mut reader = Reader::from_str(xml_content);
     reader.config_mut().trim_text(true);
 
-    let mut stack: Vec<SchemaNode> = Vec::new();
+    let mut stack: Vec<(SchemaNode, String)> = Vec::new();  // (node, accumulated_text)
     let mut root_children: Vec<SchemaNode> = Vec::new();
     let mut in_template = false;
     let mut template_depth = 0;
@@ -877,13 +896,24 @@ fn parse_template_children(xml_content: &str) -> Result<(Vec<SchemaNode>, Option
                     } else if in_hooks && tag_name == "post-create" {
                         current_hook_text.clear();
                     } else if let Some(node) = parse_element(e)? {
-                        stack.push(node);
+                        stack.push((node, String::new()));
                     }
                 }
             }
             Ok(Event::Text(ref e)) => {
                 if in_hooks {
                     current_hook_text.push_str(&e.unescape()?.into_owned());
+                } else if let Some((ref node, ref mut text)) = stack.last_mut() {
+                    if node.node_type == "file" {
+                        text.push_str(&e.unescape()?.into_owned());
+                    }
+                }
+            }
+            Ok(Event::CData(ref e)) => {
+                if let Some((ref node, ref mut text)) = stack.last_mut() {
+                    if node.node_type == "file" {
+                        text.push_str(&String::from_utf8_lossy(e));
+                    }
                 }
             }
             Ok(Event::Empty(ref e)) => {
@@ -899,7 +929,7 @@ fn parse_template_children(xml_content: &str) -> Result<(Vec<SchemaNode>, Option
                 }
 
                 if let Some(node) = parse_element(e)? {
-                    if let Some(parent) = stack.last_mut() {
+                    if let Some((parent, _)) = stack.last_mut() {
                         parent.children.get_or_insert_with(Vec::new).push(node);
                     } else {
                         root_children.push(node);
@@ -931,8 +961,12 @@ fn parse_template_children(xml_content: &str) -> Result<(Vec<SchemaNode>, Option
                             }
                         }
                         current_hook_text.clear();
-                    } else if let Some(node) = stack.pop() {
-                        if let Some(parent) = stack.last_mut() {
+                    } else if let Some((mut node, text)) = stack.pop() {
+                        // Assign accumulated content to file nodes
+                        if node.node_type == "file" && !text.is_empty() {
+                            node.content = Some(text);
+                        }
+                        if let Some((parent, _)) = stack.last_mut() {
                             parent.children.get_or_insert_with(Vec::new).push(node);
                         } else {
                             root_children.push(node);
@@ -1976,5 +2010,208 @@ mod tests {
         assert!(!name_validation2.required);               // From base2
         // Note: max_length from base1 is lost because base2's entire ValidationRule replaces it
         assert_eq!(name_validation2.max_length, None);
+    }
+
+    // ========================================================================
+    // CDATA Content Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_file_with_cdata_content() {
+        let xml = r#"
+            <folder name="project">
+                <file name="component.tsx">
+<![CDATA[import React from 'react';
+
+export const Component = () => {
+  return <div>Hello</div>;
+};
+]]>
+                </file>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert_eq!(tree.root.name, "project");
+
+        let children = tree.root.children.as_ref().unwrap();
+        assert_eq!(children.len(), 1);
+
+        let file = &children[0];
+        assert_eq!(file.name, "component.tsx");
+        assert_eq!(file.node_type, "file");
+        assert!(file.content.is_some());
+
+        let content = file.content.as_ref().unwrap();
+        assert!(content.contains("import React from 'react'"));
+        assert!(content.contains("export const Component"));
+    }
+
+    #[test]
+    fn test_parse_file_with_text_content() {
+        let xml = r#"
+            <folder name="project">
+                <file name="readme.txt">Hello World!</file>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let children = tree.root.children.as_ref().unwrap();
+        let file = &children[0];
+
+        assert_eq!(file.content, Some("Hello World!".to_string()));
+    }
+
+    #[test]
+    fn test_parse_file_without_content() {
+        let xml = r#"
+            <folder name="project">
+                <file name="empty.txt" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let children = tree.root.children.as_ref().unwrap();
+        let file = &children[0];
+
+        assert!(file.content.is_none());
+    }
+
+    #[test]
+    fn test_schema_to_xml_with_file_content() {
+        let tree = SchemaTree {
+            root: SchemaNode {
+                id: None,
+                node_type: "folder".to_string(),
+                name: "project".to_string(),
+                url: None,
+                content: None,
+                children: Some(vec![
+                    SchemaNode {
+                        id: None,
+                        node_type: "file".to_string(),
+                        name: "test.tsx".to_string(),
+                        url: None,
+                        content: Some("export const Test = () => <div>Test</div>;".to_string()),
+                        children: None,
+                        condition_var: None,
+                        repeat_count: None,
+                        repeat_as: None,
+                    }
+                ]),
+                condition_var: None,
+                repeat_count: None,
+                repeat_as: None,
+            },
+            stats: SchemaStats {
+                folders: 1,
+                files: 1,
+                downloads: 0,
+            },
+            hooks: None,
+        };
+
+        let xml = schema_to_xml(&tree);
+        assert!(xml.contains("<file name=\"test.tsx\">"));
+        assert!(xml.contains("<![CDATA[export const Test = () => <div>Test</div>;]]>"));
+        assert!(xml.contains("</file>"));
+    }
+
+    #[test]
+    fn test_cdata_content_roundtrip() {
+        let original_content = r#"import React from 'react';
+
+export const Button = () => {
+  return <button className="btn">Click me</button>;
+};
+"#;
+
+        let xml = format!(r#"
+            <folder name="src">
+                <file name="Button.tsx">
+<![CDATA[{}]]>
+                </file>
+            </folder>
+        "#, original_content);
+
+        // Parse
+        let tree = parse_xml_schema(&xml).unwrap();
+        let file = &tree.root.children.as_ref().unwrap()[0];
+        assert_eq!(file.content.as_ref().unwrap(), original_content);
+
+        // Export back to XML
+        let exported_xml = schema_to_xml(&tree);
+
+        // Parse again
+        let tree2 = parse_xml_schema(&exported_xml).unwrap();
+        let file2 = &tree2.root.children.as_ref().unwrap()[0];
+        assert_eq!(file2.content.as_ref().unwrap(), original_content);
+    }
+
+    #[test]
+    fn test_parse_file_with_variables_in_cdata() {
+        let xml = r#"
+            <folder name="%PROJECT_NAME%">
+                <file name="%COMPONENT_NAME:PascalCase%.tsx">
+<![CDATA[import React from 'react';
+
+export const %COMPONENT_NAME:PascalCase% = () => {
+  return <div className="%COMPONENT_NAME:kebab-case%">Hello</div>;
+};
+]]>
+                </file>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let file = &tree.root.children.as_ref().unwrap()[0];
+
+        let content = file.content.as_ref().unwrap();
+        assert!(content.contains("%COMPONENT_NAME:PascalCase%"));
+        assert!(content.contains("%COMPONENT_NAME:kebab-case%"));
+    }
+
+    #[test]
+    fn test_template_inheritance_with_cdata_content() {
+        let base_xml = r#"<folder name="%PROJECT%">
+            <file name="base.ts">
+<![CDATA[// Base file content
+export const BASE = true;
+]]>
+            </file>
+        </folder>"#;
+
+        let extending_xml = r#"<template extends="base">
+            <file name="extension.ts">
+<![CDATA[// Extension file content
+export const EXTENSION = true;
+]]>
+            </file>
+        </template>"#;
+
+        let loader = |name: &str| -> Option<TemplateData> {
+            if name == "base" {
+                Some(TemplateData {
+                    schema_xml: base_xml.to_string(),
+                    variables: HashMap::new(),
+                    variable_validation: HashMap::new(),
+                })
+            } else {
+                None
+            }
+        };
+
+        let result = resolve_template_inheritance(extending_xml, &loader).unwrap();
+
+        let children = result.tree.root.children.as_ref().unwrap();
+        assert_eq!(children.len(), 2);
+
+        // Check base file has content
+        let base_file = children.iter().find(|c| c.name == "base.ts").unwrap();
+        assert!(base_file.content.as_ref().unwrap().contains("// Base file content"));
+
+        // Check extension file has content
+        let ext_file = children.iter().find(|c| c.name == "extension.ts").unwrap();
+        assert!(ext_file.content.as_ref().unwrap().contains("// Extension file content"));
     }
 }
