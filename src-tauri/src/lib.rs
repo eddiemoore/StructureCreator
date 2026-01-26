@@ -2251,6 +2251,7 @@ fn cmd_update_template(
     name: Option<String>,
     description: Option<String>,
     icon_color: Option<String>,
+    wizard_config: Option<serde_json::Value>,
 ) -> Result<Option<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state
@@ -2261,6 +2262,7 @@ fn cmd_update_template(
                 name,
                 description,
                 icon_color,
+                wizard_config,
             },
         )
         .map_err(|e| e.to_string())
