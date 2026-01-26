@@ -158,10 +158,12 @@ pub struct Template {
     pub updated_at: String,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Wizard configuration for guided template setup (JSON)
+    pub wizard_config: Option<serde_json::Value>,
 }
 
 /// Helper function to construct a Template from a database row.
-/// Expects columns in order: id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
+/// Expects columns in order: id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags, wizard_config
 fn row_to_template(row: &Row) -> rusqlite::Result<Template> {
     let variables_json: String = row.get(4)?;
     let variables: HashMap<String, String> = serde_json::from_str(&variables_json)
@@ -194,6 +196,16 @@ fn row_to_template(row: &Row) -> rusqlite::Result<Template> {
         })
         .unwrap_or_default();
 
+    // wizard_config may be NULL for templates without wizards
+    let wizard_config_json: Option<String> = row.get(12)?;
+    let wizard_config: Option<serde_json::Value> = wizard_config_json
+        .and_then(|json| {
+            serde_json::from_str(&json).unwrap_or_else(|e| {
+                eprintln!("Warning: Failed to parse wizard_config JSON, using null: {}", e);
+                None
+            })
+        });
+
     Ok(Template {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -207,6 +219,7 @@ fn row_to_template(row: &Row) -> rusqlite::Result<Template> {
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
         tags,
+        wizard_config,
     })
 }
 
@@ -223,6 +236,8 @@ pub struct CreateTemplateInput {
     pub is_favorite: bool,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Optional wizard configuration (JSON)
+    pub wizard_config: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +245,8 @@ pub struct UpdateTemplateInput {
     pub name: Option<String>,
     pub description: Option<String>,
     pub icon_color: Option<String>,
+    /// Optional wizard configuration update (JSON)
+    pub wizard_config: Option<serde_json::Value>,
 }
 
 pub struct Database {
@@ -314,6 +331,17 @@ impl Database {
             }
         }
 
+        // Migration: Add wizard_config column (JSON object, nullable)
+        if let Err(e) = conn.execute(
+            "ALTER TABLE templates ADD COLUMN wizard_config TEXT DEFAULT NULL",
+            [],
+        ) {
+            let err_msg = e.to_string();
+            if !err_msg.contains("duplicate column") {
+                eprintln!("Warning: Migration failed (wizard_config column): {}", err_msg);
+            }
+        }
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -347,7 +375,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
+            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags, wizard_config
              FROM templates
              ORDER BY is_favorite DESC, use_count DESC, updated_at DESC",
         )?;
@@ -360,7 +388,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
+            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags, wizard_config
              FROM templates
              WHERE id = ?",
         )?;
@@ -377,7 +405,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags
+            "SELECT id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags, wizard_config
              FROM templates
              WHERE LOWER(name) = LOWER(?)",
         )?;
@@ -400,11 +428,13 @@ impl Database {
         let variables_json = serde_json::to_string(&input.variables).unwrap_or_else(|_| "{}".to_string());
         let validation_json = serde_json::to_string(&input.variable_validation).unwrap_or_else(|_| "{}".to_string());
         let tags_json = serde_json::to_string(&validated_tags).unwrap_or_else(|_| "[]".to_string());
+        let wizard_config_json: Option<String> = input.wizard_config.as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "null".to_string()));
         let is_favorite_int = if input.is_favorite { 1 } else { 0 };
 
         conn.execute(
-            "INSERT INTO templates (id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+            "INSERT INTO templates (id, name, description, schema_xml, variables, variable_validation, icon_color, is_favorite, use_count, created_at, updated_at, tags, wizard_config)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)",
             rusqlite::params![
                 &id,
                 &input.name,
@@ -417,6 +447,7 @@ impl Database {
                 &now,
                 &now,
                 &tags_json,
+                &wizard_config_json,
             ],
         )?;
 
@@ -433,6 +464,7 @@ impl Database {
             created_at: now.clone(),
             updated_at: now,
             tags: validated_tags,
+            wizard_config: input.wizard_config,
         })
     }
 
@@ -442,29 +474,46 @@ impl Database {
 
         // Build dynamic update query
         let mut updates = vec!["updated_at = ?"];
-        let mut params: Vec<String> = vec![now.clone()];
+        let mut string_params: Vec<String> = vec![now.clone()];
+        let mut has_wizard_config = false;
+        let mut wizard_config_json: Option<String> = None;
 
         if let Some(name) = input.name {
             updates.push("name = ?");
-            params.push(name);
+            string_params.push(name);
         }
         if let Some(description) = input.description {
             updates.push("description = ?");
-            params.push(description);
+            string_params.push(description);
         }
         if let Some(icon_color) = input.icon_color {
             updates.push("icon_color = ?");
-            params.push(icon_color);
+            string_params.push(icon_color);
+        }
+        if let Some(ref wc) = input.wizard_config {
+            updates.push("wizard_config = ?");
+            wizard_config_json = Some(serde_json::to_string(wc).unwrap_or_else(|_| "null".to_string()));
+            has_wizard_config = true;
         }
 
-        params.push(id.to_string());
+        string_params.push(id.to_string());
 
         let query = format!(
             "UPDATE templates SET {} WHERE id = ?",
             updates.join(", ")
         );
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        // Build params list, inserting wizard_config in the right position
+        let mut params_refs: Vec<&dyn rusqlite::ToSql> = string_params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+
+        // If we have wizard_config, insert it before the id param
+        if has_wizard_config {
+            if let Some(ref json) = wizard_config_json {
+                // Insert wizard_config param at the right position (before id)
+                params_refs.insert(params_refs.len() - 1, json as &dyn rusqlite::ToSql);
+            }
+        }
+
         conn.execute(&query, params_refs.as_slice())?;
 
         drop(conn);
@@ -778,6 +827,7 @@ mod tests {
             icon_color: Some("#ff0000".to_string()),
             is_favorite: false,
             tags: Vec::new(),
+            wizard_config: None,
         }
     }
 

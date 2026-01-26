@@ -14,6 +14,7 @@ import type {
   DuplicateStrategy,
   ParseWithInheritanceResult,
   RecentProject,
+  WizardConfig,
 } from "../../types/schema";
 
 // ============================================================================
@@ -106,12 +107,14 @@ export interface CreateTemplateInput {
   variableValidation: Record<string, ValidationRule>;
   iconColor: string | null;
   tags?: string[];
+  wizardConfig?: WizardConfig | null;
 }
 
 export interface UpdateTemplateInput {
   name?: string;
   description?: string | null;
   iconColor?: string | null;
+  wizardConfig?: WizardConfig | null;
 }
 
 export interface CreateRecentProjectInput {

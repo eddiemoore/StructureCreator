@@ -127,6 +127,80 @@ export const DATE_FORMATS = [
   { id: "MMM D, YYYY", label: "Short (Jan 15, 2024)" },
 ] as const;
 
+// ============================================================================
+// Template Wizard Types
+// ============================================================================
+
+/** Question types supported by the wizard */
+export type WizardQuestionType = "boolean" | "single" | "multiple" | "text" | "select";
+
+/** A choice option for single/multiple/select questions */
+export interface WizardChoice {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+/** Conditional display rule for a question */
+export interface WizardShowWhen {
+  questionId: string;
+  value: string | boolean | string[];
+}
+
+/** A single question in a wizard step */
+export interface WizardQuestion {
+  id: string;
+  type: WizardQuestionType;
+  question: string;
+  helpText?: string;
+  choices?: WizardChoice[];        // for single/multiple/select
+  defaultValue?: string | boolean | string[];
+  placeholder?: string;            // for text
+  validation?: ValidationRule;     // for text
+  showWhen?: WizardShowWhen;       // conditional display
+}
+
+/** A step containing one or more questions */
+export interface WizardStep {
+  id: string;
+  title: string;
+  description?: string;
+  questions: WizardQuestion[];
+}
+
+/** How wizard answers affect the schema */
+export interface WizardSchemaModifier {
+  questionId: string;
+  action: "include" | "exclude" | "set_variable";
+  nodeConditionVar?: string;    // for include/exclude - the var name used in <if var="...">
+  variableName?: string;        // for set_variable
+  valueMap?: Record<string, string>; // maps answer values to variable values
+}
+
+/** Complete wizard configuration for a template */
+export interface WizardConfig {
+  title: string;
+  description?: string;
+  steps: WizardStep[];
+  schemaModifiers: WizardSchemaModifier[];
+}
+
+/** User answers during wizard completion */
+export type WizardAnswers = Record<string, string | boolean | string[]>;
+
+/** State for an active wizard session */
+export interface WizardState {
+  isOpen: boolean;
+  template: Template | null;
+  currentStep: number;
+  answers: WizardAnswers;
+  previewTree: SchemaTree | null;
+}
+
+// ============================================================================
+// Template Types
+// ============================================================================
+
 export interface Template {
   id: string;
   name: string;
@@ -140,6 +214,7 @@ export interface Template {
   created_at: string;
   updated_at: string;
   tags: string[];
+  wizard_config: WizardConfig | null;
 }
 
 export interface RecentProject {
@@ -175,6 +250,7 @@ export interface TemplateExport {
   variable_validation?: Record<string, ValidationRule>;
   icon_color: string | null;
   tags?: string[];
+  wizard_config?: WizardConfig | null;
 }
 
 export interface TemplateExportFile {
@@ -400,6 +476,9 @@ export interface AppState {
   diffError: string | null;
   showDiffModal: boolean;
 
+  // Wizard
+  wizardState: WizardState | null;
+
   // Actions
   setSchemaPath: (path: string | null) => void;
   setSchemaContent: (content: string | null) => void;
@@ -461,4 +540,11 @@ export interface AppState {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+
+  // Wizard actions
+  openWizard: (template: Template) => void;
+  closeWizard: () => void;
+  setWizardStep: (step: number) => void;
+  updateWizardAnswer: (questionId: string, value: string | boolean | string[]) => void;
+  setWizardPreviewTree: (tree: SchemaTree | null) => void;
 }
