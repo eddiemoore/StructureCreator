@@ -4,6 +4,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   readTextFile,
@@ -24,6 +25,7 @@ import type {
   StructureCreatorAdapter,
   ValidationAdapter,
   TemplateImportExportAdapter,
+  WatchAdapter,
   FileFilter,
   CreateTemplateInput,
   UpdateTemplateInput,
@@ -428,6 +430,85 @@ class TauriTemplateImportExportAdapter implements TemplateImportExportAdapter {
 }
 
 // ============================================================================
+// Watch Adapter (Tauri)
+// ============================================================================
+
+/** Event payload for schema file changes */
+interface SchemaFileChangedPayload {
+  path: string;
+  content: string;
+}
+
+/** Event payload for watch errors */
+interface WatchErrorPayload {
+  error: string;
+}
+
+class TauriWatchAdapter implements WatchAdapter {
+  async startWatch(path: string): Promise<void> {
+    await invoke("cmd_start_watch", { path });
+  }
+
+  async stopWatch(): Promise<void> {
+    await invoke("cmd_stop_watch");
+  }
+
+  onSchemaFileChanged(callback: (path: string, content: string) => void): () => void {
+    let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
+
+    // Set up the listener asynchronously
+    listen<SchemaFileChangedPayload>("schema-file-changed", (event) => {
+      callback(event.payload.path, event.payload.content);
+    }).then((fn) => {
+      if (cancelled) {
+        // Already cancelled before listener was set up, immediately unsubscribe
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    }).catch((err) => {
+      console.error("Failed to set up schema change listener:", err);
+    });
+
+    // Return an unsubscribe function
+    return () => {
+      cancelled = true;
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }
+
+  onWatchError(callback: (error: string) => void): () => void {
+    let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
+
+    // Set up the listener asynchronously
+    listen<WatchErrorPayload>("watch-error", (event) => {
+      callback(event.payload.error);
+    }).then((fn) => {
+      if (cancelled) {
+        // Already cancelled before listener was set up, immediately unsubscribe
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    }).catch((err) => {
+      console.error("Failed to set up watch error listener:", err);
+    });
+
+    // Return an unsubscribe function
+    return () => {
+      cancelled = true;
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }
+}
+
+// ============================================================================
 // Combined Tauri Platform Adapter
 // ============================================================================
 
@@ -438,6 +519,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
   structureCreator: StructureCreatorAdapter;
   validation: ValidationAdapter;
   templateImportExport: TemplateImportExportAdapter;
+  watch: WatchAdapter;
 
   constructor() {
     this.fileSystem = new TauriFileSystemAdapter();
@@ -446,6 +528,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     this.structureCreator = new TauriStructureCreatorAdapter();
     this.validation = new TauriValidationAdapter();
     this.templateImportExport = new TauriTemplateImportExportAdapter();
+    this.watch = new TauriWatchAdapter();
   }
 
   async initialize(): Promise<void> {

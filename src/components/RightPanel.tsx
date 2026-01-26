@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import {
@@ -6,28 +6,14 @@ import {
   CheckIcon,
   ClockIcon,
   AlertCircleIcon,
+  EyeIcon,
+  EyeOffIcon,
+  WarningIcon,
+  LoaderIcon,
 } from "./Icons";
 import { DiffPreviewModal } from "./DiffPreviewModal";
 import type { CreateResult, ResultSummary, ValidationRule } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
-
-const WarningIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
 
 export const RightPanel = () => {
   const {
@@ -44,6 +30,9 @@ export const RightPanel = () => {
     diffLoading,
     diffError,
     showDiffModal,
+    watchEnabled,
+    watchAutoCreate,
+    isWatching,
     setDryRun,
     setOverwrite,
     setDiffResult,
@@ -55,17 +44,28 @@ export const RightPanel = () => {
     clearLogs,
     setValidationErrors,
     setRecentProjects,
+    setWatchEnabled,
+    setWatchAutoCreate,
+    setIsWatching,
+    setSchemaContent,
+    setSchemaTree,
   } = useAppStore();
 
   const [summary, setSummary] = useState<ResultSummary | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
+  const [watchStarting, setWatchStarting] = useState(false);
 
   const canExecute = schemaTree && outputPath && projectName;
+  const canWatch = schemaPath && schemaPath !== "new-schema" && !schemaPath.startsWith("template:") && api.isTauri();
 
   // Ref to hold the create handler for keyboard shortcut
   const handleCreateRef = useRef<(() => void) | null>(null);
 
-  // Listen for keyboard shortcut event
+  // Ref for the auto-create handler (used in watch mode callbacks)
+  // Accepts optional overrides for tree/content/varsMap to use newly parsed values before state updates
+  const autoCreateHandlerRef = useRef<((overrides?: { tree?: typeof schemaTree; content?: string; varsMap?: Record<string, string> }) => Promise<void>) | null>(null);
+
+  // Keyboard shortcut subscription
   useEffect(() => {
     const handleShortcut = () => {
       if (handleCreateRef.current) {
@@ -78,6 +78,102 @@ export const RightPanel = () => {
       window.removeEventListener(SHORTCUT_EVENTS.CREATE_STRUCTURE, handleShortcut);
     };
   }, []);
+
+  // Watch mode subscription - manages file watcher lifecycle
+  useEffect(() => {
+    if (!watchEnabled || !canWatch || !schemaPath) {
+      return;
+    }
+
+    const unsubscribers: (() => void)[] = [];
+    let mounted = true;
+
+    // Show loading state while initializing
+    setWatchStarting(true);
+
+    // Subscribe to schema file changes
+    const unsubChange = api.watch.onSchemaFileChanged(async (path, content) => {
+      if (!mounted) return;
+
+      addLog({ type: "info", message: `Schema file changed: ${path}` });
+
+      // Parse and update the schema
+      try {
+        const tree = await api.schema.parseSchema(content);
+        if (!mounted) return;
+
+        setSchemaContent(content);
+        setSchemaTree(tree);
+        addLog({ type: "success", message: "Schema reloaded successfully" });
+
+        // Auto-create if enabled and we have a valid setup
+        // Pass the new tree/content directly since React state hasn't updated yet
+        if (watchAutoCreate && autoCreateHandlerRef.current) {
+          addLog({ type: "info", message: "Auto-creating structure..." });
+          await autoCreateHandlerRef.current({ tree, content });
+        }
+      } catch (e) {
+        if (!mounted) return;
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        addLog({ type: "error", message: `Failed to parse schema: ${errorMessage}` });
+      }
+    });
+    unsubscribers.push(unsubChange);
+
+    // Subscribe to watch errors
+    const unsubError = api.watch.onWatchError((error) => {
+      if (!mounted) return;
+      addLog({ type: "error", message: `Watch error: ${error}` });
+      setIsWatching(false);
+    });
+    unsubscribers.push(unsubError);
+
+    // Start watching the file
+    api.watch.startWatch(schemaPath)
+      .then(() => {
+        if (!mounted) return;
+        setIsWatching(true);
+        setWatchStarting(false);
+        addLog({ type: "success", message: `Now watching: ${schemaPath}` });
+      })
+      .catch((e) => {
+        if (!mounted) return;
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        addLog({ type: "error", message: `Failed to start watch: ${errorMessage}` });
+        setWatchEnabled(false);
+        setWatchStarting(false);
+      });
+
+    return () => {
+      mounted = false;
+      unsubscribers.forEach((unsub) => unsub());
+      api.watch.stopWatch().catch(() => {
+        // Ignore errors when stopping
+      });
+      setIsWatching(false);
+      setWatchStarting(false);
+    };
+  }, [watchEnabled, schemaPath, canWatch, watchAutoCreate, addLog, setSchemaContent, setSchemaTree, setIsWatching, setWatchEnabled]);
+
+  // Toggle watch mode
+  const handleToggleWatch = () => {
+    if (watchEnabled) {
+      setWatchEnabled(false);
+      addLog({ type: "info", message: "Watch mode disabled" });
+    } else {
+      setWatchEnabled(true);
+    }
+  };
+
+  // Handle auto-create toggle with persistence
+  const handleAutoCreateChange = async (checked: boolean) => {
+    setWatchAutoCreate(checked);
+    try {
+      await api.database.setSetting("watchAutoCreate", String(checked));
+    } catch (e) {
+      console.warn("Failed to save watchAutoCreate setting:", e);
+    }
+  };
 
   const toggleErrorDetails = (id: string) => {
     setExpandedErrors((prev) => {
@@ -145,13 +241,21 @@ export const RightPanel = () => {
   };
 
   // Execute the actual structure creation
-  const executeCreate = async (isDryRun: boolean) => {
-    const { varsMap, rulesMap } = buildVariableMaps();
+  // Optional overrides allow watch mode to pass the newly parsed tree/content
+  // before React state has updated, and varsMap to avoid rebuilding it
+  const executeCreate = async (
+    isDryRun: boolean,
+    overrides?: { tree?: typeof schemaTree; content?: string; varsMap?: Record<string, string> }
+  ) => {
+    const effectiveTree = overrides?.tree ?? schemaTree;
+    const effectiveContent = overrides?.content ?? schemaContent;
+    const { varsMap: builtVarsMap, rulesMap } = buildVariableMaps();
+    const varsMap = overrides?.varsMap ?? builtVarsMap;
 
     setProgress({
       status: "running",
       current: 0,
-      total: schemaTree!.stats.folders + schemaTree!.stats.files,
+      total: effectiveTree!.stats.folders + effectiveTree!.stats.files,
     });
 
     try {
@@ -159,15 +263,15 @@ export const RightPanel = () => {
 
       let result: CreateResult;
 
-      if (schemaContent) {
-        result = await api.structureCreator.createStructure(schemaContent, {
+      if (effectiveContent) {
+        result = await api.structureCreator.createStructure(effectiveContent, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
           overwrite,
         });
-      } else if (schemaTree) {
-        result = await api.structureCreator.createStructureFromTree(schemaTree, {
+      } else if (effectiveTree) {
+        result = await api.structureCreator.createStructureFromTree(effectiveTree, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
@@ -212,10 +316,10 @@ export const RightPanel = () => {
         // Record to history for non-dry-run successful creations
         if (!isDryRun) {
           try {
-            // Get schema XML - use schemaContent if available, or export from tree
-            let schemaXml = schemaContent || "";
-            if (!schemaXml && schemaTree) {
-              schemaXml = await api.schema.exportSchemaXml(schemaTree);
+            // Get schema XML - use effectiveContent if available, or export from tree
+            let schemaXml = effectiveContent || "";
+            if (!schemaXml && effectiveTree) {
+              schemaXml = await api.schema.exportSchemaXml(effectiveTree);
             }
 
             // Extract template info from schemaPath if it was loaded from a template
@@ -297,15 +401,52 @@ export const RightPanel = () => {
     await executeCreate(false);
   };
 
-  // Update ref so keyboard shortcut can trigger create
-  // Using useLayoutEffect to ensure ref is updated synchronously after render
-  // before any effects that might use it. Empty deps intentional - we want this
+  // Update refs so keyboard shortcut and watch mode can trigger create
+  // Using useLayoutEffect to ensure refs are updated synchronously after render
+  // before any effects that might use them. Empty deps intentional - we want this
   // to run on every render to capture the latest function references.
   useLayoutEffect(() => {
     handleCreateRef.current = () => {
       if (canExecute && progress.status !== "running") {
         handleCreate();
       }
+    };
+
+    // Auto-create handler for watch mode - skips validation UI and directly creates
+    // Accepts optional overrides to use newly parsed tree/content before state updates
+    autoCreateHandlerRef.current = async (overrides) => {
+      // Check if we can execute - use override tree if provided for the check
+      const effectiveTree = overrides?.tree ?? schemaTree;
+      const canExecuteNow = effectiveTree && outputPath && projectName;
+
+      if (!canExecuteNow || progress.status === "running") {
+        return;
+      }
+
+      // Verify output path still exists before auto-creating
+      try {
+        const pathExists = await api.fileSystem.exists(outputPath!);
+        if (!pathExists) {
+          addLog({ type: "error", message: "Auto-create aborted: output path no longer exists" });
+          return;
+        }
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        addLog({ type: "error", message: `Auto-create aborted: failed to verify output path - ${errorMessage}` });
+        return;
+      }
+
+      const { varsMap, rulesMap } = buildVariableMaps();
+
+      // Run validation silently
+      const isValid = await runValidation(varsMap, rulesMap);
+      if (!isValid) {
+        addLog({ type: "error", message: "Auto-create aborted due to validation errors" });
+        return;
+      }
+
+      // Execute creation (not dry run for watch mode), passing overrides including varsMap
+      await executeCreate(false, { ...overrides, varsMap });
     };
   });
 
@@ -357,6 +498,66 @@ export const RightPanel = () => {
             Overwrite
           </button>
         </div>
+
+        {/* Watch Mode Controls */}
+        {canWatch && (
+          <div className="mt-3 pt-3 border-t border-border-subtle">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-mac-xs text-text-muted">Watch Mode</span>
+              {watchStarting && (
+                <span className="flex items-center gap-1 text-mac-xs text-system-blue">
+                  <LoaderIcon size={12} className="animate-spin" />
+                  Starting...
+                </span>
+              )}
+              {isWatching && !watchStarting && (
+                <span className="flex items-center gap-1 text-mac-xs text-system-green">
+                  <span className="w-1.5 h-1.5 rounded-full bg-system-green animate-pulse-slow" />
+                  Active
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleToggleWatch}
+              disabled={progress.status === "running" || watchStarting}
+              className={`w-full py-2 px-3 flex items-center justify-center gap-2 text-mac-sm rounded-mac border transition-colors ${
+                watchEnabled
+                  ? "bg-system-blue/10 border-system-blue/30 text-system-blue"
+                  : "bg-card-bg border-border-default text-text-secondary hover:bg-mac-bg-secondary"
+              } ${watchStarting ? "opacity-70 cursor-not-allowed" : ""}`}
+              title="Monitor schema file for changes and auto-recreate"
+            >
+              {watchStarting ? (
+                <>
+                  <LoaderIcon size={16} className="animate-spin" />
+                  Starting...
+                </>
+              ) : watchEnabled ? (
+                <>
+                  <EyeIcon size={16} />
+                  Stop Watching
+                </>
+              ) : (
+                <>
+                  <EyeOffIcon size={16} />
+                  Watch Schema
+                </>
+              )}
+            </button>
+            {watchEnabled && (
+              <label className="flex items-center gap-2 mt-2 text-mac-xs text-text-secondary cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={watchAutoCreate}
+                  onChange={(e) => handleAutoCreateChange(e.target.checked)}
+                  className="rounded border-border-default"
+                  disabled={watchStarting}
+                />
+                Auto-create on change
+              </label>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Summary Card */}

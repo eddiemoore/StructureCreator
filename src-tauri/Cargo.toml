@@ -54,6 +54,9 @@ tempfile = "3"
 dirs = "5"
 # Text diff algorithm
 similar = "2"
+# File system watcher for watch mode
+notify = "6"
+notify-debouncer-mini = "0.4"
 
 [profile.release]
 panic = "abort"

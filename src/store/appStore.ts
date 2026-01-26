@@ -158,6 +158,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   outputPath: null,
   projectName: "my-project",
 
+  // Watch mode
+  watchEnabled: false,
+  watchAutoCreate: true,
+  isWatching: false,
+
   // Variables
   variables: [
     { name: "%DATE%", value: new Date().toISOString().split("T")[0] },
@@ -431,6 +436,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   setDiffError: (diffError: string | null) => set({ diffError }),
   setShowDiffModal: (showDiffModal: boolean) => set({ showDiffModal }),
 
+  // Watch mode actions
+  setWatchEnabled: (watchEnabled: boolean) => set({ watchEnabled }),
+  setWatchAutoCreate: (watchAutoCreate: boolean) => set({ watchAutoCreate }),
+  setIsWatching: (isWatching: boolean) => set({ isWatching }),
+
+  // Reset transient state but preserve user preferences like watchAutoCreate
+  // (which is persisted to the database and loaded on startup)
   reset: () =>
     set({
       schemaPath: null,
@@ -445,6 +457,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       diffLoading: false,
       diffError: null,
       showDiffModal: false,
+      watchEnabled: false,
+      isWatching: false,
     }),
 
   // Schema editing actions

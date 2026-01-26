@@ -11,6 +11,7 @@ import type {
   StructureCreatorAdapter,
   ValidationAdapter,
   TemplateImportExportAdapter,
+  WatchAdapter,
   CreateStructureOptions,
 } from "../types";
 
@@ -245,6 +246,30 @@ class WebValidationAdapter implements ValidationAdapter {
 }
 
 // ============================================================================
+// Web Watch Adapter (Stub - file watching not supported in browsers)
+// ============================================================================
+
+class WebWatchAdapter implements WatchAdapter {
+  async startWatch(_path: string): Promise<void> {
+    throw new Error("Watch mode is not supported in the web browser. Please use the desktop app for file watching functionality.");
+  }
+
+  async stopWatch(): Promise<void> {
+    // No-op in web mode
+  }
+
+  onSchemaFileChanged(_callback: (path: string, content: string) => void): () => void {
+    // Return a no-op unsubscribe function
+    return () => {};
+  }
+
+  onWatchError(_callback: (error: string) => void): () => void {
+    // Return a no-op unsubscribe function
+    return () => {};
+  }
+}
+
+// ============================================================================
 // Combined Web Platform Adapter
 // ============================================================================
 
@@ -255,6 +280,7 @@ export class WebPlatformAdapter implements PlatformAdapter {
   structureCreator: StructureCreatorAdapter;
   validation: ValidationAdapter;
   templateImportExport: TemplateImportExportAdapter;
+  watch: WatchAdapter;
 
   private indexedDB: IndexedDBAdapter;
 
@@ -266,6 +292,7 @@ export class WebPlatformAdapter implements PlatformAdapter {
     this.structureCreator = new WebStructureCreatorAdapter();
     this.validation = new WebValidationAdapter();
     this.templateImportExport = new WebTemplateImportExportAdapter(this.database);
+    this.watch = new WebWatchAdapter();
   }
 
   async initialize(): Promise<void> {

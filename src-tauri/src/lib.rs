@@ -21,6 +21,14 @@ use tauri::{
     Manager, State, Emitter,
 };
 
+// File watcher imports
+#[cfg(feature = "tauri-app")]
+use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
+#[cfg(feature = "tauri-app")]
+use std::time::Duration;
+#[cfg(feature = "tauri-app")]
+use std::sync::mpsc;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub log_type: String, // "success", "error", "warning", "info"
@@ -2182,6 +2190,10 @@ fn validate_template_name(name: &str) -> Result<String, String> {
 #[cfg(feature = "tauri-app")]
 pub struct AppState {
     pub db: Database,
+    /// Channel sender to stop the file watcher
+    pub watch_stop_tx: Option<mpsc::Sender<()>>,
+    /// Currently watched file path
+    pub watch_path: Option<String>,
 }
 
 #[cfg(feature = "tauri-app")]
@@ -2659,6 +2671,170 @@ fn cmd_delete_recent_project(state: State<Mutex<AppState>>, id: String) -> Resul
 fn cmd_clear_recent_projects(state: State<Mutex<AppState>>) -> Result<usize, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.clear_recent_projects().map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Watch Mode Commands
+// ============================================================================
+
+/// Payload emitted when a watched schema file changes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaFileChangedPayload {
+    pub path: String,
+    pub content: String,
+}
+
+/// Payload emitted when watch error occurs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchErrorPayload {
+    pub error: String,
+}
+
+/// Start watching a schema file for changes
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_start_watch(
+    app: tauri::AppHandle,
+    state: State<Mutex<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let mut state_guard = state.lock().map_err(|e| e.to_string())?;
+
+    // Stop any existing watcher first
+    if let Some(tx) = state_guard.watch_stop_tx.take() {
+        let _ = tx.send(());
+    }
+
+    // Validate the path exists and is a file
+    let watch_path = PathBuf::from(&path);
+    if !watch_path.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+    if !watch_path.is_file() {
+        return Err(format!("Path is not a file: {}", path));
+    }
+
+    // Create a channel to stop the watcher
+    let (stop_tx, stop_rx) = mpsc::channel::<()>();
+
+    // Store the watcher state
+    state_guard.watch_stop_tx = Some(stop_tx);
+    state_guard.watch_path = Some(path.clone());
+
+    // Get the parent directory to watch (notify doesn't always work well watching single files)
+    let watch_dir = watch_path.parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| watch_path.clone());
+    let file_name = watch_path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    // Clone values for the watcher thread
+    let app_handle = app.clone();
+    let watched_path = path.clone();
+    let watched_file_name = file_name;
+
+    // Spawn a thread to run the file watcher
+    std::thread::spawn(move || {
+        // Create a debounced watcher with 500ms delay to avoid rapid-fire events
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let mut debouncer = match new_debouncer(Duration::from_millis(500), tx) {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = app_handle.emit("watch-error", WatchErrorPayload {
+                    error: format!("Failed to create file watcher: {}", e),
+                });
+                return;
+            }
+        };
+
+        // Start watching the directory
+        if let Err(e) = debouncer.watcher().watch(&watch_dir, RecursiveMode::NonRecursive) {
+            let _ = app_handle.emit("watch-error", WatchErrorPayload {
+                error: format!("Failed to watch directory: {}", e),
+            });
+            return;
+        }
+
+        loop {
+            // Check if we should stop
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
+
+            // Check for file change events with a timeout
+            match rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(result) => {
+                    match result {
+                        Ok(events) => {
+                            // Check if any event is for our watched file
+                            let relevant_event = events.iter().any(|event| {
+                                event.path.file_name()
+                                    .map(|n| n.to_string_lossy() == watched_file_name)
+                                    .unwrap_or(false)
+                            });
+
+                            if relevant_event {
+                                // Read the file content
+                                match std::fs::read_to_string(&watched_path) {
+                                    Ok(content) => {
+                                        let _ = app_handle.emit("schema-file-changed", SchemaFileChangedPayload {
+                                            path: watched_path.clone(),
+                                            content,
+                                        });
+                                    }
+                                    Err(e) => {
+                                        let _ = app_handle.emit("watch-error", WatchErrorPayload {
+                                            error: format!("Failed to read file: {}", e),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let _ = app_handle.emit("watch-error", WatchErrorPayload {
+                                error: format!("Watch error: {:?}", e),
+                            });
+                        }
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // Continue the loop
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    // Watcher disconnected, exit the loop
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+/// Stop watching the schema file
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_stop_watch(state: State<Mutex<AppState>>) -> Result<(), String> {
+    let mut state_guard = state.lock().map_err(|e| e.to_string())?;
+
+    // Send stop signal to the watcher thread
+    if let Some(tx) = state_guard.watch_stop_tx.take() {
+        let _ = tx.send(());
+    }
+
+    state_guard.watch_path = None;
+
+    Ok(())
+}
+
+/// Get the currently watched path (if any)
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_get_watch_status(state: State<Mutex<AppState>>) -> Result<Option<String>, String> {
+    let state_guard = state.lock().map_err(|e| e.to_string())?;
+    Ok(state_guard.watch_path.clone())
 }
 
 /// Strip % delimiters from variable name for user-friendly display
@@ -3267,7 +3443,11 @@ pub fn run() {
             let db = Database::new(app_data_dir).expect("Failed to initialize database");
 
             // Store app state
-            app.manage(Mutex::new(AppState { db }));
+            app.manage(Mutex::new(AppState {
+                db,
+                watch_stop_tx: None,
+                watch_path: None,
+            }));
 
             // Create native menu
             let handle = app.handle();
@@ -3387,7 +3567,10 @@ pub fn run() {
             cmd_get_recent_project,
             cmd_add_recent_project,
             cmd_delete_recent_project,
-            cmd_clear_recent_projects
+            cmd_clear_recent_projects,
+            cmd_start_watch,
+            cmd_stop_watch,
+            cmd_get_watch_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

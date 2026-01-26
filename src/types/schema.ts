@@ -202,6 +202,7 @@ export interface Settings {
   defaultProjectName: string;
   theme: ThemeMode;
   accentColor: AccentColor;
+  watchAutoCreate: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -209,6 +210,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultProjectName: "my-project",
   theme: "system",
   accentColor: "blue",
+  watchAutoCreate: true,
 };
 
 export const ACCENT_COLORS: Record<AccentColor, string> = {
@@ -358,6 +360,11 @@ export interface AppState {
   outputPath: string | null;
   projectName: string;
 
+  // Watch mode
+  watchEnabled: boolean;
+  watchAutoCreate: boolean;
+  isWatching: boolean;
+
   // Variables
   variables: Variable[];
   validationErrors: ValidationError[];
@@ -435,6 +442,11 @@ export interface AppState {
   setDiffError: (error: string | null) => void;
   setShowDiffModal: (show: boolean) => void;
   reset: () => void;
+
+  // Watch mode actions
+  setWatchEnabled: (enabled: boolean) => void;
+  setWatchAutoCreate: (autoCreate: boolean) => void;
+  setIsWatching: (watching: boolean) => void;
 
   // Schema editing actions
   setEditMode: (enabled: boolean) => void;

@@ -16,7 +16,7 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [importExportModalOpen, setImportExportModalOpen] = useState(false);
-  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent } = useAppStore();
+  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, setWatchAutoCreate } = useAppStore();
 
   // Ref for search input (passed to LeftPanel)
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +91,7 @@ function App() {
         defaultProjectName: savedSettings.defaultProjectName || DEFAULT_SETTINGS.defaultProjectName,
         theme: (savedSettings.theme as ThemeMode) || DEFAULT_SETTINGS.theme,
         accentColor: (savedSettings.accentColor as AccentColor) || DEFAULT_SETTINGS.accentColor,
+        watchAutoCreate: savedSettings.watchAutoCreate === "true" || savedSettings.watchAutoCreate === undefined,
       };
 
       setSettings(newSettings);
@@ -98,6 +99,9 @@ function App() {
       // Apply theme and accent color
       applyTheme(newSettings.theme);
       applyAccentColor(newSettings.accentColor);
+
+      // Apply watch auto-create setting
+      setWatchAutoCreate(newSettings.watchAutoCreate);
 
       // Apply defaults to current session
       if (newSettings.defaultOutputPath) {
