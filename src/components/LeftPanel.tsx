@@ -890,7 +890,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                                 ? minLength : maxLength,
                             });
                           }}
-                          className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 text-text-primary outline-none focus:border-accent"
+                          className="mac-input w-full text-mac-sm"
                           placeholder="0"
                         />
                       </label>
@@ -915,7 +915,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                                 ? maxLength : minLength,
                             });
                           }}
-                          className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 text-text-primary outline-none focus:border-accent"
+                          className="mac-input w-full text-mac-sm"
                           placeholder="None"
                         />
                       </label>
@@ -933,7 +933,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                             pattern: e.target.value || undefined,
                           })
                         }
-                        className="w-full bg-bg-primary border border-border-default rounded px-2 py-1 font-mono text-text-primary outline-none focus:border-accent"
+                        className="mac-input w-full font-mono text-mac-sm"
                         placeholder="e.g., ^[a-z]+$"
                       />
                     </label>
