@@ -5,12 +5,14 @@ node_modules/
 dist/
 dist-ssr/
 
-# Rust / Cargo (src-tauri)
-src-tauri/target/
+# Rust / Cargo (Tauri)
+**/target/
 
 # Tauri build output
-src-tauri/gen/
-src-tauri/target/
+**/gen/
+
+# Shared package build output
+packages/*/dist/
 
 # Environment files
 .env

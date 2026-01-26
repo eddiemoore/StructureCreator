@@ -2,39 +2,73 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Monorepo Structure
+
+This is a pnpm monorepo with the following packages:
+
+```
+structure-creator/
+├── apps/
+│   ├── desktop/     # Tauri desktop app
+│   └── web/         # Website (Vite + React)
+└── packages/
+    └── shared/      # Shared types
+```
+
 ## Build & Development Commands
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (from root)
+pnpm install
 
-# Start Vite dev server (frontend only, port 1420)
-npm run dev
+# Build shared package first (required before running apps)
+pnpm build:shared
 
-# Run full Tauri app in development mode
-npm run tauri dev
+# Start desktop Vite dev server (frontend only, port 1420)
+pnpm dev:desktop
 
-# Build production frontend
-npm run build
+# Run full Tauri desktop app in development mode
+pnpm tauri:dev
+
+# Start website dev server (port 3000)
+pnpm dev:web
+
+# Start both desktop app and website
+pnpm dev
+
+# Build production frontend for desktop
+pnpm build:desktop
 
 # Build complete Tauri application
-npm run tauri build
-```
+pnpm tauri:build
 
-No test framework is currently configured.
+# Build website
+pnpm build:web
+
+# Run tests
+pnpm test
+```
 
 ## Architecture Overview
 
 Structure Creator is a Tauri 2.0 desktop application that generates folder/file structures from XML schemas.
 
-### Frontend (React/TypeScript)
+### Packages
+
+- **@structure-creator/shared**: Shared TypeScript types used by both desktop and web apps
+- **@structure-creator/desktop**: Tauri desktop application
+- **@structure-creator/web**: Landing page website
+
+### Desktop App (apps/desktop)
+
+#### Frontend (React/TypeScript)
 
 - **Entry**: `src/main.tsx` → `src/App.tsx`
 - **State Management**: Zustand store in `src/store/appStore.ts` - single store with all app state (schema, variables, templates, settings, progress)
-- **Types**: All TypeScript interfaces in `src/types/schema.ts` (SchemaNode, SchemaTree, Template, Settings, AppState)
+- **Types**: Desktop-specific types in `src/types/schema.ts`, shared types re-exported from `@structure-creator/shared`
 - **Layout**: Three-panel layout with LeftPanel (schema input/templates), TreePreview (visual tree), RightPanel (execution/logs)
 
-### Backend (Rust)
+#### Backend (Rust)
 
 - **Tauri Commands**: `src-tauri/src/lib.rs` - all IPC commands prefixed with `cmd_` (e.g., `cmd_parse_schema`, `cmd_create_structure`)
 - **XML Parsing**: `src-tauri/src/schema.rs` - `parse_xml_schema()` parses XML to SchemaTree, `scan_folder_to_schema()` converts folders to schemas
