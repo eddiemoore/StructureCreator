@@ -62,8 +62,8 @@ export const RightPanel = () => {
   const handleCreateRef = useRef<(() => void) | null>(null);
 
   // Ref for the auto-create handler (used in watch mode callbacks)
-  // Accepts optional overrides for tree/content to use newly parsed values before state updates
-  const autoCreateHandlerRef = useRef<((overrides?: { tree?: typeof schemaTree; content?: string }) => Promise<void>) | null>(null);
+  // Accepts optional overrides for tree/content/varsMap to use newly parsed values before state updates
+  const autoCreateHandlerRef = useRef<((overrides?: { tree?: typeof schemaTree; content?: string; varsMap?: Record<string, string> }) => Promise<void>) | null>(null);
 
   // Keyboard shortcut subscription
   useEffect(() => {
@@ -242,14 +242,15 @@ export const RightPanel = () => {
 
   // Execute the actual structure creation
   // Optional overrides allow watch mode to pass the newly parsed tree/content
-  // before React state has updated
+  // before React state has updated, and varsMap to avoid rebuilding it
   const executeCreate = async (
     isDryRun: boolean,
-    overrides?: { tree?: typeof schemaTree; content?: string }
+    overrides?: { tree?: typeof schemaTree; content?: string; varsMap?: Record<string, string> }
   ) => {
     const effectiveTree = overrides?.tree ?? schemaTree;
     const effectiveContent = overrides?.content ?? schemaContent;
-    const { varsMap, rulesMap } = buildVariableMaps();
+    const { varsMap: builtVarsMap, rulesMap } = buildVariableMaps();
+    const varsMap = overrides?.varsMap ?? builtVarsMap;
 
     setProgress({
       status: "running",
@@ -444,8 +445,8 @@ export const RightPanel = () => {
         return;
       }
 
-      // Execute creation (not dry run for watch mode), passing overrides
-      await executeCreate(false, overrides);
+      // Execute creation (not dry run for watch mode), passing overrides including varsMap
+      await executeCreate(false, { ...overrides, varsMap });
     };
   });
 
