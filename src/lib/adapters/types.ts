@@ -294,11 +294,6 @@ export interface WatchAdapter {
   stopWatch(): Promise<void>;
 
   /**
-   * Get the currently watched path, or null if not watching.
-   */
-  getWatchStatus(): Promise<string | null>;
-
-  /**
    * Register a callback for when the schema file changes.
    * Returns an unsubscribe function.
    */

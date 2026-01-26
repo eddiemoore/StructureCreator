@@ -441,6 +441,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setWatchAutoCreate: (watchAutoCreate: boolean) => set({ watchAutoCreate }),
   setIsWatching: (isWatching: boolean) => set({ isWatching }),
 
+  // Reset transient state but preserve user preferences like watchAutoCreate
+  // (which is persisted to the database and loaded on startup)
   reset: () =>
     set({
       schemaPath: null,

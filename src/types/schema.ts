@@ -202,6 +202,7 @@ export interface Settings {
   defaultProjectName: string;
   theme: ThemeMode;
   accentColor: AccentColor;
+  watchAutoCreate: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -209,6 +210,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultProjectName: "my-project",
   theme: "system",
   accentColor: "blue",
+  watchAutoCreate: true,
 };
 
 export const ACCENT_COLORS: Record<AccentColor, string> = {

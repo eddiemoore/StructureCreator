@@ -23,7 +23,7 @@ use tauri::{
 
 // File watcher imports
 #[cfg(feature = "tauri-app")]
-use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode, DebounceEventResult};
+use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 #[cfg(feature = "tauri-app")]
 use std::time::Duration;
 #[cfg(feature = "tauri-app")]

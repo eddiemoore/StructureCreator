@@ -453,22 +453,27 @@ class TauriWatchAdapter implements WatchAdapter {
     await invoke("cmd_stop_watch");
   }
 
-  async getWatchStatus(): Promise<string | null> {
-    return invoke<string | null>("cmd_get_watch_status");
-  }
-
   onSchemaFileChanged(callback: (path: string, content: string) => void): () => void {
     let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
 
     // Set up the listener asynchronously
     listen<SchemaFileChangedPayload>("schema-file-changed", (event) => {
       callback(event.payload.path, event.payload.content);
     }).then((fn) => {
-      unlisten = fn;
+      if (cancelled) {
+        // Already cancelled before listener was set up, immediately unsubscribe
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    }).catch((err) => {
+      console.error("Failed to set up schema change listener:", err);
     });
 
     // Return an unsubscribe function
     return () => {
+      cancelled = true;
       if (unlisten) {
         unlisten();
       }
@@ -477,16 +482,25 @@ class TauriWatchAdapter implements WatchAdapter {
 
   onWatchError(callback: (error: string) => void): () => void {
     let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
 
     // Set up the listener asynchronously
     listen<WatchErrorPayload>("watch-error", (event) => {
       callback(event.payload.error);
     }).then((fn) => {
-      unlisten = fn;
+      if (cancelled) {
+        // Already cancelled before listener was set up, immediately unsubscribe
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    }).catch((err) => {
+      console.error("Failed to set up watch error listener:", err);
     });
 
     // Return an unsubscribe function
     return () => {
+      cancelled = true;
       if (unlisten) {
         unlisten();
       }

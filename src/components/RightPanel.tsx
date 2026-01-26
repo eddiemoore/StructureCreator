@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect, useCallback } from "react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import {
@@ -6,63 +6,14 @@ import {
   CheckIcon,
   ClockIcon,
   AlertCircleIcon,
+  EyeIcon,
+  EyeOffIcon,
+  WarningIcon,
+  LoaderIcon,
 } from "./Icons";
 import { DiffPreviewModal } from "./DiffPreviewModal";
 import type { CreateResult, ResultSummary, ValidationRule } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
-import { useSyncExternalStore } from "react";
-
-const WarningIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
-
-const EyeIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-
-const EyeOffIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-    <line x1="1" y1="1" x2="23" y2="23" />
-  </svg>
-);
 
 export const RightPanel = () => {
   const {
@@ -102,7 +53,7 @@ export const RightPanel = () => {
 
   const [summary, setSummary] = useState<ResultSummary | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
-  const watchUnsubscribersRef = useRef<(() => void)[]>([]);
+  const [watchStarting, setWatchStarting] = useState(false);
 
   const canExecute = schemaTree && outputPath && projectName;
   const canWatch = schemaPath && schemaPath !== "new-schema" && !schemaPath.startsWith("template:") && api.isTauri();
@@ -113,24 +64,43 @@ export const RightPanel = () => {
   // Ref for the auto-create handler (used in watch mode callbacks)
   const autoCreateHandlerRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Store subscription setup for watch mode events
-  // We use a subscribe/getSnapshot pattern compatible with React's model
-  const watchSubscribersSetup = useCallback(() => {
-    // Clean up any existing subscriptions
-    watchUnsubscribersRef.current.forEach((unsub) => unsub());
-    watchUnsubscribersRef.current = [];
+  // Keyboard shortcut subscription
+  useEffect(() => {
+    const handleShortcut = () => {
+      if (handleCreateRef.current) {
+        handleCreateRef.current();
+      }
+    };
 
-    if (!watchEnabled || !schemaPath || !canWatch) {
+    window.addEventListener(SHORTCUT_EVENTS.CREATE_STRUCTURE, handleShortcut);
+    return () => {
+      window.removeEventListener(SHORTCUT_EVENTS.CREATE_STRUCTURE, handleShortcut);
+    };
+  }, []);
+
+  // Watch mode subscription - manages file watcher lifecycle
+  useEffect(() => {
+    if (!watchEnabled || !canWatch || !schemaPath) {
       return;
     }
 
+    const unsubscribers: (() => void)[] = [];
+    let mounted = true;
+
+    // Show loading state while initializing
+    setWatchStarting(true);
+
     // Subscribe to schema file changes
     const unsubChange = api.watch.onSchemaFileChanged(async (path, content) => {
+      if (!mounted) return;
+
       addLog({ type: "info", message: `Schema file changed: ${path}` });
 
       // Parse and update the schema
       try {
         const tree = await api.schema.parseSchema(content);
+        if (!mounted) return;
+
         setSchemaContent(content);
         setSchemaTree(tree);
         addLog({ type: "success", message: "Schema reloaded successfully" });
@@ -141,82 +111,67 @@ export const RightPanel = () => {
           await autoCreateHandlerRef.current();
         }
       } catch (e) {
+        if (!mounted) return;
         const errorMessage = e instanceof Error ? e.message : String(e);
         addLog({ type: "error", message: `Failed to parse schema: ${errorMessage}` });
       }
     });
-    watchUnsubscribersRef.current.push(unsubChange);
+    unsubscribers.push(unsubChange);
 
     // Subscribe to watch errors
     const unsubError = api.watch.onWatchError((error) => {
+      if (!mounted) return;
       addLog({ type: "error", message: `Watch error: ${error}` });
       setIsWatching(false);
     });
-    watchUnsubscribersRef.current.push(unsubError);
+    unsubscribers.push(unsubError);
 
     // Start watching the file
     api.watch.startWatch(schemaPath)
       .then(() => {
+        if (!mounted) return;
         setIsWatching(true);
+        setWatchStarting(false);
         addLog({ type: "success", message: `Now watching: ${schemaPath}` });
       })
       .catch((e) => {
+        if (!mounted) return;
         const errorMessage = e instanceof Error ? e.message : String(e);
         addLog({ type: "error", message: `Failed to start watch: ${errorMessage}` });
         setWatchEnabled(false);
+        setWatchStarting(false);
       });
+
+    return () => {
+      mounted = false;
+      unsubscribers.forEach((unsub) => unsub());
+      api.watch.stopWatch().catch(() => {
+        // Ignore errors when stopping
+      });
+      setIsWatching(false);
+      setWatchStarting(false);
+    };
   }, [watchEnabled, schemaPath, canWatch, watchAutoCreate, addLog, setSchemaContent, setSchemaTree, setIsWatching, setWatchEnabled]);
 
-  // Stop watching when disabled
-  const stopWatching = useCallback(() => {
-    watchUnsubscribersRef.current.forEach((unsub) => unsub());
-    watchUnsubscribersRef.current = [];
-
-    api.watch.stopWatch().catch(() => {
-      // Ignore errors when stopping
-    });
-    setIsWatching(false);
-  }, [setIsWatching]);
-
   // Toggle watch mode
-  const handleToggleWatch = useCallback(() => {
+  const handleToggleWatch = () => {
     if (watchEnabled) {
-      stopWatching();
       setWatchEnabled(false);
       addLog({ type: "info", message: "Watch mode disabled" });
     } else {
       setWatchEnabled(true);
-      // Subscription setup will be triggered by the ref callback
     }
-  }, [watchEnabled, stopWatching, setWatchEnabled, addLog]);
+  };
 
-  // Ref callback for managing watch subscriptions
-  // This runs when watchEnabled or schemaPath changes
-  const watchSetupRef = useCallback((node: HTMLButtonElement | null) => {
-    if (node && watchEnabled && canWatch && !isWatching) {
-      watchSubscribersSetup();
+  // Handle auto-create toggle with persistence
+  const handleAutoCreateChange = async (checked: boolean) => {
+    setWatchAutoCreate(checked);
+    try {
+      await api.database.setSetting("watchAutoCreate", String(checked));
+    } catch (e) {
+      console.warn("Failed to save watchAutoCreate setting:", e);
     }
-  }, [watchEnabled, canWatch, isWatching, watchSubscribersSetup]);
-
-  // Store subscription setup for keyboard shortcut
-  const keyboardSubscribe = useCallback((callback: () => void) => {
-    const handleShortcut = () => {
-      if (handleCreateRef.current) {
-        handleCreateRef.current();
-      }
-      callback();
-    };
-
-    window.addEventListener(SHORTCUT_EVENTS.CREATE_STRUCTURE, handleShortcut);
-    return () => {
-      window.removeEventListener(SHORTCUT_EVENTS.CREATE_STRUCTURE, handleShortcut);
-    };
-  }, []);
-
-  const keyboardSnapshot = useCallback(() => null, []);
-
-  // Use useSyncExternalStore for keyboard shortcut subscription
-  useSyncExternalStore(keyboardSubscribe, keyboardSnapshot);
+  };
 
   const toggleErrorDetails = (id: string) => {
     setExpandedErrors((prev) => {
@@ -453,6 +408,19 @@ export const RightPanel = () => {
         return;
       }
 
+      // Verify output path still exists before auto-creating
+      try {
+        const pathExists = await api.fileSystem.exists(outputPath!);
+        if (!pathExists) {
+          addLog({ type: "error", message: "Auto-create aborted: output path no longer exists" });
+          return;
+        }
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        addLog({ type: "error", message: `Auto-create aborted: failed to verify output path - ${errorMessage}` });
+        return;
+      }
+
       const { varsMap, rulesMap } = buildVariableMaps();
 
       // Run validation silently
@@ -521,7 +489,13 @@ export const RightPanel = () => {
           <div className="mt-3 pt-3 border-t border-border-subtle">
             <div className="flex items-center justify-between mb-2">
               <span className="text-mac-xs text-text-muted">Watch Mode</span>
-              {isWatching && (
+              {watchStarting && (
+                <span className="flex items-center gap-1 text-mac-xs text-system-blue">
+                  <LoaderIcon size={12} className="animate-spin" />
+                  Starting...
+                </span>
+              )}
+              {isWatching && !watchStarting && (
                 <span className="flex items-center gap-1 text-mac-xs text-system-green">
                   <span className="w-1.5 h-1.5 rounded-full bg-system-green animate-pulse-slow" />
                   Active
@@ -529,26 +503,40 @@ export const RightPanel = () => {
               )}
             </div>
             <button
-              ref={watchSetupRef}
               onClick={handleToggleWatch}
-              disabled={progress.status === "running"}
+              disabled={progress.status === "running" || watchStarting}
               className={`w-full py-2 px-3 flex items-center justify-center gap-2 text-mac-sm rounded-mac border transition-colors ${
                 watchEnabled
                   ? "bg-system-blue/10 border-system-blue/30 text-system-blue"
                   : "bg-card-bg border-border-default text-text-secondary hover:bg-mac-bg-secondary"
-              }`}
+              } ${watchStarting ? "opacity-70 cursor-not-allowed" : ""}`}
               title="Monitor schema file for changes and auto-recreate"
             >
-              {watchEnabled ? <EyeIcon size={16} /> : <EyeOffIcon size={16} />}
-              {watchEnabled ? "Stop Watching" : "Watch Schema"}
+              {watchStarting ? (
+                <>
+                  <LoaderIcon size={16} className="animate-spin" />
+                  Starting...
+                </>
+              ) : watchEnabled ? (
+                <>
+                  <EyeIcon size={16} />
+                  Stop Watching
+                </>
+              ) : (
+                <>
+                  <EyeOffIcon size={16} />
+                  Watch Schema
+                </>
+              )}
             </button>
             {watchEnabled && (
               <label className="flex items-center gap-2 mt-2 text-mac-xs text-text-secondary cursor-pointer">
                 <input
                   type="checkbox"
                   checked={watchAutoCreate}
-                  onChange={(e) => setWatchAutoCreate(e.target.checked)}
+                  onChange={(e) => handleAutoCreateChange(e.target.checked)}
                   className="rounded border-border-default"
+                  disabled={watchStarting}
                 />
                 Auto-create on change
               </label>

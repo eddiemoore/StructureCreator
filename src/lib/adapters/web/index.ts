@@ -258,10 +258,6 @@ class WebWatchAdapter implements WatchAdapter {
     // No-op in web mode
   }
 
-  async getWatchStatus(): Promise<string | null> {
-    return null;
-  }
-
   onSchemaFileChanged(_callback: (path: string, content: string) => void): () => void {
     // Return a no-op unsubscribe function
     return () => {};
