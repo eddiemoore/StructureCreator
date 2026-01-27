@@ -22,6 +22,7 @@ import type {
   CreateResult,
   DiffResult,
   ParseWithInheritanceResult,
+  SchemaValidationResult,
 } from "../../../types/schema";
 
 import { IndexedDBAdapter } from "./indexeddb";
@@ -242,6 +243,24 @@ class WebValidationAdapter implements ValidationAdapter {
     rules: Record<string, ValidationRule>
   ): Promise<ValidationError[]> {
     return validateVars(variables, rules);
+  }
+
+  async validateSchema(
+    _content: string,
+    _variables: Record<string, string>
+  ): Promise<SchemaValidationResult> {
+    // TODO: Implement web-based schema validation (issue #25)
+    // Currently returns valid since we don't have the full Rust validation logic.
+    // Could add basic checks like:
+    // - XML syntax validation using DOMParser
+    // - Undefined variable detection
+    // - Duplicate name detection
+    // For now, the web version relies on the simpler variable validation above.
+    return {
+      isValid: true,
+      errors: [],
+      warnings: [],
+    };
   }
 }
 

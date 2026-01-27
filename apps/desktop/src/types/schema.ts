@@ -39,6 +39,10 @@ export type {
   AccentColor,
   Settings,
   ParseWithInheritanceResult,
+  ValidationSeverity,
+  ValidationIssueType,
+  ValidationIssue,
+  SchemaValidationResult,
 } from '@structure-creator/shared';
 
 // Import types needed for desktop-specific types

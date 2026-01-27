@@ -308,3 +308,54 @@ export interface ParseWithInheritanceResult {
   /** List of base template names that were extended (in resolution order) */
   baseTemplates: string[];
 }
+
+// ============================================================================
+// Schema Validation Types
+// ============================================================================
+
+/**
+ * Severity level for validation issues.
+ * - error: Blocks structure creation
+ * - warning: Advisory only, doesn't block creation
+ */
+export type ValidationSeverity = "error" | "warning";
+
+/**
+ * Type of validation issue found in the schema.
+ */
+export type ValidationIssueType =
+  | "xml_syntax"
+  | "undefined_variable"
+  | "duplicate_name"
+  | "circular_inheritance"
+  | "inheritance_error"
+  | "invalid_url";
+
+/**
+ * A single validation issue found during schema validation.
+ */
+export interface ValidationIssue {
+  /** Severity level of the issue */
+  severity: ValidationSeverity;
+  /** Type of validation issue */
+  issueType: ValidationIssueType;
+  /** Human-readable description of the issue */
+  message: string;
+  /** Path to the node where the issue was found (e.g., "root/src/components") */
+  nodePath?: string;
+  /** The problematic value (e.g., the undefined variable name or invalid URL) */
+  value?: string;
+}
+
+/**
+ * Result of schema validation.
+ * Returned by cmd_validate_schema.
+ */
+export interface SchemaValidationResult {
+  /** True if no errors were found (warnings don't affect this) */
+  isValid: boolean;
+  /** Error-level issues that block creation */
+  errors: ValidationIssue[];
+  /** Warning-level issues that are advisory */
+  warnings: ValidationIssue[];
+}
