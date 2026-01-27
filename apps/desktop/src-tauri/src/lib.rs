@@ -3442,6 +3442,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Get app data directory
             let app_data_dir = app
@@ -3465,6 +3466,9 @@ pub fn run() {
             // Settings menu item
             let settings_item = MenuItem::with_id(handle, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
 
+            // Check for Updates menu item
+            let check_updates_item = MenuItem::with_id(handle, "check_updates", "Check for Updates...", true, None::<&str>)?;
+
             // App submenu (macOS style)
             let app_submenu = Submenu::with_items(
                 handle,
@@ -3472,6 +3476,7 @@ pub fn run() {
                 true,
                 &[
                     &PredefinedMenuItem::about(handle, Some("About Structure Creator"), None)?,
+                    &check_updates_item,
                     &PredefinedMenuItem::separator(handle)?,
                     &settings_item,
                     &PredefinedMenuItem::separator(handle)?,
@@ -3541,6 +3546,9 @@ pub fn run() {
                     }
                     "new_schema" => {
                         let _ = app_handle.emit("new-schema", ());
+                    }
+                    "check_updates" => {
+                        let _ = app_handle.emit("check-for-updates", ());
                     }
                     _ => {}
                 }

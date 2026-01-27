@@ -12,7 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = ["tauri-app"]
-tauri-app = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-fs", "dep:tauri-build"]
+tauri-app = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-fs", "dep:tauri-plugin-updater", "dep:tauri-build"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }
@@ -29,6 +29,7 @@ path = "src/bin/cli.rs"
 tauri = { version = "2", features = [], optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
 tauri-plugin-fs = { version = "2", optional = true }
+tauri-plugin-updater = { version = "2", optional = true }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

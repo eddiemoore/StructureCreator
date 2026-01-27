@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
@@ -8,6 +8,13 @@ const initialProgress: CreationProgress = {
   total: 0,
   status: "idle",
   logs: [],
+};
+
+const initialUpdateState: UpdateState = {
+  status: "idle",
+  info: null,
+  progress: null,
+  error: null,
 };
 
 // Helper: Generate unique ID for nodes
@@ -202,6 +209,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Wizard
   wizardState: null,
+
+  // Update
+  updateState: initialUpdateState,
 
   // Actions
   setSchemaPath: (path: string | null) => set({ schemaPath: path }),
@@ -769,5 +779,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     });
   },
+
+  // Update actions
+  setUpdateStatus: (status: UpdateStatus) =>
+    set((state) => ({
+      updateState: { ...state.updateState, status },
+    })),
+
+  setUpdateInfo: (info: UpdateInfo | null) =>
+    set((state) => ({
+      updateState: { ...state.updateState, info },
+    })),
+
+  setUpdateProgress: (progress: UpdateProgress | null) =>
+    set((state) => ({
+      updateState: { ...state.updateState, progress },
+    })),
+
+  setUpdateError: (error: string | null) =>
+    set((state) => ({
+      updateState: { ...state.updateState, error, status: error ? "error" : state.updateState.status },
+    })),
+
+  resetUpdateState: () =>
+    set({ updateState: initialUpdateState }),
 
 }));
