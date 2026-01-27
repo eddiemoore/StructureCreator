@@ -1,6 +1,7 @@
-import { Link } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import type { Route } from "./+types/_index";
-import type { Template } from "@structure-creator/shared";
+import { getApprovedTemplates, type ParsedTemplate } from "~/lib/db.server";
+import { getDb } from "~/lib/env.server";
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -12,15 +13,14 @@ export function meta(_args: Route.MetaArgs) {
   ];
 }
 
-type TemplatePlaceholder = Template & {
-  author: string;
-  downloads: number;
+export async function loader({ context }: Route.LoaderArgs) {
+  const db = getDb(context);
+  const templates = await getApprovedTemplates(db);
+  return { templates };
 }
 
-// Placeholder templates - will be loaded from D1 database
-const placeholderTemplates: TemplatePlaceholder[] = [];
-
 export default function TemplatesIndex() {
+  const { templates } = useLoaderData<typeof loader>();
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       {/* Header */}
@@ -38,7 +38,7 @@ export default function TemplatesIndex() {
 
       {/* Templates Grid */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {placeholderTemplates.map((template) => (
+        {templates.map((template) => (
           <Link
             key={template.id}
             to={`/templates/${template.id}`}
@@ -71,15 +71,15 @@ export default function TemplatesIndex() {
             </div>
 
             <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-              <span>by {template.author}</span>
-              <span>{template.downloads} downloads</span>
+              <span>by {template.author_github ? `@${template.author_github}` : template.author_name}</span>
+              <span>{template.download_count} downloads</span>
             </div>
           </Link>
         ))}
       </div>
 
       {/* Empty State */}
-      {placeholderTemplates.length === 0 && (
+      {templates.length === 0 && (
         <div className="py-12 text-center">
           <svg
             className="mx-auto h-12 w-12 text-muted"

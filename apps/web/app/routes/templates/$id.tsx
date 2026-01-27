@@ -1,69 +1,58 @@
-import { Link } from "react-router";
+import { useState } from "react";
+import { Link, useLoaderData, data } from "react-router";
 import type { Route } from "./+types/$id";
+import { getTemplateById, incrementDownloadCount, type ParsedTemplate } from "~/lib/db.server";
+import { getDb } from "~/lib/env.server";
 
-export function meta(_args: Route.MetaArgs) {
+export function meta({ data }: Route.MetaArgs) {
+  const template = data as ParsedTemplate | null;
   return [
-    { title: `Template - Structure Creator` },
+    { title: template ? `${template.name} - Structure Creator` : "Template Not Found - Structure Creator" },
     {
       name: "description",
-      content: "View template details and download for Structure Creator.",
+      content: template?.description || "View template details and download for Structure Creator.",
     },
   ];
 }
 
-// Placeholder - will be loaded from D1 database
-const placeholderTemplate = {
-  id: "react-component",
-  name: "React Component",
-  description: "A basic React component with TypeScript, CSS modules, and tests. Perfect for adding new components to your React project with a consistent structure.",
-  schema_xml: `<folder name="%COMPONENT_NAME%">
-  <file name="%COMPONENT_NAME%.tsx">
-import styles from './%COMPONENT_NAME%.module.css';
+export async function loader({ params, context }: Route.LoaderArgs) {
+  const db = getDb(context);
+  const template = await getTemplateById(db, params.id);
 
-interface %COMPONENT_NAME%Props {
-  // Add props here
+  if (!template) {
+    throw data({ message: "Template not found" }, { status: 404 });
+  }
+
+  return { template };
 }
 
-export function %COMPONENT_NAME%({ }: %COMPONENT_NAME%Props) {
-  return (
-    <div className={styles.root}>
-      %COMPONENT_NAME% component
-    </div>
-  );
+export async function action({ params, context }: Route.ActionArgs) {
+  const db = getDb(context);
+  await incrementDownloadCount(db, params.id);
+  return { success: true };
 }
-  </file>
-  <file name="%COMPONENT_NAME%.module.css">
-.root {
-  /* Add styles here */
-}
-  </file>
-  <file name="%COMPONENT_NAME%.test.tsx">
-import { render, screen } from '@testing-library/react';
-import { %COMPONENT_NAME% } from './%COMPONENT_NAME%';
 
-describe('%COMPONENT_NAME%', () => {
-  it('renders correctly', () => {
-    render(<%COMPONENT_NAME% />);
-    expect(screen.getByText('%COMPONENT_NAME% component')).toBeInTheDocument();
-  });
-});
-  </file>
-  <file name="index.ts">
-export { %COMPONENT_NAME% } from './%COMPONENT_NAME%';
-  </file>
-</folder>`,
-  variables: {
-    COMPONENT_NAME: "MyComponent",
-  },
-  tags: ["react", "typescript", "component"],
-  author_name: "Community",
-  author_github: "eddiemoore",
-  download_count: 0,
-  submitted_at: "2024-01-15",
-};
+export default function TemplateDetail() {
+  const { template } = useLoaderData<typeof loader>();
+  const [copied, setCopied] = useState(false);
 
-export default function TemplateDetail(_props: Route.ComponentProps) {
-  const template = placeholderTemplate;
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(template.schema_xml);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([template.schema_xml], { type: "application/xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${template.id}.xml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
@@ -106,7 +95,9 @@ export default function TemplateDetail(_props: Route.ComponentProps) {
           <div className="rounded-xl border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <span className="text-sm font-medium text-foreground">Schema</span>
-              <button className="btn btn-ghost text-sm">Copy</button>
+              <button onClick={handleCopy} className="btn btn-ghost text-sm">
+                {copied ? "Copied!" : "Copy"}
+              </button>
             </div>
             <pre className="overflow-x-auto p-4 text-sm">
               <code className="text-muted-foreground">{template.schema_xml}</code>
@@ -146,11 +137,11 @@ export default function TemplateDetail(_props: Route.ComponentProps) {
         {/* Sidebar */}
         <div className="lg:col-span-1">
           <div className="sticky top-24 rounded-xl border border-border bg-surface p-6">
-            <button className="btn btn-primary mb-4 w-full">
+            <button onClick={handleDownload} className="btn btn-primary mb-4 w-full">
               Download Template
             </button>
-            <button className="btn btn-secondary w-full">
-              Copy to Clipboard
+            <button onClick={handleCopy} className="btn btn-secondary w-full">
+              {copied ? "Copied!" : "Copy to Clipboard"}
             </button>
 
             <hr className="my-6 border-border" />
@@ -175,11 +166,13 @@ export default function TemplateDetail(_props: Route.ComponentProps) {
               </div>
               <div>
                 <dt className="text-muted-foreground">Downloads</dt>
-                <dd className="mt-1 text-foreground">{template.download_count}</dd>
+                <dd className="mt-1 text-foreground">{template.download_count.toLocaleString()}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Submitted</dt>
-                <dd className="mt-1 text-foreground">{template.submitted_at}</dd>
+                <dd className="mt-1 text-foreground">
+                  {new Date(template.submitted_at).toLocaleDateString()}
+                </dd>
               </div>
             </dl>
           </div>
