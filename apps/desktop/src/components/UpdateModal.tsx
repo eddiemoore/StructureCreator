@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useAppStore } from "../store/appStore";
 import { useUpdater } from "../hooks";
 import { XIcon, CheckCircleIcon, DownloadIcon, RefreshIcon } from "./Icons";
@@ -20,14 +20,22 @@ export const UpdateModal = ({ isOpen, onClose }: UpdateModalProps) => {
     onClose();
   }, [updateState.status, resetUpdateState, onClose]);
 
+  // Handle escape key
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+    (e: KeyboardEvent) => {
       if (e.key === "Escape" && updateState.status !== "downloading") {
         handleClose();
       }
     },
     [handleClose, updateState.status]
   );
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;
 
@@ -47,10 +55,7 @@ export const UpdateModal = ({ isOpen, onClose }: UpdateModalProps) => {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onKeyDown={handleKeyDown}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
