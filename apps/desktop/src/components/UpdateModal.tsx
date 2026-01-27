@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { useAppStore } from "../store/appStore";
 import { useUpdater } from "../hooks";
 import { XIcon, CheckCircleIcon, DownloadIcon, RefreshIcon } from "./Icons";
+import { parseMarkdown } from "../utils/markdown";
 
 interface UpdateModalProps {
   isOpen: boolean;
@@ -126,9 +127,10 @@ export const UpdateModal = ({ isOpen, onClose }: UpdateModalProps) => {
                   <p className="text-mac-xs font-medium text-text-secondary mb-1">
                     What's new:
                   </p>
-                  <p className="text-mac-sm text-text-primary whitespace-pre-wrap">
-                    {info.body}
-                  </p>
+                  <div
+                    className="text-mac-sm text-text-primary"
+                    dangerouslySetInnerHTML={{ __html: parseMarkdown(info.body) }}
+                  />
                 </div>
               )}
             </div>
