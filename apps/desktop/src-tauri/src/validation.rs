@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
 
-use crate::schema::{parse_xml_schema, resolve_template_inheritance, SchemaNode, TemplateData};
+use crate::schema::{parse_xml_schema, resolve_template_inheritance, SchemaNode, SchemaTree, TemplateData};
 use crate::transforms::find_variable_refs;
 
 /// Severity level for validation issues
@@ -36,6 +36,7 @@ pub enum ValidationIssueType {
     UndefinedVariable,
     DuplicateName,
     CircularInheritance,
+    InheritanceError,
     InvalidUrl,
 }
 
@@ -99,21 +100,24 @@ impl Default for SchemaValidationResult {
     }
 }
 
-/// Validate XML syntax by attempting to parse the schema
-pub fn validate_xml_syntax(content: &str) -> SchemaValidationResult {
+/// Validate XML syntax by attempting to parse the schema.
+/// Returns the validation result and the parsed tree (if successful).
+pub fn validate_xml_syntax(content: &str) -> (SchemaValidationResult, Option<SchemaTree>) {
     let mut result = SchemaValidationResult::new();
 
-    if let Err(e) = parse_xml_schema(content) {
-        result.add_error(ValidationIssue {
-            severity: ValidationSeverity::Error,
-            issue_type: ValidationIssueType::XmlSyntax,
-            message: format!("XML syntax error: {}", e),
-            node_path: None,
-            value: None,
-        });
+    match parse_xml_schema(content) {
+        Ok(tree) => (result, Some(tree)),
+        Err(e) => {
+            result.add_error(ValidationIssue {
+                severity: ValidationSeverity::Error,
+                issue_type: ValidationIssueType::XmlSyntax,
+                message: format!("XML syntax error: {}", e),
+                node_path: None,
+                value: None,
+            });
+            (result, None)
+        }
     }
-
-    result
 }
 
 /// Check for undefined variable references in the schema.
@@ -210,10 +214,10 @@ fn check_duplicate_names_recursive(
     }
 }
 
-/// Check for circular template inheritance.
+/// Check for template inheritance errors including circular dependencies.
 /// Wraps the existing resolve_template_inheritance function and converts
 /// InheritanceError to ValidationIssue.
-pub fn check_circular_inheritance<F>(
+pub fn check_inheritance<F>(
     content: &str,
     template_loader: &F,
 ) -> SchemaValidationResult
@@ -225,26 +229,21 @@ where
     if let Err(e) = resolve_template_inheritance(content, template_loader) {
         let message = e.to_string();
 
-        // Check if this is a circular dependency error
-        if message.contains("Circular") {
-            result.add_error(ValidationIssue {
-                severity: ValidationSeverity::Error,
-                issue_type: ValidationIssueType::CircularInheritance,
-                message,
-                node_path: None,
-                value: None,
-            });
+        // Determine issue type based on error message
+        let issue_type = if message.contains("Circular") {
+            ValidationIssueType::CircularInheritance
         } else {
-            // Other inheritance errors (template not found, max depth, parse error)
-            // are also errors that block creation
-            result.add_error(ValidationIssue {
-                severity: ValidationSeverity::Error,
-                issue_type: ValidationIssueType::CircularInheritance,
-                message,
-                node_path: None,
-                value: None,
-            });
-        }
+            // Template not found, max depth exceeded, parse error, etc.
+            ValidationIssueType::InheritanceError
+        };
+
+        result.add_error(ValidationIssue {
+            severity: ValidationSeverity::Error,
+            issue_type,
+            message,
+            node_path: None,
+            value: None,
+        });
     }
 
     result
@@ -269,19 +268,18 @@ fn validate_urls_recursive(
         format!("{}/{}", parent_path, node.name)
     };
 
-    // Check URL if present
+    // Check URL if present and doesn't contain variables (which can't be validated statically)
     if let Some(url_str) = &node.url {
-        // Skip URLs that contain variables - they can't be validated statically
-        if url_str.contains('%') {
-            // URLs with variables are deferred for runtime validation
-        } else if let Err(e) = Url::parse(url_str) {
-            result.add_warning(ValidationIssue {
-                severity: ValidationSeverity::Warning,
-                issue_type: ValidationIssueType::InvalidUrl,
-                message: format!("Invalid URL format: {}", e),
-                node_path: Some(current_path.clone()),
-                value: Some(url_str.clone()),
-            });
+        if !url_str.contains('%') {
+            if let Err(e) = Url::parse(url_str) {
+                result.add_warning(ValidationIssue {
+                    severity: ValidationSeverity::Warning,
+                    issue_type: ValidationIssueType::InvalidUrl,
+                    message: format!("Invalid URL format: {}", e),
+                    node_path: Some(current_path.clone()),
+                    value: Some(url_str.clone()),
+                });
+            }
         }
     }
 
@@ -312,8 +310,8 @@ where
 {
     let mut result = SchemaValidationResult::new();
 
-    // 1. Validate XML syntax first - if this fails, other checks may not work
-    let syntax_result = validate_xml_syntax(content);
+    // 1. Validate XML syntax first and get the parsed tree
+    let (syntax_result, parsed_tree) = validate_xml_syntax(content);
     if !syntax_result.is_valid {
         return syntax_result;
     }
@@ -322,8 +320,8 @@ where
     let vars_result = check_undefined_variables(content, variables);
     result.merge(vars_result);
 
-    // 3. Parse the schema to check structural issues
-    if let Ok(tree) = parse_xml_schema(content) {
+    // 3. Check structural issues using the already-parsed tree
+    if let Some(tree) = parsed_tree {
         // 4. Check for duplicate sibling names
         let dup_result = check_duplicate_names(&tree.root);
         result.merge(dup_result);
@@ -333,9 +331,9 @@ where
         result.merge(url_result);
     }
 
-    // 6. Check circular inheritance if a template loader is provided
+    // 6. Check inheritance errors if a template loader is provided
     if let Some(loader) = template_loader {
-        let inheritance_result = check_circular_inheritance(content, loader);
+        let inheritance_result = check_inheritance(content, loader);
         result.merge(inheritance_result);
     }
 
@@ -349,25 +347,28 @@ mod tests {
     #[test]
     fn test_validate_xml_syntax_valid() {
         let xml = r#"<folder name="test"><file name="readme.txt" /></folder>"#;
-        let result = validate_xml_syntax(xml);
+        let (result, tree) = validate_xml_syntax(xml);
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
+        assert!(tree.is_some());
     }
 
     #[test]
     fn test_validate_xml_syntax_invalid() {
         let xml = r#"<folder name="test"><file name="readme.txt"</folder>"#;
-        let result = validate_xml_syntax(xml);
+        let (result, tree) = validate_xml_syntax(xml);
         assert!(!result.is_valid);
         assert_eq!(result.errors.len(), 1);
         assert_eq!(result.errors[0].issue_type, ValidationIssueType::XmlSyntax);
+        assert!(tree.is_none());
     }
 
     #[test]
     fn test_validate_xml_syntax_unclosed_tag() {
         let xml = r#"<folder name="test">"#;
-        let result = validate_xml_syntax(xml);
+        let (result, tree) = validate_xml_syntax(xml);
         assert!(!result.is_valid);
+        assert!(tree.is_none());
     }
 
     #[test]
@@ -654,18 +655,18 @@ mod tests {
     }
 
     #[test]
-    fn test_check_circular_inheritance_no_extends() {
+    fn test_check_inheritance_no_extends() {
         let content = r#"<folder name="project"><file name="readme.txt" /></folder>"#;
 
         let loader = |_name: &str| -> Option<TemplateData> { None };
 
-        let result = check_circular_inheritance(content, &loader);
+        let result = check_inheritance(content, &loader);
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
     }
 
     #[test]
-    fn test_check_circular_inheritance_circular() {
+    fn test_check_inheritance_circular() {
         let template_a = r#"<template extends="template-b"><file name="a.txt" /></template>"#;
         let template_b = r#"<template extends="template-a"><file name="b.txt" /></template>"#;
 
@@ -685,7 +686,7 @@ mod tests {
             }
         };
 
-        let result = check_circular_inheritance(template_a, &loader);
+        let result = check_inheritance(template_a, &loader);
         assert!(!result.is_valid);
         assert_eq!(result.errors.len(), 1);
         assert_eq!(

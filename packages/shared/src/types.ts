@@ -328,6 +328,7 @@ export type ValidationIssueType =
   | "undefined_variable"
   | "duplicate_name"
   | "circular_inheritance"
+  | "inheritance_error"
   | "invalid_url";
 
 /**
