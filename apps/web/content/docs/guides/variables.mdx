@@ -1,0 +1,138 @@
+---
+title: Variables & Transforms
+description: Use dynamic variables with powerful transformations in Structure Creator.
+---
+
+# Variables & Transforms
+
+Variables allow you to create dynamic, reusable schemas. This guide covers variable syntax and available transformations.
+
+## Variable Syntax
+
+Variables use the `%VARIABLE_NAME%` format:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <file name="%COMPONENT_NAME%.tsx" />
+</folder>
+```
+
+### Naming Conventions
+
+- Use UPPERCASE with underscores: `PROJECT_NAME`, `AUTHOR_EMAIL`
+- Names can contain letters, numbers, and underscores
+- Names must start with a letter
+
+### Variable Detection
+
+Structure Creator automatically detects variables in your schema and displays them in the Variables panel. Enter values before creating your structure.
+
+## Transforms
+
+Apply transformations to format variable values:
+
+```xml
+%VARIABLE:transform%
+```
+
+### Available Transforms
+
+| Transform | Input | Output |
+|-----------|-------|--------|
+| `uppercase` | hello world | HELLO WORLD |
+| `lowercase` | HELLO WORLD | hello world |
+| `camelCase` | hello world | helloWorld |
+| `PascalCase` | hello world | HelloWorld |
+| `kebab-case` | HelloWorld | hello-world |
+| `snake_case` | HelloWorld | hello_world |
+| `plural` | cat | cats |
+| `length` | hello | 5 |
+
+### Examples
+
+```xml
+<!-- Package name in kebab-case -->
+<file name="package.json">
+{
+  "name": "%PROJECT_NAME:kebab-case%"
+}
+</file>
+
+<!-- Component name in PascalCase -->
+<file name="%COMPONENT:PascalCase%.tsx" />
+
+<!-- Class name in snake_case -->
+<file name="%MODEL:snake_case%.py" />
+```
+
+## Built-in Variables
+
+Structure Creator provides built-in variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `%DATE%` | Current date (ISO) | 2024-01-15 |
+| `%DATE:FORMAT%` | Formatted date | See below |
+| `%YEAR%` | Current year | 2024 |
+| `%MONTH%` | Current month (01-12) | 01 |
+| `%DAY%` | Current day (01-31) | 15 |
+
+### Date Formats
+
+Format dates with `%DATE:FORMAT%`:
+
+```xml
+<file name="log-%DATE:YYYY-MM-DD%.txt" />
+<file name="report-%DATE:MMM D, YYYY%.md" />
+```
+
+Available tokens:
+- `YYYY` - 4-digit year (2024)
+- `YY` - 2-digit year (24)
+- `MMMM` - Full month (January)
+- `MMM` - Short month (Jan)
+- `MM` - 2-digit month (01)
+- `DD` - 2-digit day (15)
+- `D` - Day without padding (5)
+
+## Variable Validation
+
+Add validation rules to variables in templates:
+
+```json
+{
+  "variable_validation": {
+    "PROJECT_NAME": {
+      "required": true,
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 3,
+      "maxLength": 50
+    },
+    "AUTHOR_EMAIL": {
+      "required": true,
+      "pattern": "^[^@]+@[^@]+\\.[^@]+$"
+    }
+  }
+}
+```
+
+Validation is enforced in the UI before structure creation.
+
+## Conditional Variables
+
+Use variables with conditionals:
+
+```xml
+<if var="INCLUDE_DOCKER">
+  <file name="Dockerfile" />
+  <file name="docker-compose.yml" />
+</if>
+```
+
+Boolean variables are truthy when:
+- Set to "true", "yes", "1", or "on"
+- Non-empty string
+
+Variables are falsy when:
+- Empty or not set
+- Set to "false", "no", "0", or "off"

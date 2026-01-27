@@ -1,0 +1,78 @@
+---
+title: Quick Start
+description: Create your first folder structure with Structure Creator in minutes.
+---
+
+# Quick Start
+
+This guide will walk you through creating your first folder structure with Structure Creator.
+
+## Step 1: Define Your Schema
+
+You have three ways to define a schema:
+
+1. **Write XML** - Enter XML directly in the left panel
+2. **Import a folder** - Scan an existing folder to generate a schema
+3. **Import a ZIP file** - Use a zip archive as your schema source
+
+For this guide, we'll write XML. Enter this schema in the left panel:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <folder name="src">
+    <file name="index.ts" />
+  </folder>
+  <file name="package.json">
+{
+  "name": "%PROJECT_NAME:kebab-case%",
+  "version": "1.0.0"
+}
+  </file>
+  <file name="README.md">
+# %PROJECT_NAME%
+
+A new project.
+  </file>
+</folder>
+```
+
+## Step 2: Set Variables
+
+In the Variables section on the right panel:
+
+1. Find the `PROJECT_NAME` variable that was detected
+2. Enter a value like `My New Project`
+
+## Step 3: Preview
+
+The center panel shows a tree preview of what will be created:
+
+```
+My New Project/
+├── src/
+│   └── index.ts
+├── package.json
+└── README.md
+```
+
+## Step 4: Choose Output Location
+
+1. Click **Browse** next to the output path
+2. Select where you want to create the structure (e.g., `~/Projects`)
+
+## Step 5: Create Structure
+
+Click **Create Structure** to generate the files and folders.
+
+The log panel will show:
+- ✓ Created folder: My New Project
+- ✓ Created folder: My New Project/src
+- ✓ Created file: My New Project/src/index.ts
+- ✓ Created file: My New Project/package.json
+- ✓ Created file: My New Project/README.md
+
+## Next Steps
+
+- Learn more about [XML Schema syntax](/docs/guides/xml-schema)
+- Explore [Variables and Transforms](/docs/guides/variables)
+- Save your schema as a [Template](/docs/guides/templates)

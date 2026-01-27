@@ -1,0 +1,282 @@
+---
+title: XML Schema
+description: Learn the XML syntax for defining folder and file structures in Structure Creator.
+---
+
+# XML Schema Guide
+
+Structure Creator uses XML to define folder and file structures. This guide covers all the available elements and attributes.
+
+## Schema Sources
+
+You can define schemas in three ways:
+
+### XML Editor
+
+Write XML directly in the schema editor. This gives you full control over the structure, variables, and content.
+
+### Import from Folder
+
+Scan an existing folder to generate a schema automatically:
+
+1. Click the **folder icon** in the schema toolbar
+2. Select a folder to scan
+3. Structure Creator generates XML representing that folder's structure
+
+This is useful for:
+- Creating templates from existing projects
+- Documenting current folder structures
+- Starting with a base structure and customizing it
+
+### Import from ZIP
+
+Use a ZIP archive as your schema source:
+
+1. Click the **import icon** in the schema toolbar
+2. Select a `.zip` file
+3. Structure Creator extracts and generates the schema
+
+ZIP import preserves the complete folder hierarchy and all file contents, making it easy to share templates or create structures from archived projects.
+
+## Basic Elements
+
+### Folders
+
+Use the `<folder>` element to create directories:
+
+```xml
+<folder name="src">
+  <!-- child elements go here -->
+</folder>
+```
+
+Folders can be nested:
+
+```xml
+<folder name="src">
+  <folder name="components">
+    <folder name="ui" />
+  </folder>
+</folder>
+```
+
+### Files
+
+Use the `<file>` element to create files:
+
+```xml
+<file name="index.ts" />
+```
+
+Structure Creator supports **any file type**—code files, documents (.docx, .pdf), images, binaries, and more. For text files, you can include content directly. For binary files, use the `url` attribute to download from a remote source.
+
+#### File Content
+
+Add content directly inside the element:
+
+```xml
+<file name="README.md">
+# My Project
+
+Welcome to my project!
+</file>
+```
+
+#### CDATA for Special Characters
+
+When file content contains XML-reserved characters like `<`, `>`, or `&`, wrap it in a CDATA section to avoid escaping:
+
+```xml
+<file name="App.tsx"><![CDATA[
+import React from 'react';
+
+export const App = () => {
+  return <div className="app">Hello & welcome!</div>;
+};
+]]></file>
+```
+
+Without CDATA, you'd need to escape these characters (`&lt;`, `&gt;`, `&amp;`). CDATA is especially useful for:
+- JSX/TSX files with angle brackets
+- HTML templates
+- Code containing `&&` or comparison operators
+- Any content with ampersands
+
+For plain text like Markdown or config files without special characters, CDATA is not required.
+
+#### File from URL
+
+Download content from a URL:
+
+```xml
+<file name="tsconfig.json" url="https://example.com/tsconfig.json" />
+```
+
+## Variables
+
+Use `%VARIABLE_NAME%` syntax for dynamic values:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <file name="%COMPONENT_NAME%.tsx" />
+</folder>
+```
+
+Variables are automatically detected and shown in the UI for you to fill in.
+
+### Transforms
+
+Apply transformations to variables:
+
+```xml
+<file name="%NAME:kebab-case%.ts" />
+```
+
+Available transforms:
+- `uppercase` - HELLO WORLD
+- `lowercase` - hello world
+- `camelCase` - helloWorld
+- `PascalCase` - HelloWorld
+- `kebab-case` - hello-world
+- `snake_case` - hello_world
+- `plural` - cats
+- `length` - 5
+
+See the [Variables guide](/docs/guides/variables) for more details on transforms and date formatting.
+
+## Control Flow
+
+### Conditionals
+
+Include content conditionally with `<if>`:
+
+```xml
+<if var="INCLUDE_TESTS">
+  <folder name="tests">
+    <file name="index.test.ts" />
+  </folder>
+</if>
+```
+
+Add an `<else>` block:
+
+```xml
+<if var="USE_TYPESCRIPT">
+  <file name="index.ts" />
+</if>
+<else>
+  <file name="index.js" />
+</else>
+```
+
+### Loops
+
+Repeat content with `<repeat>`:
+
+```xml
+<repeat count="3" as="i">
+  <file name="file-%i%.txt" />
+</repeat>
+```
+
+This creates:
+- file-0.txt
+- file-1.txt
+- file-2.txt
+
+Use `%i_1%` for 1-indexed values:
+
+```xml
+<repeat count="3" as="n">
+  <folder name="module-%n_1%">
+    <file name="index.ts" />
+  </folder>
+</repeat>
+```
+
+## Hooks
+
+Hooks let you run commands automatically after your structure is created. This is useful for initializing git repositories, installing dependencies, or running setup scripts.
+
+### Post-Create Hook
+
+Use the `<hooks>` element with `<post-create>` children to run commands after structure creation:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <file name="package.json">
+{
+  "name": "%PROJECT_NAME:kebab-case%",
+  "version": "1.0.0"
+}
+  </file>
+
+  <hooks>
+    <post-create>npm install</post-create>
+  </hooks>
+</folder>
+```
+
+### Multiple Commands
+
+You can specify multiple post-create commands. They run in order:
+
+```xml
+<hooks>
+  <post-create>git init</post-create>
+  <post-create>npm install</post-create>
+  <post-create>npm run build</post-create>
+</hooks>
+```
+
+### Working Directory
+
+Commands run from the root of the created structure (the top-level folder).
+
+### Common Use Cases
+
+```xml
+<!-- Initialize a git repository -->
+<hooks>
+  <post-create>git init</post-create>
+  <post-create>git add .</post-create>
+  <post-create>git commit -m "Initial commit"</post-create>
+</hooks>
+
+<!-- Install dependencies for different package managers -->
+<hooks>
+  <post-create>pnpm install</post-create>
+</hooks>
+
+<!-- Run setup scripts -->
+<hooks>
+  <post-create>chmod +x ./scripts/setup.sh</post-create>
+  <post-create>./scripts/setup.sh</post-create>
+</hooks>
+```
+
+## Complete Example
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <folder name="src">
+    <folder name="components">
+      <repeat count="%NUM_COMPONENTS%" as="i">
+        <folder name="%COMPONENT_PREFIX%Component%i_1%">
+          <file name="index.tsx" />
+          <if var="INCLUDE_STYLES">
+            <file name="styles.css" />
+          </if>
+        </folder>
+      </repeat>
+    </folder>
+    <file name="main.tsx" />
+  </folder>
+  <file name="package.json" url="https://..." />
+  <file name="README.md">
+# %PROJECT_NAME%
+
+Created with Structure Creator.
+  </file>
+</folder>
+```
