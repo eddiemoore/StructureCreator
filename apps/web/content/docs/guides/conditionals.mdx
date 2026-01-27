@@ -1,0 +1,204 @@
+---
+title: Conditionals & Loops
+description: Use control flow elements to create dynamic structures.
+---
+
+# Conditionals & Loops
+
+Structure Creator supports conditionals and loops for creating dynamic structures based on user input.
+
+## Conditionals
+
+### If Statements
+
+Include content conditionally based on a variable:
+
+```xml
+<if var="INCLUDE_TESTS">
+  <folder name="tests">
+    <file name="index.test.ts" />
+  </folder>
+</if>
+```
+
+The content inside `<if>` is only created when the variable is truthy.
+
+### Truthy Values
+
+A variable is truthy when:
+- Non-empty string
+- "true", "yes", "1", "on" (case-insensitive)
+
+A variable is falsy when:
+- Empty or not set
+- "false", "no", "0", "off" (case-insensitive)
+
+### If-Else
+
+Add an alternative with `<else>`:
+
+```xml
+<if var="USE_TYPESCRIPT">
+  <file name="index.ts" />
+</if>
+<else>
+  <file name="index.js" />
+</else>
+```
+
+**Important:** The `<else>` must immediately follow the closing `</if>` tag.
+
+### Nested Conditionals
+
+Conditionals can be nested:
+
+```xml
+<if var="INCLUDE_SRC">
+  <folder name="src">
+    <if var="USE_TYPESCRIPT">
+      <file name="index.ts" />
+    </if>
+    <else>
+      <file name="index.js" />
+    </else>
+  </folder>
+</if>
+```
+
+## Loops
+
+### Repeat Element
+
+Create repeated content with `<repeat>`:
+
+```xml
+<repeat count="3" as="i">
+  <file name="file-%i%.txt" />
+</repeat>
+```
+
+Creates:
+```
+file-0.txt
+file-1.txt
+file-2.txt
+```
+
+### Loop Attributes
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `count` | Yes | Number of iterations (literal or variable) |
+| `as` | No | Loop variable name (default: "i") |
+
+### Zero vs One-Indexed
+
+The loop variable is 0-indexed by default. Use `_1` suffix for 1-indexed:
+
+```xml
+<repeat count="3" as="n">
+  <folder name="chapter-%n_1%">
+    <file name="content.md" />
+  </folder>
+</repeat>
+```
+
+Creates:
+```
+chapter-1/content.md
+chapter-2/content.md
+chapter-3/content.md
+```
+
+### Dynamic Count
+
+Use a variable for the count:
+
+```xml
+<repeat count="%NUM_MODULES%" as="i">
+  <folder name="module-%i_1%">
+    <file name="index.ts" />
+  </folder>
+</repeat>
+```
+
+### Nested Loops
+
+Loops can be nested with different variable names:
+
+```xml
+<repeat count="2" as="row">
+  <folder name="row-%row_1%">
+    <repeat count="3" as="col">
+      <file name="cell-%col_1%.txt" />
+    </repeat>
+  </folder>
+</repeat>
+```
+
+Creates:
+```
+row-1/
+  cell-1.txt
+  cell-2.txt
+  cell-3.txt
+row-2/
+  cell-1.txt
+  cell-2.txt
+  cell-3.txt
+```
+
+## Combining Conditionals and Loops
+
+Use conditionals inside loops:
+
+```xml
+<repeat count="%NUM_COMPONENTS%" as="i">
+  <folder name="Component%i_1%">
+    <file name="index.tsx" />
+    <if var="INCLUDE_STYLES">
+      <file name="styles.css" />
+    </if>
+    <if var="INCLUDE_TESTS">
+      <file name="index.test.tsx" />
+    </if>
+  </folder>
+</repeat>
+```
+
+## Examples
+
+### Module Structure
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <folder name="src">
+    <repeat count="%NUM_MODULES%" as="m">
+      <folder name="%MODULE_PREFIX%-%m_1%">
+        <file name="index.ts" />
+        <if var="INCLUDE_TYPES">
+          <file name="types.ts" />
+        </if>
+      </folder>
+    </repeat>
+  </folder>
+</folder>
+```
+
+### Feature Flags
+
+```xml
+<folder name="src">
+  <if var="INCLUDE_AUTH">
+    <folder name="auth">
+      <file name="login.tsx" />
+      <file name="logout.tsx" />
+    </folder>
+  </if>
+  <if var="INCLUDE_DASHBOARD">
+    <folder name="dashboard">
+      <file name="index.tsx" />
+    </folder>
+  </if>
+</folder>
+```

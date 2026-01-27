@@ -1,0 +1,19 @@
+name = "structure-creator-web"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+main = "./build/server/index.js"
+assets = { directory = "./build/client" }
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "structure-creator-db"
+database_id = "YOUR_DATABASE_ID_HERE"
+
+[vars]
+GITHUB_OWNER = "eddiemoore"
+GITHUB_REPO = "structurecreator"
+
+# Environment-specific secrets (set via wrangler secret put)
+# GITHUB_TOKEN = "..."
+# GITHUB_WEBHOOK_SECRET = "..."

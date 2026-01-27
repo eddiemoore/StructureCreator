@@ -1,0 +1,216 @@
+---
+title: Transforms Reference
+description: Complete reference for all variable transforms available in Structure Creator.
+---
+
+# Transforms Reference
+
+Apply transforms to variables to change their format. Use the syntax `%VARIABLE:transform%`.
+
+## String Transforms
+
+### `uppercase`
+
+Converts to uppercase.
+
+| Input | Output |
+|-------|--------|
+| `hello world` | `HELLO WORLD` |
+| `MyProject` | `MYPROJECT` |
+
+```xml
+<file name="%NAME:uppercase%.txt" />
+```
+
+### `lowercase`
+
+Converts to lowercase.
+
+| Input | Output |
+|-------|--------|
+| `HELLO WORLD` | `hello world` |
+| `MyProject` | `myproject` |
+
+```xml
+<file name="%NAME:lowercase%.txt" />
+```
+
+### `camelCase`
+
+Converts to camelCase (first word lowercase, subsequent words capitalized).
+
+| Input | Output |
+|-------|--------|
+| `hello world` | `helloWorld` |
+| `user-profile` | `userProfile` |
+| `MY_CONSTANT` | `myConstant` |
+
+```xml
+<file name="%NAME:camelCase%.ts" />
+```
+
+### `PascalCase`
+
+Converts to PascalCase (all words capitalized).
+
+| Input | Output |
+|-------|--------|
+| `hello world` | `HelloWorld` |
+| `user-profile` | `UserProfile` |
+| `my_component` | `MyComponent` |
+
+```xml
+<file name="%NAME:PascalCase%.tsx" />
+```
+
+### `kebab-case`
+
+Converts to kebab-case (lowercase with hyphens).
+
+| Input | Output |
+|-------|--------|
+| `HelloWorld` | `hello-world` |
+| `myProject` | `my-project` |
+| `MY_CONSTANT` | `my-constant` |
+
+```xml
+<!-- Perfect for npm package names -->
+<file name="package.json">
+{
+  "name": "%PROJECT_NAME:kebab-case%"
+}
+</file>
+```
+
+### `snake_case`
+
+Converts to snake_case (lowercase with underscores).
+
+| Input | Output |
+|-------|--------|
+| `HelloWorld` | `hello_world` |
+| `myProject` | `my_project` |
+| `user-profile` | `user_profile` |
+
+```xml
+<!-- Common for Python files -->
+<file name="%MODEL:snake_case%.py" />
+```
+
+## Utility Transforms
+
+### `plural`
+
+Converts a word to its plural form using basic English pluralization rules.
+
+| Input | Output |
+|-------|--------|
+| `cat` | `cats` |
+| `box` | `boxes` |
+| `city` | `cities` |
+| `child` | `children` |
+
+```xml
+<folder name="%MODEL:plural%" />
+```
+
+### `length`
+
+Returns the character count of the value.
+
+| Input | Output |
+|-------|--------|
+| `hello` | `5` |
+| `Structure Creator` | `17` |
+
+```xml
+<file name="length-%NAME:length%.txt" />
+```
+
+## Date Formats
+
+The built-in `%DATE%` variable supports format strings as transforms.
+
+### Format Tokens
+
+| Token | Description | Example |
+|-------|-------------|---------|
+| `YYYY` | 4-digit year | 2024 |
+| `YY` | 2-digit year | 24 |
+| `MMMM` | Full month name | January |
+| `MMM` | Short month name | Jan |
+| `MM` | 2-digit month | 01 |
+| `DD` | 2-digit day | 15 |
+| `D` | Day without padding | 5 |
+
+### Examples
+
+```xml
+<!-- ISO date: 2024-01-15 -->
+<file name="log-%DATE:YYYY-MM-DD%.txt" />
+
+<!-- Readable date: Jan 15, 2024 -->
+<file name="report-%DATE:MMM D, YYYY%.md" />
+
+<!-- Year-month: 2024-01 -->
+<folder name="archive-%DATE:YYYY-MM%" />
+```
+
+## Built-in Variables
+
+These variables are automatically available without needing to define them.
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `%DATE%` | Current date (ISO format) | 2024-01-15 |
+| `%YEAR%` | Current year | 2024 |
+| `%MONTH%` | Current month (01-12) | 01 |
+| `%DAY%` | Current day (01-31) | 15 |
+
+## Chaining Transforms
+
+Transforms cannot be chained. Use the single most appropriate transform for your use case.
+
+```xml
+<!-- ✓ Correct -->
+<file name="%NAME:kebab-case%.ts" />
+
+<!-- ✗ Not supported -->
+<file name="%NAME:lowercase:kebab-case%.ts" />
+```
+
+## Usage Examples
+
+### React Component
+
+```xml
+<folder name="%COMPONENT:PascalCase%">
+  <file name="index.tsx" />
+  <file name="%COMPONENT:PascalCase%.tsx" />
+  <file name="%COMPONENT:PascalCase%.test.tsx" />
+  <file name="%COMPONENT:kebab-case%.module.css" />
+</folder>
+```
+
+### Python Module
+
+```xml
+<folder name="%MODULE:snake_case%">
+  <file name="__init__.py" />
+  <file name="%MODULE:snake_case%.py" />
+  <file name="test_%MODULE:snake_case%.py" />
+</folder>
+```
+
+### npm Package
+
+```xml
+<folder name="%PACKAGE%">
+  <file name="package.json">
+{
+  "name": "@%SCOPE:kebab-case%/%PACKAGE:kebab-case%",
+  "version": "1.0.0"
+}
+  </file>
+</folder>
+```

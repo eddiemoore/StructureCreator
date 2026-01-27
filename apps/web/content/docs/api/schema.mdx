@@ -1,0 +1,166 @@
+---
+title: Schema Reference
+description: Complete reference for all XML elements and attributes in Structure Creator schemas.
+---
+
+# Schema Reference
+
+Complete reference for all XML elements and attributes available in Structure Creator schemas.
+
+## Elements
+
+### `<folder>`
+
+Creates a directory.
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `name` | Yes | Folder name (supports variables) |
+
+```xml
+<folder name="src">
+  <!-- child elements -->
+</folder>
+```
+
+### `<file>`
+
+Creates a file with optional content.
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `name` | Yes | File name (supports variables) |
+| `url` | No | URL to download content from |
+
+```xml
+<!-- Empty file -->
+<file name="index.ts" />
+
+<!-- File with inline content -->
+<file name="README.md">
+# Project Title
+
+Description here.
+</file>
+
+<!-- File with content from URL -->
+<file name="tsconfig.json" url="https://example.com/tsconfig.json" />
+
+<!-- File with CDATA for special characters -->
+<file name="App.tsx"><![CDATA[
+export const App = () => <div>Hello</div>;
+]]></file>
+```
+
+### `<if>`
+
+Conditional inclusion based on a variable's truthiness.
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `var` | Yes | Variable name to check |
+
+A variable is **truthy** when set to: `"true"`, `"yes"`, `"1"`, `"on"`, or any non-empty string.
+
+A variable is **falsy** when: empty, not set, or set to `"false"`, `"no"`, `"0"`, `"off"`.
+
+```xml
+<if var="INCLUDE_TESTS">
+  <folder name="tests" />
+</if>
+```
+
+### `<else>`
+
+Alternative content when the preceding `<if>` is falsy. Must immediately follow an `<if>` element.
+
+```xml
+<if var="USE_TYPESCRIPT">
+  <file name="index.ts" />
+</if>
+<else>
+  <file name="index.js" />
+</else>
+```
+
+### `<repeat>`
+
+Repeats child elements a specified number of times.
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `count` | Yes | Number of iterations (supports variables) |
+| `as` | No | Variable name for index (default: `i`) |
+
+The index variable is 0-based. Use `%i_1%` for 1-based indexing.
+
+```xml
+<repeat count="3" as="n">
+  <file name="file-%n%.txt" />    <!-- file-0.txt, file-1.txt, file-2.txt -->
+  <file name="item-%n_1%.txt" />  <!-- item-1.txt, item-2.txt, item-3.txt -->
+</repeat>
+```
+
+### `<hooks>`
+
+Container for lifecycle hooks.
+
+```xml
+<hooks>
+  <post-create>npm install</post-create>
+</hooks>
+```
+
+### `<post-create>`
+
+Command to run after structure creation. Must be inside `<hooks>`. Multiple commands run in order.
+
+```xml
+<hooks>
+  <post-create>git init</post-create>
+  <post-create>npm install</post-create>
+</hooks>
+```
+
+## Variables
+
+Variables use the `%NAME%` syntax and are substituted at creation time.
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <file name="%COMPONENT%Component.tsx" />
+</folder>
+```
+
+See [Variables & Transforms](/docs/guides/variables) for details on transforms and built-in variables.
+
+## Complete Example
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <folder name="src">
+    <folder name="components">
+      <repeat count="%NUM_COMPONENTS%" as="i">
+        <folder name="Component%i_1%">
+          <file name="index.tsx" />
+          <if var="INCLUDE_STYLES">
+            <file name="styles.css" />
+          </if>
+        </folder>
+      </repeat>
+    </folder>
+    <file name="main.tsx" />
+  </folder>
+
+  <file name="package.json">
+{
+  "name": "%PROJECT_NAME:kebab-case%",
+  "version": "1.0.0"
+}
+  </file>
+
+  <hooks>
+    <post-create>npm install</post-create>
+  </hooks>
+</folder>
+```

@@ -1,0 +1,267 @@
+---
+title: Template Wizard
+description: Create interactive configuration wizards for your templates.
+---
+
+# Template Wizard
+
+Template wizards provide a guided setup experience for complex templates. Instead of filling in all variables manually, users answer questions in steps.
+
+## Overview
+
+A wizard consists of:
+- **Steps** - Logical groupings of questions
+- **Questions** - Different input types (text, boolean, select, etc.)
+- **Schema Modifiers** - Rules for how answers affect the schema
+
+## Creating a Wizard
+
+Wizards are configured in the template's `wizard_config` property:
+
+```json
+{
+  "wizard_config": {
+    "title": "Project Setup",
+    "description": "Configure your new project",
+    "steps": [...],
+    "schemaModifiers": [...]
+  }
+}
+```
+
+## Steps
+
+Each step contains one or more questions:
+
+```json
+{
+  "steps": [
+    {
+      "id": "basics",
+      "title": "Basic Information",
+      "description": "Enter project details",
+      "questions": [...]
+    },
+    {
+      "id": "features",
+      "title": "Features",
+      "description": "Select optional features",
+      "questions": [...]
+    }
+  ]
+}
+```
+
+## Question Types
+
+### Text Input
+
+```json
+{
+  "id": "project_name",
+  "type": "text",
+  "question": "What is your project name?",
+  "placeholder": "my-project",
+  "defaultValue": "",
+  "validation": {
+    "required": true,
+    "pattern": "^[a-z][a-z0-9-]*$"
+  }
+}
+```
+
+### Boolean (Yes/No)
+
+```json
+{
+  "id": "include_tests",
+  "type": "boolean",
+  "question": "Include test setup?",
+  "helpText": "Adds Jest and testing utilities",
+  "defaultValue": true
+}
+```
+
+### Single Select
+
+```json
+{
+  "id": "framework",
+  "type": "single",
+  "question": "Which framework?",
+  "choices": [
+    { "id": "react", "label": "React" },
+    { "id": "vue", "label": "Vue" },
+    { "id": "svelte", "label": "Svelte" }
+  ],
+  "defaultValue": "react"
+}
+```
+
+### Multiple Select
+
+```json
+{
+  "id": "features",
+  "type": "multiple",
+  "question": "Select features",
+  "choices": [
+    { "id": "auth", "label": "Authentication" },
+    { "id": "api", "label": "API Routes" },
+    { "id": "db", "label": "Database" }
+  ],
+  "defaultValue": ["auth"]
+}
+```
+
+### Select (Dropdown)
+
+```json
+{
+  "id": "license",
+  "type": "select",
+  "question": "Choose a license",
+  "choices": [
+    { "id": "mit", "label": "MIT" },
+    { "id": "apache", "label": "Apache 2.0" },
+    { "id": "gpl", "label": "GPL 3.0" }
+  ],
+  "defaultValue": "mit"
+}
+```
+
+## Conditional Questions
+
+Show questions based on previous answers:
+
+```json
+{
+  "id": "db_type",
+  "type": "single",
+  "question": "Which database?",
+  "choices": [
+    { "id": "postgres", "label": "PostgreSQL" },
+    { "id": "mysql", "label": "MySQL" },
+    { "id": "sqlite", "label": "SQLite" }
+  ],
+  "showWhen": {
+    "questionId": "features",
+    "value": ["db"]
+  }
+}
+```
+
+## Schema Modifiers
+
+Connect wizard answers to schema behavior:
+
+### Set Variable
+
+Map answers to variable values:
+
+```json
+{
+  "questionId": "project_name",
+  "action": "set_variable",
+  "variableName": "PROJECT_NAME"
+}
+```
+
+### Include/Exclude Sections
+
+Control conditional blocks:
+
+```json
+{
+  "questionId": "include_tests",
+  "action": "include",
+  "nodeConditionVar": "INCLUDE_TESTS"
+}
+```
+
+This sets the variable used by `<if var="INCLUDE_TESTS">` blocks.
+
+### Value Mapping
+
+Map choices to specific values:
+
+```json
+{
+  "questionId": "framework",
+  "action": "set_variable",
+  "variableName": "FRAMEWORK_EXT",
+  "valueMap": {
+    "react": "tsx",
+    "vue": "vue",
+    "svelte": "svelte"
+  }
+}
+```
+
+## Complete Example
+
+```json
+{
+  "wizard_config": {
+    "title": "Create React App",
+    "description": "Set up a new React application",
+    "steps": [
+      {
+        "id": "basics",
+        "title": "Project Details",
+        "questions": [
+          {
+            "id": "name",
+            "type": "text",
+            "question": "Project name",
+            "validation": { "required": true }
+          }
+        ]
+      },
+      {
+        "id": "features",
+        "title": "Features",
+        "questions": [
+          {
+            "id": "typescript",
+            "type": "boolean",
+            "question": "Use TypeScript?",
+            "defaultValue": true
+          },
+          {
+            "id": "testing",
+            "type": "boolean",
+            "question": "Include testing setup?",
+            "defaultValue": true
+          }
+        ]
+      }
+    ],
+    "schemaModifiers": [
+      {
+        "questionId": "name",
+        "action": "set_variable",
+        "variableName": "PROJECT_NAME"
+      },
+      {
+        "questionId": "typescript",
+        "action": "include",
+        "nodeConditionVar": "USE_TYPESCRIPT"
+      },
+      {
+        "questionId": "testing",
+        "action": "include",
+        "nodeConditionVar": "INCLUDE_TESTS"
+      }
+    ]
+  }
+}
+```
+
+## Using the Wizard
+
+1. Select a template with a wizard
+2. Click "Use Wizard" instead of filling variables manually
+3. Answer questions in each step
+4. Review the generated structure
+5. Create the structure

@@ -1,0 +1,124 @@
+---
+title: Templates
+description: Save, share, and reuse your schema definitions in Structure Creator.
+---
+
+# Templates
+
+Templates let you save and reuse your schema definitions. Build a library of project scaffolds for quick setup.
+
+## Saving Templates
+
+1. Create or edit a schema in the Schema panel
+2. Click **Save as Template** in the toolbar
+3. Enter a name and optional description
+4. Click **Save**
+
+Your template is now available in the template library.
+
+## Using Templates
+
+1. Find the **Templates** section in the left sidebar
+2. Browse or search for a template
+3. Click on a template to load it
+4. Fill in the required variables
+5. Create your structure
+
+## Template Properties
+
+Templates store:
+
+- **Schema XML** - The folder/file structure definition
+- **Variables** - Default values for variables
+- **Validation Rules** - Input validation for variables
+- **Tags** - Categories for organization
+- **Wizard Config** - Optional interactive setup wizard
+
+## Exporting Templates
+
+Share templates as `.sctemplate` files:
+
+1. Right-click a template in the library
+2. Select **Export Template**
+3. Choose a save location
+
+### Export Format
+
+Templates are exported as JSON:
+
+```json
+{
+  "version": "1.0",
+  "type": "template",
+  "exported_at": "2024-01-15T10:30:00Z",
+  "template": {
+    "name": "React Component",
+    "description": "A React component with tests",
+    "schema_xml": "<folder name=\"%NAME%\">...</folder>",
+    "variables": {
+      "NAME": "MyComponent"
+    },
+    "variable_validation": {
+      "NAME": { "required": true }
+    },
+    "tags": ["react", "component"]
+  }
+}
+```
+
+## Importing Templates
+
+Import templates from files:
+
+1. Click **Import** in the template library
+2. Select a `.sctemplate` file
+3. Choose how to handle duplicates:
+   - **Skip** - Keep existing template
+   - **Replace** - Overwrite existing template
+   - **Rename** - Import with a new name
+
+## Template Bundles
+
+Export multiple templates as a bundle:
+
+1. Select multiple templates (Cmd-click)
+2. Right-click and select **Export Bundle**
+3. Save as a `.scbundle` file
+
+Import bundles the same way as single templates.
+
+## Community Templates
+
+Browse and share templates with the community:
+
+1. Visit the [Templates](/templates) page
+2. Download templates to use locally
+3. [Submit your own templates](/templates/submit) for others to use
+
+## Template Inheritance
+
+Extend existing templates:
+
+```xml
+<template extends="base-react">
+  <folder name="src">
+    <folder name="features">
+      <file name="%FEATURE_NAME%.tsx" />
+    </folder>
+  </folder>
+</template>
+```
+
+The child template inherits:
+- Base schema structure
+- Variables (can be overridden)
+- Validation rules (can be overridden)
+
+## Best Practices
+
+1. **Use descriptive names** - Make it clear what the template creates
+2. **Add default values** - Provide sensible defaults for variables
+3. **Add validation** - Prevent invalid input with validation rules
+4. **Use tags** - Organize templates by technology or purpose
+5. **Write descriptions** - Explain when and how to use the template
+6. **Create wizards** - For complex templates, add a configuration wizard
