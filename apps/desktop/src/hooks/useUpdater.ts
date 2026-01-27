@@ -1,6 +1,8 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
+
+type Update = Awaited<ReturnType<typeof import("@tauri-apps/plugin-updater").check>>;
 
 interface UseUpdaterReturn {
   checkForUpdates: (silent?: boolean) => Promise<void>;
@@ -16,6 +18,9 @@ export const useUpdater = (): UseUpdaterReturn => {
     setUpdateError,
     resetUpdateState,
   } = useAppStore();
+
+  // Cache the update object to avoid duplicate API calls
+  const updateRef = useRef<Update>(null);
 
   const checkForUpdates = useCallback(
     async (silent = false) => {
@@ -35,6 +40,9 @@ export const useUpdater = (): UseUpdaterReturn => {
 
         const currentVersion = await getVersion();
         const update = await check();
+
+        // Cache the update object for later use
+        updateRef.current = update;
 
         if (update) {
           setUpdateInfo({
@@ -74,17 +82,16 @@ export const useUpdater = (): UseUpdaterReturn => {
       return;
     }
 
+    // Use cached update object instead of calling check() again
+    const update = updateRef.current;
+    if (!update) {
+      setUpdateError("No update available. Please check for updates first.");
+      return;
+    }
+
     try {
       setUpdateStatus("downloading");
       setUpdateProgress({ downloaded: 0, total: 0 });
-
-      const { check } = await import("@tauri-apps/plugin-updater");
-      const update = await check();
-
-      if (!update) {
-        setUpdateError("No update available");
-        return;
-      }
 
       let downloaded = 0;
       let total = 0;

@@ -19,7 +19,7 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [importExportModalOpen, setImportExportModalOpen] = useState(false);
-  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, setWatchAutoCreate, wizardState, updateState } = useAppStore();
+  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, setWatchAutoCreate, wizardState } = useAppStore();
   const { checkForUpdates } = useUpdater();
 
   // Ref for search input (passed to LeftPanel)
@@ -93,25 +93,21 @@ function App() {
   }, [createNewSchema, checkForUpdates]);
 
   // Auto-check for updates on startup (silent mode)
+  // Uses a ref to avoid re-running when checkForUpdates changes
+  const hasCheckedForUpdates = useRef(false);
   useEffect(() => {
-    if (!api.isTauri() || !isInitialized) {
+    if (!api.isTauri() || !isInitialized || hasCheckedForUpdates.current) {
       return;
     }
 
-    // Check for updates 3 seconds after startup
+    // Check for updates 3 seconds after startup (silent - badge will show if available)
     const timer = setTimeout(() => {
+      hasCheckedForUpdates.current = true;
       checkForUpdates(true);
     }, 3000);
 
     return () => clearTimeout(timer);
   }, [isInitialized, checkForUpdates]);
-
-  // Open update modal when an update becomes available (from silent check)
-  useEffect(() => {
-    if (updateState.status === "available" && !updateModalOpen) {
-      setUpdateModalOpen(true);
-    }
-  }, [updateState.status, updateModalOpen]);
 
   const loadSettings = async () => {
     try {
