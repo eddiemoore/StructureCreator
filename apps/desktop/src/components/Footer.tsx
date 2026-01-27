@@ -1,11 +1,13 @@
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
+import { UpdateBadge } from "./UpdateBadge";
 
 interface FooterProps {
   onOpenSettings?: () => void;
+  onOpenUpdateModal?: () => void;
 }
 
-export const Footer = ({ onOpenSettings }: FooterProps) => {
+export const Footer = ({ onOpenSettings, onOpenUpdateModal }: FooterProps) => {
   const { progress } = useAppStore();
 
   const statusColor =
@@ -39,6 +41,9 @@ export const Footer = ({ onOpenSettings }: FooterProps) => {
           >
             Settings
           </button>
+        )}
+        {onOpenUpdateModal && api.isTauri() && (
+          <UpdateBadge onClick={onOpenUpdateModal} />
         )}
       </div>
       <span className="text-text-placeholder">{platformLabel}</span>

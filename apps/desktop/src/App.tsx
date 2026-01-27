@@ -4,9 +4,10 @@ import { TreePreview } from "./components/TreePreview";
 import { RightPanel } from "./components/RightPanel";
 import { Footer } from "./components/Footer";
 import { SettingsModal } from "./components/SettingsModal";
+import { UpdateModal } from "./components/UpdateModal";
 import { TemplateWizard } from "./components/wizard";
 import { useAppStore } from "./store/appStore";
-import { useKeyboardShortcuts } from "./hooks";
+import { useKeyboardShortcuts, useUpdater } from "./hooks";
 import { api } from "./lib/api";
 import type { Settings, ThemeMode, AccentColor } from "./types/schema";
 import { DEFAULT_SETTINGS } from "./types/schema";
@@ -14,16 +15,18 @@ import { applyTheme, applyAccentColor } from "./utils/theme";
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [importExportModalOpen, setImportExportModalOpen] = useState(false);
   const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, setWatchAutoCreate, wizardState } = useAppStore();
+  const { checkForUpdates } = useUpdater();
 
   // Ref for search input (passed to LeftPanel)
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Check if any modal is open (used to disable shortcuts)
-  const isModalOpen = settingsOpen || showDiffModal || importExportModalOpen || !!wizardState?.isOpen;
+  const isModalOpen = settingsOpen || updateModalOpen || showDiffModal || importExportModalOpen || !!wizardState?.isOpen;
 
   // Initialize keyboard shortcuts
   // Note: Escape key is handled by individual modals, not here
@@ -67,9 +70,15 @@ function App() {
         createNewSchema();
       });
 
+      const unlistenCheckUpdates = await listen("check-for-updates", () => {
+        setUpdateModalOpen(true);
+        checkForUpdates();
+      });
+
       return () => {
         unlistenSettings();
         unlistenNewSchema();
+        unlistenCheckUpdates();
       };
     };
 
@@ -81,7 +90,24 @@ function App() {
     return () => {
       cleanup?.();
     };
-  }, [createNewSchema]);
+  }, [createNewSchema, checkForUpdates]);
+
+  // Auto-check for updates on startup (silent mode)
+  // Uses a ref to avoid re-running when checkForUpdates changes
+  const hasCheckedForUpdates = useRef(false);
+  useEffect(() => {
+    if (!api.isTauri() || !isInitialized || hasCheckedForUpdates.current) {
+      return;
+    }
+
+    // Check for updates 3 seconds after startup (silent - badge will show if available)
+    const timer = setTimeout(() => {
+      hasCheckedForUpdates.current = true;
+      checkForUpdates(true);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [isInitialized, checkForUpdates]);
 
   const loadSettings = async () => {
     try {
@@ -153,8 +179,15 @@ function App() {
         <TreePreview />
         <RightPanel />
       </div>
-      <Footer onOpenSettings={() => setSettingsOpen(true)} />
+      <Footer
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenUpdateModal={() => {
+          setUpdateModalOpen(true);
+          checkForUpdates();
+        }}
+      />
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <UpdateModal isOpen={updateModalOpen} onClose={() => setUpdateModalOpen(false)} />
       <TemplateWizard />
     </div>
   );

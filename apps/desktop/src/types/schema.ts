@@ -180,6 +180,35 @@ export interface CreationProgress {
   logs: LogEntry[];
 }
 
+// ============================================================================
+// Update Types
+// ============================================================================
+
+/** Update check status */
+export type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "ready" | "error" | "up-to-date";
+
+/** Information about an available update */
+export interface UpdateInfo {
+  version: string;
+  currentVersion: string;
+  body?: string;
+  date?: string;
+}
+
+/** Download progress */
+export interface UpdateProgress {
+  downloaded: number;
+  total: number;
+}
+
+/** Update state */
+export interface UpdateState {
+  status: UpdateStatus;
+  info: UpdateInfo | null;
+  progress: UpdateProgress | null;
+  error: string | null;
+}
+
 export interface AppState {
   // Schema
   schemaPath: string | null;
@@ -238,6 +267,9 @@ export interface AppState {
 
   // Wizard
   wizardState: WizardState | null;
+
+  // Update
+  updateState: UpdateState;
 
   // Actions
   setSchemaPath: (path: string | null) => void;
@@ -307,4 +339,11 @@ export interface AppState {
   setWizardStep: (step: number) => void;
   updateWizardAnswer: (questionId: string, value: string | boolean | string[]) => void;
   setWizardPreviewTree: (tree: SchemaTree | null) => void;
+
+  // Update actions
+  setUpdateStatus: (status: UpdateStatus) => void;
+  setUpdateInfo: (info: UpdateInfo | null) => void;
+  setUpdateProgress: (progress: UpdateProgress | null) => void;
+  setUpdateError: (error: string | null) => void;
+  resetUpdateState: () => void;
 }
