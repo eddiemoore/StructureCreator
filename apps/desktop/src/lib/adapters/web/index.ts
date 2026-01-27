@@ -22,6 +22,7 @@ import type {
   CreateResult,
   DiffResult,
   ParseWithInheritanceResult,
+  SchemaValidationResult,
 } from "../../../types/schema";
 
 import { IndexedDBAdapter } from "./indexeddb";
@@ -242,6 +243,20 @@ class WebValidationAdapter implements ValidationAdapter {
     rules: Record<string, ValidationRule>
   ): Promise<ValidationError[]> {
     return validateVars(variables, rules);
+  }
+
+  async validateSchema(
+    _content: string,
+    _variables: Record<string, string>
+  ): Promise<SchemaValidationResult> {
+    // Web adapter: schema validation is not fully implemented
+    // Return a valid result since we don't have the full Rust validation logic
+    // The web version relies on the simpler variable validation above
+    return {
+      isValid: true,
+      errors: [],
+      warnings: [],
+    };
   }
 }
 

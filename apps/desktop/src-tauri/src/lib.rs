@@ -1,9 +1,11 @@
 pub mod database;
 pub mod schema;
 pub mod transforms;
+pub mod validation;
 
 pub use database::{CreateTemplateInput, Database, Template, UpdateTemplateInput, ValidationRule, RecentProject, CreateRecentProjectInput};
 pub use schema::{parse_xml_schema, scan_folder_to_schema, scan_zip_to_schema, schema_to_xml, SchemaTree, SchemaNode, SchemaStats, SchemaHooks, resolve_template_inheritance, ParseWithInheritanceResult, TemplateData};
+pub use validation::{validate_schema, SchemaValidationResult, ValidationIssue, ValidationSeverity, ValidationIssueType};
 use transforms::substitute_variables;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -2977,6 +2979,35 @@ fn cmd_validate_variables(
     Ok(validate_variables(&variables, &rules))
 }
 
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
+fn cmd_validate_schema(
+    state: State<Mutex<AppState>>,
+    content: String,
+    variables: HashMap<String, String>,
+) -> Result<SchemaValidationResult, String> {
+    let state_guard = state.lock().map_err(|e| e.to_string())?;
+
+    // Create a template loader closure that looks up templates from the database
+    let loader = |name: &str| -> Option<TemplateData> {
+        state_guard
+            .db
+            .get_template_by_name(name)
+            .ok()
+            .flatten()
+            .map(|t| TemplateData {
+                schema_xml: t.schema_xml,
+                variables: t.variables,
+                variable_validation: t.variable_validation
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            })
+    };
+
+    Ok(validate_schema(&content, &variables, Some(&loader)))
+}
+
 // ============================================================================
 // Diff Preview Implementation
 // ============================================================================
@@ -3580,6 +3611,7 @@ pub fn run() {
             cmd_get_settings,
             cmd_set_setting,
             cmd_validate_variables,
+            cmd_validate_schema,
             cmd_generate_diff_preview,
             cmd_list_recent_projects,
             cmd_get_recent_project,

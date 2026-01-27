@@ -44,6 +44,7 @@ import type {
   DuplicateStrategy,
   ParseWithInheritanceResult,
   RecentProject,
+  SchemaValidationResult,
 } from "../../../types/schema";
 
 // Rust returns snake_case fields, this interface matches the Rust struct
@@ -382,6 +383,16 @@ class TauriValidationAdapter implements ValidationAdapter {
     return invoke<ValidationError[]>("cmd_validate_variables", {
       variables,
       rules,
+    });
+  }
+
+  async validateSchema(
+    content: string,
+    variables: Record<string, string>
+  ): Promise<SchemaValidationResult> {
+    return invoke<SchemaValidationResult>("cmd_validate_schema", {
+      content,
+      variables,
     });
   }
 }

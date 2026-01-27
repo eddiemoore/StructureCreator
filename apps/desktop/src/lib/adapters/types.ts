@@ -15,6 +15,7 @@ import type {
   ParseWithInheritanceResult,
   RecentProject,
   WizardConfig,
+  SchemaValidationResult,
 } from "../../types/schema";
 
 // ============================================================================
@@ -244,6 +245,16 @@ export interface ValidationAdapter {
     variables: Record<string, string>,
     rules: Record<string, ValidationRule>
   ): Promise<ValidationError[]>;
+
+  /**
+   * Validate a schema before structure creation.
+   * Checks for XML syntax errors, undefined variables, duplicate names,
+   * circular inheritance, and invalid URLs.
+   */
+  validateSchema(
+    content: string,
+    variables: Record<string, string>
+  ): Promise<SchemaValidationResult>;
 }
 
 // ============================================================================

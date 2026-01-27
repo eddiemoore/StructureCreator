@@ -367,7 +367,47 @@ export const RightPanel = () => {
 
     const { varsMap, rulesMap } = buildVariableMaps();
 
-    // Run validation first
+    // Run schema validation first (XML syntax, undefined variables, etc.)
+    if (schemaContent) {
+      addLog({ type: "info", message: "Validating schema..." });
+      setProgress({ status: "running", current: 0, total: 0 });
+
+      try {
+        const schemaValidation = await api.validation.validateSchema(schemaContent, varsMap);
+
+        // Log any warnings (they don't block creation)
+        for (const warning of schemaValidation.warnings) {
+          addLog({
+            type: "warning",
+            message: warning.message,
+            details: warning.nodePath ? `Path: ${warning.nodePath}` : undefined,
+          });
+        }
+
+        // If there are errors, stop here
+        if (!schemaValidation.isValid) {
+          for (const error of schemaValidation.errors) {
+            addLog({
+              type: "error",
+              message: error.message,
+              details: error.nodePath ? `Path: ${error.nodePath}` : undefined,
+            });
+          }
+          setProgress({ status: "error" });
+          return;
+        }
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        addLog({
+          type: "error",
+          message: `Schema validation failed: ${errorMessage}`,
+        });
+        setProgress({ status: "error" });
+        return;
+      }
+    }
+
+    // Run variable validation
     const isValid = await runValidation(varsMap, rulesMap);
     if (!isValid) return;
 

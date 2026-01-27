@@ -224,6 +224,8 @@ struct TemplateExport {
     is_favorite: bool,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    wizard_config: Option<serde_json::Value>,
 }
 
 /// CLI execution result
@@ -852,6 +854,7 @@ fn cmd_templates_export(name: &str, output: &std::path::Path, overwrite: bool, q
         icon_color: template.icon_color,
         is_favorite: template.is_favorite,
         tags: template.tags,
+        wizard_config: template.wizard_config,
     };
 
     let content = match serde_json::to_string_pretty(&export) {
@@ -972,6 +975,7 @@ fn cmd_templates_import(path: &std::path::Path, force: bool, quiet: bool) -> Cli
         icon_color: export.icon_color,
         is_favorite: export.is_favorite,
         tags: export.tags,
+        wizard_config: export.wizard_config,
     };
 
     let template = match db.create_template(input) {
