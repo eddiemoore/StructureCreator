@@ -30,7 +30,7 @@ interface TreeItemProps {
 
 const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
   const displayName =
-    node.name === "%BASE%" ? projectName : node.name.replace(/%BASE%/g, projectName);
+    node.name === "%PROJECT_NAME%" ? projectName : node.name.replace(/%PROJECT_NAME%/g, projectName);
 
   const isFolder = node.type === "folder";
   const isIf = node.type === "if";

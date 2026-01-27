@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<folder name="%BASE%">
+<folder name="%PROJECT_NAME%">
   <!-- Generate multiple module folders dynamically -->
   <repeat count="%NUM_MODULES%" as="i">
     <folder name="module_%i%">

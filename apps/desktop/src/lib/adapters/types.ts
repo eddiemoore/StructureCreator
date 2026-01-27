@@ -203,6 +203,7 @@ export interface CreateStructureOptions {
   variables: Record<string, string>;
   dryRun: boolean;
   overwrite: boolean;
+  projectName?: string;
 }
 
 export interface StructureCreatorAdapter {

@@ -206,10 +206,16 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
       );
     }
 
+    // Inject built-in variables (project name), allowing user overrides
+    const allVariables = { ...options.variables };
+    if (options.projectName && !allVariables["%PROJECT_NAME%"]) {
+      allVariables["%PROJECT_NAME%"] = options.projectName;
+    }
+
     return createStructureFromTree(
       tree,
       rootHandle,
-      options.variables,
+      allVariables,
       options.dryRun,
       options.overwrite
     );

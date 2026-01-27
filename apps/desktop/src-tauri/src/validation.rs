@@ -136,8 +136,11 @@ pub fn check_undefined_variables(
     for var_ref in refs {
         // base_name is already in %NAME% format
         if !variables.contains_key(&var_ref.base_name) {
-            // Special case: skip DATE variable as it's handled internally
-            if var_ref.base_name == "%DATE%" {
+            // Special case: skip built-in variables as they're handled internally
+            if matches!(
+                var_ref.base_name.as_str(),
+                "%DATE%" | "%YEAR%" | "%MONTH%" | "%DAY%" | "%PROJECT_NAME%"
+            ) {
                 continue;
             }
 
@@ -414,6 +417,17 @@ mod tests {
     fn test_check_undefined_variables_date_special() {
         // DATE is a special variable that's handled internally
         let content = r#"<file name="%DATE:format(YYYY-MM-DD)%.txt" />"#;
+        let variables = HashMap::new();
+
+        let result = check_undefined_variables(content, &variables);
+        assert!(result.is_valid);
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_check_undefined_variables_year_month_day_special() {
+        // YEAR, MONTH, DAY are built-in variables handled internally
+        let content = r#"<file name="report-%YEAR%-%MONTH%-%DAY%.txt" />"#;
         let variables = HashMap::new();
 
         let result = check_undefined_variables(content, &variables);

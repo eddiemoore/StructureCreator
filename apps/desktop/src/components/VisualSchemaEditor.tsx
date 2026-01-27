@@ -345,9 +345,9 @@ const EditableTreeItem = ({
   }, [showContextMenu]);
 
   const displayName =
-    node.name === "%BASE%"
+    node.name === "%PROJECT_NAME%"
       ? projectName
-      : node.name.replace(/%BASE%/g, projectName);
+      : node.name.replace(/%PROJECT_NAME%/g, projectName);
 
   const hasChildren = node.children && node.children.length > 0;
 
@@ -953,7 +953,7 @@ export const VisualSchemaEditor = () => {
     try {
       const xml = await api.schema.exportSchemaXml(schemaTree);
 
-      const defaultName = schemaTree.root.name === "%BASE%"
+      const defaultName = schemaTree.root.name === "%PROJECT_NAME%"
         ? `${projectName}-schema.xml`
         : `${schemaTree.root.name}-schema.xml`;
 
@@ -1090,9 +1090,9 @@ export const VisualSchemaEditor = () => {
                   case "repeat":
                     return `repeat ${draggedNode.repeat_count || DEFAULT_REPEAT_COUNT} as %${draggedNode.repeat_as || DEFAULT_REPEAT_AS}%`;
                   default:
-                    return draggedNode.name === "%BASE%"
+                    return draggedNode.name === "%PROJECT_NAME%"
                       ? projectName
-                      : draggedNode.name.replace(/%BASE%/g, projectName);
+                      : draggedNode.name.replace(/%PROJECT_NAME%/g, projectName);
                 }
               };
 

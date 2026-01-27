@@ -262,9 +262,10 @@ fn cmd_create_structure(
     variables: HashMap<String, String>,
     dry_run: bool,
     overwrite: bool,
+    project_name: Option<String>,
 ) -> Result<CreateResult, String> {
     let tree = parse_xml_schema(&content).map_err(|e| e.to_string())?;
-    create_structure_from_tree(&tree, &output_path, &variables, dry_run, overwrite)
+    create_structure_from_tree(&tree, &output_path, &variables, dry_run, overwrite, project_name.as_deref())
 }
 
 #[cfg(feature = "tauri-app")]
@@ -275,8 +276,9 @@ fn cmd_create_structure_from_tree(
     variables: HashMap<String, String>,
     dry_run: bool,
     overwrite: bool,
+    project_name: Option<String>,
 ) -> Result<CreateResult, String> {
-    create_structure_from_tree(&tree, &output_path, &variables, dry_run, overwrite)
+    create_structure_from_tree(&tree, &output_path, &variables, dry_run, overwrite, project_name.as_deref())
 }
 
 pub fn create_structure_from_tree(
@@ -285,6 +287,7 @@ pub fn create_structure_from_tree(
     variables: &HashMap<String, String>,
     dry_run: bool,
     overwrite: bool,
+    project_name: Option<&str>,
 ) -> Result<CreateResult, String> {
     let base_path = PathBuf::from(output_path);
     let mut logs: Vec<LogEntry> = Vec::new();
@@ -299,8 +302,24 @@ pub fn create_structure_from_tree(
     };
     let mut hook_results: Vec<HookResult> = Vec::new();
 
+    // Inject built-in variables, allowing user overrides
+    let mut all_variables = HashMap::new();
+    let now = chrono::Local::now();
+    all_variables.insert("%DATE%".to_string(), now.format("%Y-%m-%d").to_string());
+    all_variables.insert("%YEAR%".to_string(), now.format("%Y").to_string());
+    all_variables.insert("%MONTH%".to_string(), now.format("%m").to_string());
+    all_variables.insert("%DAY%".to_string(), now.format("%d").to_string());
+    // Inject %PROJECT_NAME% if provided
+    if let Some(name) = project_name {
+        all_variables.insert("%PROJECT_NAME%".to_string(), name.to_string());
+    }
+    // User-provided variables override built-ins
+    for (k, v) in variables.iter() {
+        all_variables.insert(k.clone(), v.clone());
+    }
+
     // Create structure recursively
-    create_node(&tree.root, &base_path, variables, dry_run, overwrite, &mut logs, &mut summary)?;
+    create_node(&tree.root, &base_path, &all_variables, dry_run, overwrite, &mut logs, &mut summary)?;
 
     // Execute post-create hooks if present and not in dry-run mode
     if let Some(ref hooks) = tree.hooks {
@@ -308,7 +327,7 @@ pub fn create_structure_from_tree(
             // Determine the working directory for hooks
             // Use the root folder path if it was created, otherwise use output_path
             // Apply variable substitution to root name (same as in create_node)
-            let substituted_root_name = substitute_variables(&tree.root.name, variables);
+            let substituted_root_name = substitute_variables(&tree.root.name, &all_variables);
             let hook_working_dir = base_path.join(&substituted_root_name);
             let working_dir = if hook_working_dir.exists() {
                 hook_working_dir
@@ -318,7 +337,7 @@ pub fn create_structure_from_tree(
 
             for cmd in &hooks.post_create {
                 // Replace variables in command
-                let resolved_cmd = substitute_variables(cmd, variables);
+                let resolved_cmd = substitute_variables(cmd, &all_variables);
 
                 if dry_run {
                     logs.push(LogEntry {
@@ -4237,6 +4256,210 @@ mod tests {
             assert_eq!(errors[0].variable_name, "APPLE");
             assert_eq!(errors[1].variable_name, "MANGO");
             assert_eq!(errors[2].variable_name, "ZEBRA");
+        }
+    }
+
+    mod builtin_date_variables_tests {
+        use super::*;
+        use crate::schema::{SchemaNode, SchemaStats, SchemaTree};
+        use std::fs;
+
+        #[test]
+        fn injects_date_variables_without_user_input() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let output_path = temp_dir.path().to_str().unwrap();
+
+            // Create a simple schema with date variables
+            let tree = SchemaTree {
+                root: SchemaNode {
+                    id: Some("root".to_string()),
+                    name: "project".to_string(),
+                    node_type: "folder".to_string(),
+                    children: Some(vec![SchemaNode {
+                        id: Some("file1".to_string()),
+                        name: "report-%YEAR%-%MONTH%-%DAY%.txt".to_string(),
+                        node_type: "file".to_string(),
+                        content: Some("Created on %DATE%".to_string()),
+                        children: None,
+                        url: None,
+                        condition_var: None,
+                        repeat_count: None,
+                        repeat_as: None,
+                    }]),
+                    url: None,
+                    content: None,
+                    condition_var: None,
+                    repeat_count: None,
+                    repeat_as: None,
+                },
+                stats: SchemaStats {
+                    folders: 1,
+                    files: 1,
+                    downloads: 0,
+                },
+                hooks: None,
+            };
+
+            // Call without any user-provided variables
+            let variables = HashMap::new();
+            let result = create_structure_from_tree(&tree, output_path, &variables, false, false, None);
+            assert!(result.is_ok());
+
+            // Verify the file was created with correct date substitutions
+            let now = chrono::Local::now();
+            let expected_filename = format!(
+                "report-{}-{}-{}.txt",
+                now.format("%Y"),
+                now.format("%m"),
+                now.format("%d")
+            );
+            let file_path = temp_dir.path().join("project").join(&expected_filename);
+            assert!(file_path.exists(), "File with date variables should exist: {:?}", file_path);
+
+            // Verify content also has date substituted
+            let content = fs::read_to_string(&file_path).unwrap();
+            let expected_date = now.format("%Y-%m-%d").to_string();
+            assert!(content.contains(&expected_date), "Content should contain DATE: {}", content);
+        }
+
+        #[test]
+        fn user_can_override_builtin_date_variables() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let output_path = temp_dir.path().to_str().unwrap();
+
+            let tree = SchemaTree {
+                root: SchemaNode {
+                    id: Some("root".to_string()),
+                    name: "project".to_string(),
+                    node_type: "folder".to_string(),
+                    children: Some(vec![SchemaNode {
+                        id: Some("file1".to_string()),
+                        name: "report-%YEAR%.txt".to_string(),
+                        node_type: "file".to_string(),
+                        content: None,
+                        children: None,
+                        url: None,
+                        condition_var: None,
+                        repeat_count: None,
+                        repeat_as: None,
+                    }]),
+                    url: None,
+                    content: None,
+                    condition_var: None,
+                    repeat_count: None,
+                    repeat_as: None,
+                },
+                stats: SchemaStats {
+                    folders: 1,
+                    files: 1,
+                    downloads: 0,
+                },
+                hooks: None,
+            };
+
+            // Override %YEAR% with a custom value
+            let mut variables = HashMap::new();
+            variables.insert("%YEAR%".to_string(), "2000".to_string());
+
+            let result = create_structure_from_tree(&tree, output_path, &variables, false, false, None);
+            assert!(result.is_ok());
+
+            // Verify the file was created with the user-provided year, not the current year
+            let file_path = temp_dir.path().join("project").join("report-2000.txt");
+            assert!(file_path.exists(), "File should use user-provided YEAR override");
+        }
+
+        #[test]
+        fn injects_project_name_variable() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let output_path = temp_dir.path().to_str().unwrap();
+
+            // Create a schema using %PROJECT_NAME%
+            let tree = SchemaTree {
+                root: SchemaNode {
+                    id: Some("root".to_string()),
+                    name: "%PROJECT_NAME%".to_string(),
+                    node_type: "folder".to_string(),
+                    children: Some(vec![SchemaNode {
+                        id: Some("file1".to_string()),
+                        name: "README.md".to_string(),
+                        node_type: "file".to_string(),
+                        content: Some("# %PROJECT_NAME%\n\nWelcome to %PROJECT_NAME%!".to_string()),
+                        children: None,
+                        url: None,
+                        condition_var: None,
+                        repeat_count: None,
+                        repeat_as: None,
+                    }]),
+                    url: None,
+                    content: None,
+                    condition_var: None,
+                    repeat_count: None,
+                    repeat_as: None,
+                },
+                stats: SchemaStats {
+                    folders: 1,
+                    files: 1,
+                    downloads: 0,
+                },
+                hooks: None,
+            };
+
+            let variables = HashMap::new();
+            let result = create_structure_from_tree(&tree, output_path, &variables, false, false, Some("my-awesome-app"));
+            assert!(result.is_ok());
+
+            // Verify the folder was created with the project name
+            let folder_path = temp_dir.path().join("my-awesome-app");
+            assert!(folder_path.exists(), "Folder should be created with project name");
+
+            // Verify the file content has the project name substituted
+            let file_path = folder_path.join("README.md");
+            assert!(file_path.exists(), "README.md should exist");
+            let content = fs::read_to_string(&file_path).unwrap();
+            assert!(content.contains("# my-awesome-app"), "Content should contain project name: {}", content);
+            assert!(content.contains("Welcome to my-awesome-app!"), "Content should contain project name: {}", content);
+        }
+
+        #[test]
+        fn user_can_override_project_name_variable() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let output_path = temp_dir.path().to_str().unwrap();
+
+            let tree = SchemaTree {
+                root: SchemaNode {
+                    id: Some("root".to_string()),
+                    name: "%PROJECT_NAME%".to_string(),
+                    node_type: "folder".to_string(),
+                    children: None,
+                    url: None,
+                    content: None,
+                    condition_var: None,
+                    repeat_count: None,
+                    repeat_as: None,
+                },
+                stats: SchemaStats {
+                    folders: 1,
+                    files: 0,
+                    downloads: 0,
+                },
+                hooks: None,
+            };
+
+            // Provide both project_name and a user override
+            let mut variables = HashMap::new();
+            variables.insert("%PROJECT_NAME%".to_string(), "user-override-name".to_string());
+
+            let result = create_structure_from_tree(&tree, output_path, &variables, false, false, Some("injected-name"));
+            assert!(result.is_ok());
+
+            // User-provided variable should override the injected project_name
+            let folder_path = temp_dir.path().join("user-override-name");
+            assert!(folder_path.exists(), "Folder should use user-provided override");
+
+            // Verify the injected name was NOT used
+            let injected_folder = temp_dir.path().join("injected-name");
+            assert!(!injected_folder.exists(), "Injected name should not be used when user overrides");
         }
     }
 }

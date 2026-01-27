@@ -67,15 +67,45 @@ Apply transformations to format variable values:
 
 ## Built-in Variables
 
-Structure Creator provides built-in variables:
+Structure Creator provides built-in variables that are automatically available without needing to define them:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
+| `%PROJECT_NAME%` | The project name from the UI | my-awesome-project |
 | `%DATE%` | Current date (ISO) | 2024-01-15 |
 | `%DATE:FORMAT%` | Formatted date | See below |
 | `%YEAR%` | Current year | 2024 |
 | `%MONTH%` | Current month (01-12) | 01 |
 | `%DAY%` | Current day (01-31) | 15 |
+
+### Project Name Variable
+
+The `%PROJECT_NAME%` variable is special—it's automatically set from the "Project Name" field in the UI. This is the recommended way to name your root folder:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <file name="README.md">
+# %PROJECT_NAME%
+
+Welcome to %PROJECT_NAME%!
+  </file>
+</folder>
+```
+
+When you enter "my-awesome-project" in the Project Name field, the folder will be created with that name, and all references to `%PROJECT_NAME%` in your schema will be replaced.
+
+You can also apply transforms to the project name:
+
+```xml
+<file name="package.json">
+{
+  "name": "%PROJECT_NAME:kebab-case%",
+  "displayName": "%PROJECT_NAME:PascalCase%"
+}
+</file>
+```
+
+**Note:** If you define `%PROJECT_NAME%` as a custom variable, your value will override the built-in project name.
 
 ### Date Formats
 
