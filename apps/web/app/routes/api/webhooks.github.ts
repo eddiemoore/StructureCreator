@@ -1,12 +1,14 @@
 import { data } from "react-router";
+import type { D1Database } from "@cloudflare/workers-types";
 import type { Route } from "./+types/webhooks.github";
+import { getDb, getEnv } from "~/lib/env.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
-  const env = (context.cloudflare as { env: Record<string, string | D1Database> }).env;
+  const env = getEnv(context);
 
   // Verify webhook signature
   const signature = request.headers.get("x-hub-signature-256");
-  const secret = env.GITHUB_WEBHOOK_SECRET as string;
+  const secret = env.GITHUB_WEBHOOK_SECRET;
 
   if (!signature || !secret) {
     return data({ error: "Unauthorized" }, { status: 401 });
@@ -26,7 +28,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // Handle pull request events
   if (event === "pull_request") {
-    await handlePullRequestEvent(payload, env.DB as D1Database);
+    const db = getDb(context);
+    await handlePullRequestEvent(payload, db);
   }
 
   return data({ success: true });
@@ -47,7 +50,23 @@ async function verifySignature(body: string, signature: string, secret: string):
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")}`;
 
-  return signature === expectedSignature;
+  // Use timing-safe comparison to prevent timing attacks
+  return timingSafeEqual(signature, expectedSignature);
+}
+
+// Constant-time string comparison to prevent timing attacks
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    // Still do the comparison to maintain constant time
+    b = a;
+  }
+
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+
+  return result === 0 && a.length === b.length;
 }
 
 interface PullRequestPayload {

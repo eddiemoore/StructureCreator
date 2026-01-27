@@ -1,6 +1,7 @@
 import { redirect, data } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/templates.submit";
+import { getDb, getEnv } from "~/lib/env.server";
 
 const submitSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -58,7 +59,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`;
 
   // Get D1 database from context
-  const db = (context.cloudflare as { env: { DB: D1Database } }).env.DB;
+  const db = getDb(context);
 
   // Insert into database
   await db
@@ -118,11 +119,11 @@ interface CreatePRParams {
 
 async function createGitHubPR(params: CreatePRParams) {
   const { id, name, description, schema_xml, variables, tags, author_name, author_github, context } = params;
-  const env = (context.cloudflare as { env: Record<string, string> }).env;
+  const env = getEnv(context);
 
   const token = env.GITHUB_TOKEN;
-  const owner = env.GITHUB_OWNER || "eddiemoore";
-  const repo = env.GITHUB_REPO || "structurecreator";
+  const owner = env.GITHUB_OWNER;
+  const repo = env.GITHUB_REPO;
 
   if (!token) {
     throw new Error("GITHUB_TOKEN not configured");
@@ -176,7 +177,7 @@ async function createGitHubPR(params: CreatePRParams) {
     repo,
     path: `community-templates/${id}.json`,
     message: `Add community template: ${name}`,
-    content: Buffer.from(templateContent).toString("base64"),
+    content: base64Encode(templateContent),
     branch: branchName,
   });
 
@@ -215,11 +216,21 @@ ${description}
   });
 
   // Update the database with PR info
-  const db = (context.cloudflare as { env: { DB: D1Database } }).env.DB;
+  const db = getDb(context);
   await db
     .prepare("UPDATE templates SET github_pr_number = ?, github_pr_url = ? WHERE id = ?")
     .bind(prData.number, prData.html_url, id)
     .run();
 
   return prData;
+}
+
+// Base64 encode that works in edge runtime (handles UTF-8)
+function base64Encode(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }

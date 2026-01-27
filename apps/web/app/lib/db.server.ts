@@ -59,16 +59,22 @@ export async function incrementDownloadCount(db: D1Database, id: string): Promis
 }
 
 export async function getTemplatesByTag(db: D1Database, tag: string): Promise<ParsedTemplate[]> {
+  // Sanitize tag: escape LIKE wildcards and JSON special characters
+  const sanitizedTag = escapeLikePattern(tag.replace(/["\\]/g, ""));
+
   // SQLite doesn't have native JSON array search, so we use LIKE with JSON format
   const result = await db
     .prepare("SELECT * FROM templates WHERE status = 'approved' AND tags LIKE ? ORDER BY submitted_at DESC")
-    .bind(`%"${tag}"%`)
+    .bind(`%"${sanitizedTag}"%`)
     .all<Template>();
 
   return result.results.map(parseTemplate);
 }
 
 export async function searchTemplates(db: D1Database, query: string): Promise<ParsedTemplate[]> {
+  // Sanitize query: escape LIKE wildcards
+  const sanitizedQuery = escapeLikePattern(query);
+
   const result = await db
     .prepare(
       `SELECT * FROM templates
@@ -76,8 +82,13 @@ export async function searchTemplates(db: D1Database, query: string): Promise<Pa
        AND (name LIKE ? OR description LIKE ?)
        ORDER BY submitted_at DESC`
     )
-    .bind(`%${query}%`, `%${query}%`)
+    .bind(`%${sanitizedQuery}%`, `%${sanitizedQuery}%`)
     .all<Template>();
 
   return result.results.map(parseTemplate);
+}
+
+// Escape special characters in LIKE patterns to prevent injection
+function escapeLikePattern(str: string): string {
+  return str.replace(/[%_\\]/g, "\\$&");
 }
