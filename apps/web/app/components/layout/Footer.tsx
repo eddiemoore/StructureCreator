@@ -47,7 +47,7 @@ export function Footer() {
               </span>
             </Link>
             <p className="mt-4 text-sm text-muted-foreground">
-              Generate folder and file structures from XML schemas. A powerful desktop app for developers.
+              Create consistent folder structures and document templates in seconds. For teams and individuals.
             </p>
           </div>
 

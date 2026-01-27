@@ -69,7 +69,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <p className="mb-8 text-lg text-muted-foreground">{details}</p>
         <a
           href="/"
-          className="rounded-lg bg-accent px-6 py-3 font-medium text-white transition-colors hover:bg-accent/90"
+          className="btn btn-primary px-6 py-3 font-medium"
         >
           Go Home
         </a>

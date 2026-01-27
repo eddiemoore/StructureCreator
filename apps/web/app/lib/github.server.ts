@@ -53,7 +53,7 @@ export async function createPullRequest(
     repo,
     path: filePath,
     message: commitMessage,
-    content: Buffer.from(fileContent).toString("base64"),
+    content: base64Encode(fileContent),
     branch: branchName,
   });
 
@@ -107,4 +107,14 @@ export async function getPullRequest(
     merged: data.merged,
     url: data.html_url,
   };
+}
+
+// Base64 encode that works in edge runtime (handles UTF-8)
+function base64Encode(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
