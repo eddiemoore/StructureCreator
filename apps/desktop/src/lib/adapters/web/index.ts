@@ -249,9 +249,13 @@ class WebValidationAdapter implements ValidationAdapter {
     _content: string,
     _variables: Record<string, string>
   ): Promise<SchemaValidationResult> {
-    // Web adapter: schema validation is not fully implemented
-    // Return a valid result since we don't have the full Rust validation logic
-    // The web version relies on the simpler variable validation above
+    // TODO: Implement web-based schema validation (issue #25)
+    // Currently returns valid since we don't have the full Rust validation logic.
+    // Could add basic checks like:
+    // - XML syntax validation using DOMParser
+    // - Undefined variable detection
+    // - Duplicate name detection
+    // For now, the web version relies on the simpler variable validation above.
     return {
       isValid: true,
       errors: [],

@@ -696,6 +696,22 @@ mod tests {
     }
 
     #[test]
+    fn test_check_inheritance_template_not_found() {
+        let content = r#"<template extends="nonexistent-template"><file name="a.txt" /></template>"#;
+
+        let loader = |_name: &str| -> Option<TemplateData> { None };
+
+        let result = check_inheritance(content, &loader);
+        assert!(!result.is_valid);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(
+            result.errors[0].issue_type,
+            ValidationIssueType::InheritanceError
+        );
+        assert!(result.errors[0].message.contains("not found"));
+    }
+
+    #[test]
     fn test_validate_schema_all_checks() {
         let content = r#"<folder name="%PROJECT%">
             <file name="%NAME%.txt" />
