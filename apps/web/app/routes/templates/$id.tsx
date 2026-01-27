@@ -1,8 +1,16 @@
 import { useState } from "react";
-import { Link, useLoaderData, data } from "react-router";
+import { Link, useLoaderData, useFetcher, data } from "react-router";
 import type { Route } from "./+types/$id";
 import { getTemplateById, incrementDownloadCount, type ParsedTemplate } from "~/lib/db.server";
 import { getDb } from "~/lib/env.server";
+
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
 
 export function meta({ data }: Route.MetaArgs) {
   const template = data as ParsedTemplate | null;
@@ -35,6 +43,7 @@ export async function action({ params, context }: Route.ActionArgs) {
 export default function TemplateDetail() {
   const { template } = useLoaderData<typeof loader>();
   const [copied, setCopied] = useState(false);
+  const fetcher = useFetcher();
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(template.schema_xml);
@@ -43,6 +52,10 @@ export default function TemplateDetail() {
   };
 
   const handleDownload = () => {
+    // Track download on server
+    fetcher.submit(null, { method: "post" });
+
+    // Trigger client-side download
     const blob = new Blob([template.schema_xml], { type: "application/xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -171,7 +184,7 @@ export default function TemplateDetail() {
               <div>
                 <dt className="text-muted-foreground">Submitted</dt>
                 <dd className="mt-1 text-foreground">
-                  {new Date(template.submitted_at).toLocaleDateString()}
+                  {formatDate(template.submitted_at)}
                 </dd>
               </div>
             </dl>

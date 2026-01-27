@@ -2,6 +2,7 @@ import { redirect, data } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/templates.submit";
 import { getDb, getEnv } from "~/lib/env.server";
+import { base64Encode } from "~/lib/encoding.server";
 
 const submitSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -223,14 +224,4 @@ ${description}
     .run();
 
   return prData;
-}
-
-// Base64 encode that works in edge runtime (handles UTF-8)
-function base64Encode(str: string): string {
-  const bytes = new TextEncoder().encode(str);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
 }
