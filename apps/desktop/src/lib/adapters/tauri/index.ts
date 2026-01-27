@@ -340,6 +340,7 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
       variables: options.variables,
       dryRun: options.dryRun,
       overwrite: options.overwrite,
+      projectName: options.projectName,
     });
   }
 
@@ -353,6 +354,7 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
       variables: options.variables,
       dryRun: options.dryRun,
       overwrite: options.overwrite,
+      projectName: options.projectName,
     });
   }
 

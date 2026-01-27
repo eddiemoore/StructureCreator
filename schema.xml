@@ -1,4 +1,4 @@
-<folder name='%BASE%'>
+<folder name='%PROJECT_NAME%'>
 	<folder name='assets' />
 	<folder name='docs' />
 	<folder name='release'>

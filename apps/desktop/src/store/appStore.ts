@@ -171,9 +171,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isWatching: false,
 
   // Variables
-  variables: [
-    { name: "%DATE%", value: new Date().toISOString().split("T")[0] },
-  ],
+  variables: [],
   validationErrors: [],
 
   // Templates
@@ -481,7 +479,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newRoot: SchemaNode = {
       id: generateNodeId(),
       type: "folder",
-      name: "%BASE%",
+      name: "%PROJECT_NAME%",
       children: [],
     };
 

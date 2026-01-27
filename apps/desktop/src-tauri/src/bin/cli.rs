@@ -101,6 +101,10 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
 
+        /// Project name (sets %PROJECT_NAME% variable)
+        #[arg(short, long)]
+        name: Option<String>,
+
         /// Variable substitutions (can be used multiple times)
         /// Format: NAME=value
         #[arg(long = "var", value_parser = parse_variable)]
@@ -618,6 +622,7 @@ fn cmd_create(
     template: Option<String>,
     schema: Option<String>,
     output: PathBuf,
+    name: Option<String>,
     vars: Vec<(String, String)>,
     dry_run: bool,
     overwrite: bool,
@@ -715,7 +720,7 @@ fn cmd_create(
         );
     }
 
-    match create_structure_from_tree(&tree, &output_str, &variables, dry_run, overwrite) {
+    match create_structure_from_tree(&tree, &output_str, &variables, dry_run, overwrite, name.as_deref()) {
         Ok(result) => print_result(&result, json_output, quiet),
         Err(e) => CliResult::Error(e),
     }
@@ -1112,11 +1117,12 @@ fn main() {
             template,
             schema,
             output,
+            name,
             vars,
             dry_run,
             overwrite,
             json,
-        } => cmd_create(template, schema, output, vars, dry_run, overwrite, json, quiet),
+        } => cmd_create(template, schema, output, name, vars, dry_run, overwrite, json, quiet),
 
         Commands::Templates { action } => match action {
             TemplateAction::List { json } => cmd_templates_list(json, quiet),

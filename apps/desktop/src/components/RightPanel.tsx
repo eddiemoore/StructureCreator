@@ -269,6 +269,7 @@ export const RightPanel = () => {
           variables: varsMap,
           dryRun: isDryRun,
           overwrite,
+          projectName,
         });
       } else if (effectiveTree) {
         result = await api.structureCreator.createStructureFromTree(effectiveTree, {
@@ -276,6 +277,7 @@ export const RightPanel = () => {
           variables: varsMap,
           dryRun: isDryRun,
           overwrite,
+          projectName,
         });
       } else {
         throw new Error("No schema available");
