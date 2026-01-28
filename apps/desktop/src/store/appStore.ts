@@ -1,7 +1,8 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem, EditorMode } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
+import { api } from "../lib/api";
 
 const initialProgress: CreationProgress = {
   current: 0,
@@ -157,9 +158,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Schema editing
   isEditMode: false,
+  editorMode: "preview" as const,
   schemaDirty: false,
   schemaHistory: [],
   schemaHistoryIndex: -1,
+
+  // XML Editor state
+  xmlEditorContent: null,
+  xmlParseError: null,
 
   // Output settings
   outputPath: null,
@@ -464,9 +470,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       schemaTree: null,
       progress: initialProgress,
       isEditMode: false,
+      editorMode: "preview",
       schemaDirty: false,
       schemaHistory: [],
       schemaHistoryIndex: -1,
+      xmlEditorContent: null,
+      xmlParseError: null,
       diffResult: null,
       diffLoading: false,
       diffError: null,
@@ -478,6 +487,93 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Schema editing actions
   setEditMode: (enabled: boolean) => set({ isEditMode: enabled }),
+
+  setEditorMode: async (mode: EditorMode): Promise<boolean> => {
+    const state = get();
+    const currentMode = state.editorMode;
+
+    // If switching to the same mode, do nothing
+    if (mode === currentMode) return true;
+
+    // Switching FROM XML mode - need to sync XML to tree first
+    if (currentMode === "xml" && state.xmlEditorContent !== null) {
+      const success = await get().syncXmlToTree();
+      if (!success) {
+        // Parse error - stay in XML mode
+        return false;
+      }
+    }
+
+    // Switching TO XML mode - sync tree to XML
+    if (mode === "xml" && state.schemaTree) {
+      await get().syncTreeToXml();
+    }
+
+    // Update mode and legacy isEditMode flag
+    set({
+      editorMode: mode,
+      isEditMode: mode === "visual",
+      xmlParseError: null,
+    });
+
+    return true;
+  },
+
+  setXmlEditorContent: (content: string) => {
+    set({ xmlEditorContent: content, schemaDirty: true });
+  },
+
+  setXmlParseError: (error: string | null) => {
+    set({ xmlParseError: error });
+  },
+
+  syncXmlToTree: async (): Promise<boolean> => {
+    const state = get();
+    const content = state.xmlEditorContent;
+    if (!content) return true;
+
+    try {
+      const tree = await api.schema.parseSchema(content);
+      // Ensure all nodes have IDs
+      const treeWithIds = {
+        ...tree,
+        root: ensureNodeIds(tree.root),
+      };
+
+      // Add to history
+      const history = state.schemaHistory.slice(0, state.schemaHistoryIndex + 1);
+      history.push(treeWithIds);
+
+      set({
+        schemaTree: treeWithIds,
+        schemaContent: content,
+        schemaHistory: history,
+        schemaHistoryIndex: history.length - 1,
+        xmlParseError: null,
+      });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set({ xmlParseError: message });
+      return false;
+    }
+  },
+
+  syncTreeToXml: async (): Promise<void> => {
+    const state = get();
+    if (!state.schemaTree) {
+      set({ xmlEditorContent: null });
+      return;
+    }
+
+    try {
+      const xml = await api.schema.exportSchemaXml(state.schemaTree);
+      set({ xmlEditorContent: xml, xmlParseError: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set({ xmlParseError: message });
+    }
+  },
 
   createNewSchema: () => {
     const newRoot: SchemaNode = {
@@ -500,6 +596,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       schemaHistoryIndex: 0,
       schemaDirty: true,
       isEditMode: true,
+      editorMode: "visual",
+      xmlEditorContent: null,
+      xmlParseError: null,
     });
   },
 
