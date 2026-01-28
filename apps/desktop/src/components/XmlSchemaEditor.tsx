@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useState } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "@codemirror/view";
 import { EditorState, Extension } from "@codemirror/state";
 import { xml } from "@codemirror/lang-xml";
@@ -6,7 +6,8 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { bracketMatching, foldGutter, indentOnInput, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { useAppStore } from "../store/appStore";
-import { AlertCircleIcon } from "./Icons";
+import { AlertCircleIcon, LoaderIcon } from "./Icons";
+import { api } from "../lib/api";
 
 export const XmlSchemaEditor = () => {
   const {
@@ -21,6 +22,7 @@ export const XmlSchemaEditor = () => {
   const viewRef = useRef<EditorView | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInternalChangeRef = useRef(false);
+  const [isFormatting, setIsFormatting] = useState(false);
 
   // Debounced validation - validates XML as user types
   const validateXml = useCallback((content: string) => {
@@ -47,26 +49,15 @@ export const XmlSchemaEditor = () => {
     }, 500);
   }, [setXmlParseError]);
 
-  // Format XML with proper indentation
-  const formatXml = useCallback(() => {
-    if (!viewRef.current || !xmlEditorContent) return;
+  // Format XML using backend for consistency with Rust parser
+  const formatXml = useCallback(async () => {
+    if (!viewRef.current || !xmlEditorContent || isFormatting) return;
 
+    setIsFormatting(true);
     try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(xmlEditorContent, "text/xml");
-      const parseError = doc.querySelector("parsererror");
-
-      if (parseError) {
-        // Don't format if there's a parse error
-        return;
-      }
-
-      // Format the XML
-      const serializer = new XMLSerializer();
-      let formatted = serializer.serializeToString(doc);
-
-      // Add proper indentation
-      formatted = formatXmlString(formatted);
+      // Parse through backend to get canonical format
+      const tree = await api.schema.parseSchema(xmlEditorContent);
+      const formatted = await api.schema.exportSchemaXml(tree);
 
       // Update editor content
       isInternalChangeRef.current = true;
@@ -81,10 +72,21 @@ export const XmlSchemaEditor = () => {
       setXmlEditorContent(formatted);
       setXmlParseError(null);
       isInternalChangeRef.current = false;
-    } catch {
-      // Silently fail - user will see parse error
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setXmlParseError(message);
+    } finally {
+      setIsFormatting(false);
     }
-  }, [xmlEditorContent, setXmlEditorContent, setXmlParseError]);
+  }, [xmlEditorContent, setXmlEditorContent, setXmlParseError, isFormatting]);
+
+  // Sync button handler
+  const handleSync = useCallback(async () => {
+    const success = await syncXmlToTree();
+    if (success) {
+      setXmlParseError(null);
+    }
+  }, [syncXmlToTree, setXmlParseError]);
 
   // Create CodeMirror extensions
   const createExtensions = useCallback((): Extension[] => {
@@ -181,6 +183,21 @@ export const XmlSchemaEditor = () => {
     }
   }, [xmlEditorContent]);
 
+  // Keyboard shortcut: Cmd/Ctrl+Enter to apply changes
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (!xmlParseError) {
+          handleSync();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSync, xmlParseError]);
+
   // Cleanup debounce timer on unmount
   useEffect(() => {
     return () => {
@@ -190,13 +207,8 @@ export const XmlSchemaEditor = () => {
     };
   }, []);
 
-  // Sync button handler
-  const handleSync = useCallback(async () => {
-    const success = await syncXmlToTree();
-    if (success) {
-      setXmlParseError(null);
-    }
-  }, [syncXmlToTree, setXmlParseError]);
+  const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+  const shortcutKey = isMac ? "⌘" : "Ctrl";
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -204,23 +216,24 @@ export const XmlSchemaEditor = () => {
       <div className="px-3 py-2 border-b border-border-muted flex items-center gap-2 bg-mac-bg">
         <button
           onClick={formatXml}
-          disabled={!!xmlParseError}
-          className="px-2.5 py-1 text-mac-xs rounded-mac bg-mac-bg-secondary hover:bg-mac-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!!xmlParseError || isFormatting}
+          className="px-2.5 py-1 text-mac-xs rounded-mac bg-mac-bg-secondary hover:bg-mac-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
           title="Format XML"
         >
+          {isFormatting && <LoaderIcon size={12} className="animate-spin" />}
           Format
         </button>
         <button
           onClick={handleSync}
           disabled={!!xmlParseError}
           className="px-2.5 py-1 text-mac-xs rounded-mac bg-mac-bg-secondary hover:bg-mac-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Sync changes to tree"
+          title={`Apply changes (${shortcutKey}+Enter)`}
         >
           Apply Changes
         </button>
         <div className="flex-1" />
         <span className="text-mac-xs text-text-muted">
-          Edit XML directly
+          {shortcutKey}+Enter to apply
         </span>
       </div>
 
@@ -244,37 +257,3 @@ export const XmlSchemaEditor = () => {
     </div>
   );
 };
-
-// Helper function to format XML with proper indentation
-function formatXmlString(xml: string): string {
-  const PADDING = "  ";
-  let formatted = "";
-  let indent = 0;
-
-  // Split on tags, keeping them in the result
-  const parts = xml.replace(/></g, ">\n<").split("\n");
-
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-
-    // Check if this is a closing tag
-    const isClosing = trimmed.startsWith("</");
-    // Check if this is a self-closing tag
-    const isSelfClosing = trimmed.endsWith("/>");
-    // Check if this is a processing instruction or declaration
-    const isDeclaration = trimmed.startsWith("<?");
-
-    if (isClosing && !isSelfClosing) {
-      indent = Math.max(0, indent - 1);
-    }
-
-    formatted += PADDING.repeat(indent) + trimmed + "\n";
-
-    if (!isClosing && !isSelfClosing && !isDeclaration && !trimmed.includes("</")) {
-      indent++;
-    }
-  }
-
-  return formatted.trim();
-}

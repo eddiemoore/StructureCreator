@@ -6,7 +6,7 @@ import {
   BranchIcon,
   GitMergeIcon,
   RepeatIcon,
-  EyeViewIcon,
+  EyeIcon,
   GridIcon,
   XmlIcon,
 } from "./Icons";
@@ -138,7 +138,7 @@ interface EditorModeToggleProps {
 
 const EditorModeToggle = ({ mode, onChange, disabled }: EditorModeToggleProps) => {
   const modes: { value: EditorMode; label: string; icon: React.ReactNode }[] = [
-    { value: "preview", label: "Preview", icon: <EyeViewIcon size={14} /> },
+    { value: "preview", label: "Preview", icon: <EyeIcon size={14} /> },
     { value: "visual", label: "Visual", icon: <GridIcon size={14} /> },
     { value: "xml", label: "XML", icon: <XmlIcon size={14} /> },
   ];
