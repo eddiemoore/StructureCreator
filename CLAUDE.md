@@ -66,7 +66,7 @@ Structure Creator is a Tauri 2.0 desktop application that generates folder/file 
 - **Entry**: `src/main.tsx` → `src/App.tsx`
 - **State Management**: Zustand store in `src/store/appStore.ts` - single store with all app state (schema, variables, templates, settings, progress)
 - **Types**: Desktop-specific types in `src/types/schema.ts`, shared types re-exported from `@structure-creator/shared`
-- **Layout**: Three-panel layout with LeftPanel (schema input/templates), TreePreview (visual tree), RightPanel (execution/logs)
+- **Layout**: Three-panel layout with LeftPanel (file selection/templates), TreePreview (schema editor with Preview/Visual/XML modes), RightPanel (execution/logs)
 
 #### Backend (Rust)
 

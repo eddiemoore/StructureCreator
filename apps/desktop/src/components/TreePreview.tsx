@@ -3,14 +3,16 @@ import {
   FolderIcon,
   FileIcon,
   DownloadIcon,
-  CodeIcon,
-  GridIcon,
   BranchIcon,
   GitMergeIcon,
   RepeatIcon,
+  EyeIcon,
+  GridIcon,
+  XmlIcon,
 } from "./Icons";
-import type { SchemaNode } from "../types/schema";
+import type { SchemaNode, EditorMode } from "../types/schema";
 import { VisualSchemaEditor } from "./VisualSchemaEditor";
+import { XmlSchemaEditor } from "./XmlSchemaEditor";
 import { INDENT_PX } from "../utils/schemaTree";
 
 /** Safely extract hostname from URL, returning null if URL is malformed */
@@ -128,38 +130,75 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
   );
 };
 
-export const TreePreview = () => {
-  const { schemaTree, projectName, isEditMode, setEditMode } = useAppStore();
+interface EditorModeToggleProps {
+  mode: EditorMode;
+  onChange: (mode: EditorMode) => void;
+  disabled?: boolean;
+}
+
+const EditorModeToggle = ({ mode, onChange, disabled }: EditorModeToggleProps) => {
+  const modes: { value: EditorMode; label: string; icon: React.ReactNode }[] = [
+    { value: "preview", label: "Preview", icon: <EyeIcon size={14} /> },
+    { value: "visual", label: "Visual", icon: <GridIcon size={14} /> },
+    { value: "xml", label: "XML", icon: <XmlIcon size={14} /> },
+  ];
 
   return (
-    <main className="bg-mac-bg flex flex-col overflow-hidden border-r border-border-muted">
+    <div className="flex items-center bg-mac-bg rounded-mac p-0.5 border border-border-muted">
+      {modes.map(({ value, label, icon }) => (
+        <button
+          key={value}
+          onClick={() => onChange(value)}
+          disabled={disabled}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-mac text-mac-xs transition-colors ${
+            mode === value
+              ? "bg-mac-bg-secondary text-text-primary shadow-sm"
+              : "text-text-secondary hover:text-text-primary"
+          } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          {icon}
+          <span>{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+export const TreePreview = () => {
+  const { schemaTree, projectName, editorMode, setEditorMode, xmlParseError } = useAppStore();
+
+  const handleModeChange = async (newMode: EditorMode) => {
+    await setEditorMode(newMode);
+  };
+
+  const getModeTitle = () => {
+    switch (editorMode) {
+      case "preview":
+        return "Structure Preview";
+      case "visual":
+        return "Visual Editor";
+      case "xml":
+        return "XML Editor";
+    }
+  };
+
+  return (
+    <main className="bg-mac-bg flex flex-col overflow-hidden border-r border-border-muted h-[calc(100vh-2rem)]">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border-muted flex items-center justify-between bg-mac-bg-secondary">
         <div className="flex items-center gap-3">
           <div className="text-mac-base font-medium text-text-primary">
-            {isEditMode ? "Schema Editor" : "Structure Preview"}
+            {getModeTitle()}
           </div>
           {schemaTree && (
-            <button
-              onClick={() => setEditMode(!isEditMode)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-mac hover:bg-mac-bg-hover text-mac-xs text-text-secondary hover:text-text-primary transition-colors"
-              title={isEditMode ? "Switch to Preview" : "Switch to Editor"}
-            >
-              {isEditMode ? (
-                <>
-                  <CodeIcon size={14} />
-                  <span>Preview</span>
-                </>
-              ) : (
-                <>
-                  <GridIcon size={14} />
-                  <span>Edit</span>
-                </>
-              )}
-            </button>
+            <EditorModeToggle
+              mode={editorMode}
+              onChange={handleModeChange}
+              disabled={editorMode === "xml" && !!xmlParseError}
+            />
           )}
         </div>
-        {schemaTree && !isEditMode && (
+        {schemaTree && editorMode === "preview" && (
           <div className="flex gap-4">
             <div className="flex items-center gap-1.5 text-mac-xs text-text-secondary">
               <FolderIcon size={14} className="text-system-blue" />
@@ -185,9 +224,11 @@ export const TreePreview = () => {
         )}
       </div>
 
-      {/* Tree View / Editor */}
-      {isEditMode ? (
+      {/* Content based on mode */}
+      {editorMode === "visual" ? (
         <VisualSchemaEditor />
+      ) : editorMode === "xml" ? (
+        <XmlSchemaEditor />
       ) : (
         <div className="flex-1 overflow-auto p-4 mac-scroll">
           {schemaTree ? (

@@ -52,6 +52,9 @@ import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, Va
 // Desktop-specific Types
 // ============================================================================
 
+/** Editor mode for the middle panel */
+export type EditorMode = "preview" | "visual" | "xml";
+
 /** State for an active wizard session */
 export interface WizardState {
   isOpen: boolean;
@@ -250,9 +253,14 @@ export interface AppState {
 
   // Schema editing
   isEditMode: boolean;
+  editorMode: EditorMode;
   schemaDirty: boolean;
   schemaHistory: SchemaTree[];
   schemaHistoryIndex: number;
+
+  // XML Editor state
+  xmlEditorContent: string | null;
+  xmlParseError: string | null;
 
   // Output settings
   outputPath: string | null;
@@ -357,6 +365,11 @@ export interface AppState {
 
   // Schema editing actions
   setEditMode: (enabled: boolean) => void;
+  setEditorMode: (mode: EditorMode) => Promise<boolean>;
+  setXmlEditorContent: (content: string) => void;
+  setXmlParseError: (error: string | null) => void;
+  syncXmlToTree: () => Promise<boolean>;
+  syncTreeToXml: () => Promise<void>;
   createNewSchema: () => void;
   updateSchemaNode: (nodeId: string, updates: Partial<SchemaNode>) => void;
   addSchemaNode: (parentId: string | null, node: Partial<SchemaNode>) => void;
