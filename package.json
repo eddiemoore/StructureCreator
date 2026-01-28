@@ -5,6 +5,7 @@
     "dev": "concurrently \"pnpm tauri:dev\" \"pnpm dev:web\"",
     "dev:desktop": "pnpm --filter @structure-creator/desktop dev",
     "dev:web": "pnpm --filter @structure-creator/web dev",
+    "build": "pnpm build:shared &&pnpm build:desktop && pnpm build:web",
     "build:desktop": "pnpm --filter @structure-creator/desktop build",
     "build:web": "pnpm --filter @structure-creator/web build",
     "build:shared": "pnpm --filter @structure-creator/shared build",
