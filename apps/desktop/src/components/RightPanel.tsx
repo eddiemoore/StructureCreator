@@ -598,7 +598,7 @@ export const RightPanel = () => {
   const errorCount = progress.logs.filter((l) => l.type === "error").length;
 
   return (
-    <aside className="bg-mac-sidebar flex flex-col overflow-hidden">
+    <aside className="bg-mac-sidebar flex flex-col h-[calc(100vh-2rem)] overflow-hidden">
       {/* Action Card */}
       <div className="p-4 border-b border-border-muted">
         <div className="text-mac-xs font-medium text-text-muted mb-3">Execute</div>

@@ -27,7 +27,7 @@ export const Footer = ({ onOpenSettings, onOpenUpdateModal }: FooterProps) => {
   const platformLabel = api.isTauri() ? "Tauri 2.0" : "Web";
 
   return (
-    <footer className="bg-mac-bg-secondary px-4 py-2 flex items-center justify-between text-mac-xs text-text-muted border-t border-border-muted">
+    <footer className="fixed bottom-0 left-0 right-0 z-50 bg-mac-bg-secondary px-4 py-2 flex items-center justify-between text-mac-xs text-text-muted border-t border-border-muted">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />

@@ -619,7 +619,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
   const isFolderSource = sourceType === "folder";
 
   return (
-    <aside className="bg-mac-sidebar border-r border-border-muted flex flex-col overflow-hidden">
+    <aside className="bg-mac-sidebar border-r border-border-muted flex flex-col h-[calc(100vh-2rem)] overflow-auto mac-scroll">
       {/* Schema Source Section */}
       <div className="p-4 border-b border-border-muted">
         <SectionTitle>Schema Source</SectionTitle>
@@ -1059,7 +1059,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
       <RecentProjectsSection />
 
       {/* Templates Section */}
-      <div className="p-4 flex-1 overflow-auto mac-scroll flex flex-col">
+      <div className="p-4 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <SectionTitle>Templates</SectionTitle>
           <div className="flex items-center gap-1">

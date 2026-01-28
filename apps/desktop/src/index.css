@@ -111,6 +111,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+
 /* macOS-style Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

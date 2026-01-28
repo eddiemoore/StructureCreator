@@ -170,8 +170,8 @@ function App() {
   }
 
   return (
-    <div className="bg-mac-bg min-h-screen flex flex-col">
-      <div className="flex-1 grid grid-cols-[280px_1fr_300px] border-t border-border-muted">
+    <div className="bg-mac-bg min-h-screen flex flex-col overscroll-none">
+      <div className="flex-1 grid grid-cols-[280px_1fr_300px] border-t border-border-muted pb-8">
         <LeftPanel
           searchInputRef={searchInputRef}
           onImportExportModalChange={setImportExportModalOpen}
