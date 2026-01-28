@@ -183,7 +183,7 @@ export const TreePreview = () => {
   };
 
   return (
-    <main className="bg-mac-bg flex flex-col overflow-hidden border-r border-border-muted">
+    <main className="bg-mac-bg flex flex-col overflow-hidden border-r border-border-muted h-[calc(100vh-2rem)]">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border-muted flex items-center justify-between bg-mac-bg-secondary">
         <div className="flex items-center gap-3">
