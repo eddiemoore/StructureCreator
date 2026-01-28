@@ -4,9 +4,53 @@
 
 use crate::schema::SchemaNode;
 use crate::transforms::substitute_variables;
+use regex::Regex;
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::OnceLock;
+
+// Pre-compiled regexes for declarative table parsing
+static RE_TABLE_NAME: OnceLock<Regex> = OnceLock::new();
+static RE_COLUMN: OnceLock<Regex> = OnceLock::new();
+static RE_COL_NAME: OnceLock<Regex> = OnceLock::new();
+static RE_COL_TYPE: OnceLock<Regex> = OnceLock::new();
+static RE_COL_PK: OnceLock<Regex> = OnceLock::new();
+static RE_COL_UNIQUE: OnceLock<Regex> = OnceLock::new();
+static RE_COL_NOTNULL: OnceLock<Regex> = OnceLock::new();
+static RE_COL_DEFAULT: OnceLock<Regex> = OnceLock::new();
+
+fn get_table_regexes() -> (&'static Regex, &'static Regex) {
+    let name_re = RE_TABLE_NAME.get_or_init(|| {
+        Regex::new(r#"name\s*=\s*["']([^"']+)["']"#).unwrap()
+    });
+    let column_re = RE_COLUMN.get_or_init(|| {
+        Regex::new(r#"<column\s+([^>]+)/?\s*>"#).unwrap()
+    });
+    (name_re, column_re)
+}
+
+fn get_column_regexes() -> (&'static Regex, &'static Regex, &'static Regex, &'static Regex, &'static Regex, &'static Regex) {
+    let name_re = RE_COL_NAME.get_or_init(|| {
+        Regex::new(r#"name\s*=\s*["']([^"']+)["']"#).unwrap()
+    });
+    let type_re = RE_COL_TYPE.get_or_init(|| {
+        Regex::new(r#"type\s*=\s*["']([^"']+)["']"#).unwrap()
+    });
+    let pk_re = RE_COL_PK.get_or_init(|| {
+        Regex::new(r#"primary-key\s*=\s*["']true["']"#).unwrap()
+    });
+    let unique_re = RE_COL_UNIQUE.get_or_init(|| {
+        Regex::new(r#"unique\s*=\s*["']true["']"#).unwrap()
+    });
+    let notnull_re = RE_COL_NOTNULL.get_or_init(|| {
+        Regex::new(r#"not-null\s*=\s*["']true["']"#).unwrap()
+    });
+    let default_re = RE_COL_DEFAULT.get_or_init(|| {
+        Regex::new(r#"default\s*=\s*["']([^"']+)["']"#).unwrap()
+    });
+    (name_re, type_re, pk_re, unique_re, notnull_re, default_re)
+}
 
 /// Generate a SQLite database file from raw SQL statements.
 ///
@@ -152,14 +196,13 @@ fn extract_table_elements(xml: &str) -> Vec<String> {
 
 /// Parse a <table> element into a CREATE TABLE SQL statement
 fn parse_table_to_sql(table_xml: &str) -> Option<String> {
+    let (name_re, column_re) = get_table_regexes();
+
     // Extract table name
-    let name_re = regex::Regex::new(r#"name\s*=\s*["']([^"']+)["']"#).ok()?;
     let table_name = name_re.captures(table_xml)?.get(1)?.as_str();
 
     // Extract columns
     let mut columns = Vec::new();
-    let column_re = regex::Regex::new(r#"<column\s+([^>]+)/?\s*>"#).ok()?;
-
     for cap in column_re.captures_iter(table_xml) {
         if let Some(col_def) = parse_column_to_sql(&cap[1]) {
             columns.push(col_def);
@@ -179,12 +222,7 @@ fn parse_table_to_sql(table_xml: &str) -> Option<String> {
 
 /// Parse column attributes into a SQL column definition
 fn parse_column_to_sql(attrs: &str) -> Option<String> {
-    let name_re = regex::Regex::new(r#"name\s*=\s*["']([^"']+)["']"#).ok()?;
-    let type_re = regex::Regex::new(r#"type\s*=\s*["']([^"']+)["']"#).ok()?;
-    let pk_re = regex::Regex::new(r#"primary-key\s*=\s*["']true["']"#).ok()?;
-    let unique_re = regex::Regex::new(r#"unique\s*=\s*["']true["']"#).ok()?;
-    let notnull_re = regex::Regex::new(r#"not-null\s*=\s*["']true["']"#).ok()?;
-    let default_re = regex::Regex::new(r#"default\s*=\s*["']([^"']+)["']"#).ok()?;
+    let (name_re, type_re, pk_re, unique_re, notnull_re, default_re) = get_column_regexes();
 
     let name = name_re.captures(attrs)?.get(1)?.as_str();
     let col_type = type_re.captures(attrs).map(|c| c.get(1).unwrap().as_str()).unwrap_or("TEXT");

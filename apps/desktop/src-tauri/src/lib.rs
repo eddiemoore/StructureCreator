@@ -4634,18 +4634,21 @@ mod tests {
                         url: None,
                         condition_var: None,
                         repeat_count: None,
-                        repeat_as: None, ..Default::default()
+                        repeat_as: None,
+                        ..Default::default()
                     }]),
                     url: None,
                     content: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None, ..Default::default()
+                    repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 1,
-                    downloads: 0, ..Default::default()
+                    downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };
@@ -4691,18 +4694,21 @@ mod tests {
                         url: None,
                         condition_var: None,
                         repeat_count: None,
-                        repeat_as: None, ..Default::default()
+                        repeat_as: None,
+                        ..Default::default()
                     }]),
                     url: None,
                     content: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None, ..Default::default()
+                    repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 1,
-                    downloads: 0, ..Default::default()
+                    downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };
@@ -4739,18 +4745,21 @@ mod tests {
                         url: None,
                         condition_var: None,
                         repeat_count: None,
-                        repeat_as: None, ..Default::default()
+                        repeat_as: None,
+                        ..Default::default()
                     }]),
                     url: None,
                     content: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None, ..Default::default()
+                    repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 1,
-                    downloads: 0, ..Default::default()
+                    downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };
@@ -4786,12 +4795,14 @@ mod tests {
                     content: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None, ..Default::default()
+                    repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 0,
-                    downloads: 0, ..Default::default()
+                    downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };

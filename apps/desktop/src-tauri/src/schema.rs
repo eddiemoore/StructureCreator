@@ -33,7 +33,7 @@ pub struct SchemaNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generate: Option<String>,
     /// Generator configuration (child XML as string for parsing)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "generateConfig")]
     pub generate_config: Option<String>,
 }
 
