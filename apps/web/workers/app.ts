@@ -9,11 +9,16 @@ const requestHandler = createRequestHandler({
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    return requestHandler({
-      request,
-      env,
-      waitUntil: ctx.waitUntil.bind(ctx),
-      passThroughOnException: ctx.passThroughOnException.bind(ctx),
-    });
+    try {
+      return await requestHandler({
+        request,
+        env,
+        waitUntil: ctx.waitUntil.bind(ctx),
+        passThroughOnException: ctx.passThroughOnException.bind(ctx),
+      });
+    } catch (error) {
+      console.error("Worker error:", error);
+      return new Response("Internal Server Error", { status: 500 });
+    }
   },
 } satisfies ExportedHandler<Env>;
