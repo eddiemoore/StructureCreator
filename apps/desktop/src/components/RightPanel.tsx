@@ -10,9 +10,11 @@ import {
   EyeOffIcon,
   WarningIcon,
   LoaderIcon,
+  TrashIcon,
 } from "./Icons";
 import { DiffPreviewModal } from "./DiffPreviewModal";
-import type { CreateResult, ResultSummary, ValidationRule } from "../types/schema";
+import { ConfirmDialog } from "./ConfirmDialog";
+import type { CreateResult, ResultSummary, ValidationRule, UndoResult } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
 
 export const RightPanel = () => {
@@ -49,14 +51,20 @@ export const RightPanel = () => {
     setIsWatching,
     setSchemaContent,
     setSchemaTree,
+    lastCreation,
+    setLastCreation,
+    canUndoCreation,
   } = useAppStore();
 
   const [summary, setSummary] = useState<ResultSummary | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
   const [watchStarting, setWatchStarting] = useState(false);
+  const [showUndoConfirm, setShowUndoConfirm] = useState(false);
+  const [undoLoading, setUndoLoading] = useState(false);
 
   const canExecute = schemaTree && outputPath && projectName;
   const canWatch = schemaPath && schemaPath !== "new-schema" && !schemaPath.startsWith("template:") && api.isTauri();
+  const canUndo = canUndoCreation() && api.isTauri();
 
   // Ref to hold the create handler for keyboard shortcut
   const handleCreateRef = useRef<(() => void) | null>(null);
@@ -317,6 +325,11 @@ export const RightPanel = () => {
 
         // Record to history for non-dry-run successful creations
         if (!isDryRun) {
+          // Store created items for undo functionality
+          if (result.created_items && result.created_items.length > 0) {
+            setLastCreation(result.created_items);
+          }
+
           try {
             // Get schema XML - use effectiveContent if available, or export from tree
             let schemaXml = effectiveContent || "";
@@ -357,6 +370,65 @@ export const RightPanel = () => {
       setProgress({ status: "error" });
       addLog({ type: "error", message: `Fatal error: ${e}` });
     }
+  };
+
+  // Handle undo confirmation
+  const handleUndoConfirm = async () => {
+    if (!lastCreation || lastCreation.length === 0) return;
+
+    setUndoLoading(true);
+    clearLogs();
+    setProgress({ status: "running", current: 0, total: 0 });
+    addLog({ type: "info", message: "Undoing last structure creation..." });
+
+    try {
+      const result: UndoResult = await api.structureCreator.undoStructure(lastCreation, false);
+
+      // Log each operation
+      result.logs.forEach((log) => {
+        addLog({
+          type: log.log_type as "success" | "error" | "warning" | "info",
+          message: log.message,
+          details: log.details,
+        });
+      });
+
+      const hasErrors = result.summary.errors > 0;
+      if (hasErrors) {
+        setProgress({ status: "error" });
+        addLog({
+          type: "warning",
+          message: `Undo completed with ${result.summary.errors} error(s)`,
+        });
+      } else {
+        setProgress({ status: "completed" });
+        addLog({
+          type: "success",
+          message: `Undo complete: ${result.summary.files_deleted} file(s) and ${result.summary.folders_deleted} folder(s) deleted`,
+        });
+      }
+
+      // Clear the last creation after undo
+      setLastCreation(null);
+      setSummary(null);
+    } catch (e) {
+      console.error("Failed to undo structure:", e);
+      setProgress({ status: "error" });
+      addLog({ type: "error", message: `Undo failed: ${e}` });
+    } finally {
+      setUndoLoading(false);
+      setShowUndoConfirm(false);
+    }
+  };
+
+  // Get undo summary for dialog
+  const getUndoSummary = () => {
+    if (!lastCreation) return { deletableFiles: 0, deletableFolders: 0, skippedCount: 0 };
+    const deletable = lastCreation.filter((item) => !item.pre_existed);
+    const deletableFiles = deletable.filter((item) => item.item_type === "file").length;
+    const deletableFolders = deletable.filter((item) => item.item_type === "folder").length;
+    const skippedCount = lastCreation.filter((item) => item.pre_existed).length;
+    return { deletableFiles, deletableFolders, skippedCount };
   };
 
   const handleCreate = async () => {
@@ -600,6 +672,27 @@ export const RightPanel = () => {
             )}
           </div>
         )}
+
+        {/* Undo Button */}
+        {canUndo && (
+          <div className="mt-3 pt-3 border-t border-border-subtle">
+            <button
+              onClick={() => setShowUndoConfirm(true)}
+              disabled={progress.status === "running" || undoLoading}
+              className="w-full py-2 px-3 flex items-center justify-center gap-2 text-mac-sm rounded-mac border border-system-red/30 bg-system-red/5 text-system-red hover:bg-system-red/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Undo the last structure creation"
+            >
+              <TrashIcon size={16} />
+              Undo Last Creation
+            </button>
+            <p className="text-mac-xs text-text-muted mt-1 text-center">
+              {(() => {
+                const { deletableFiles, deletableFolders } = getUndoSummary();
+                return `${deletableFiles} file(s), ${deletableFolders} folder(s)`;
+              })()}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Summary Card */}
@@ -726,6 +819,29 @@ export const RightPanel = () => {
         onProceed={handleProceedFromDiff}
         isLoading={diffLoading}
         error={diffError}
+      />
+
+      {/* Undo Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showUndoConfirm}
+        onClose={() => setShowUndoConfirm(false)}
+        onConfirm={handleUndoConfirm}
+        title="Undo Last Creation"
+        message={(() => {
+          const { deletableFiles, deletableFolders, skippedCount } = getUndoSummary();
+          const total = deletableFiles + deletableFolders;
+          let msg = `This will delete ${total} item(s) that were created:`;
+          if (deletableFiles > 0) msg += ` ${deletableFiles} file(s)`;
+          if (deletableFolders > 0) msg += `${deletableFiles > 0 ? " and" : ""} ${deletableFolders} folder(s)`;
+          if (skippedCount > 0) {
+            msg += `. ${skippedCount} overwritten item(s) will be preserved.`;
+          }
+          return msg;
+        })()}
+        warning="This action cannot be undone. Files and folders will be permanently deleted."
+        confirmLabel={undoLoading ? "Undoing..." : "Delete Items"}
+        isDangerous
+        isLoading={undoLoading}
       />
     </aside>
   );

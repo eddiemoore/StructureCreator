@@ -45,6 +45,8 @@ import type {
   ParseWithInheritanceResult,
   RecentProject,
   SchemaValidationResult,
+  CreatedItem,
+  UndoResult,
 } from "../../../types/schema";
 
 // Rust returns snake_case fields, this interface matches the Rust struct
@@ -369,6 +371,16 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
       outputPath,
       variables,
       overwrite,
+    });
+  }
+
+  async undoStructure(
+    items: CreatedItem[],
+    dryRun: boolean
+  ): Promise<UndoResult> {
+    return invoke<UndoResult>("cmd_undo_structure", {
+      items,
+      dryRun,
     });
   }
 }

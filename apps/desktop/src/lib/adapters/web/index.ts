@@ -23,6 +23,8 @@ import type {
   DiffResult,
   ParseWithInheritanceResult,
   SchemaValidationResult,
+  CreatedItem,
+  UndoResult,
 } from "../../../types/schema";
 
 import { IndexedDBAdapter } from "./indexeddb";
@@ -236,6 +238,27 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
     }
 
     return generateDiffPreview(tree, rootHandle, variables, overwrite);
+  }
+
+  async undoStructure(
+    _items: CreatedItem[],
+    _dryRun: boolean
+  ): Promise<UndoResult> {
+    // Web mode doesn't support undo - the File System Access API doesn't support
+    // deletion reliably across all browsers
+    return {
+      logs: [{
+        log_type: "warning",
+        message: "Undo is not supported in web mode",
+        details: "Please use the desktop app for undo functionality",
+      }],
+      summary: {
+        files_deleted: 0,
+        folders_deleted: 0,
+        items_skipped: 0,
+        errors: 0,
+      },
+    };
   }
 }
 

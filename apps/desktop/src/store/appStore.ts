@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 
@@ -210,6 +210,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Update
   updateState: initialUpdateState,
+
+  // Undo
+  lastCreation: null,
 
   // Actions
   setSchemaPath: (path: string | null) => set({ schemaPath: path }),
@@ -470,6 +473,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       showDiffModal: false,
       watchEnabled: false,
       isWatching: false,
+      lastCreation: null,
     }),
 
   // Schema editing actions
@@ -776,6 +780,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       };
     });
+  },
+
+  // Undo actions
+  setLastCreation: (items: CreatedItem[] | null) =>
+    set({ lastCreation: items }),
+
+  canUndoCreation: () => {
+    const state = get();
+    if (!state.lastCreation || state.lastCreation.length === 0) {
+      return false;
+    }
+    // Check if there are any items that can be undone (not pre-existing)
+    return state.lastCreation.some((item) => !item.pre_existed);
   },
 
   // Update actions

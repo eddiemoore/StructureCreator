@@ -178,6 +178,28 @@ body {
   background-color: var(--color-bg-hover);
 }
 
+.mac-button-danger {
+  background-color: var(--color-system-red);
+  color: white;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  transition: background-color 150ms;
+}
+
+.mac-button-danger:hover {
+  background-color: color-mix(in srgb, var(--color-system-red) 90%, black);
+}
+
+.mac-button-danger:active {
+  background-color: color-mix(in srgb, var(--color-system-red) 80%, black);
+}
+
+.mac-button-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* macOS Input Styles */
 .mac-input {
   background-color: var(--color-card-bg);
