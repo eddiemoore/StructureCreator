@@ -207,7 +207,7 @@ export const XmlSchemaEditor = () => {
     };
   }, []);
 
-  const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+  const isMac = navigator.userAgent.toUpperCase().includes("MAC");
   const shortcutKey = isMac ? "⌘" : "Ctrl";
 
   return (
