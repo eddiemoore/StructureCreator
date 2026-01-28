@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "react-router dev",
     "build": "react-router build",
+    "postbuild": "VITE_BASE_PATH=/app/ pnpm --filter @structure-creator/desktop build && cp -r ../desktop/dist ./build/client/app",
     "preview": "wrangler dev",
     "deploy": "wrangler deploy",
     "typegen": "wrangler types && react-router typegen"

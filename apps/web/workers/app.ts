@@ -10,6 +10,23 @@ const requestHandler = createRequestHandler({
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     try {
+      const url = new URL(request.url);
+
+      // Handle /app/* routes - SPA routing for desktop app
+      if (url.pathname.startsWith("/app")) {
+        // Try to fetch static asset
+        const assetResponse = await env.ASSETS.fetch(request);
+        if (assetResponse.status !== 404) {
+          return assetResponse;
+        }
+        // Fallback to /app/index.html for SPA routing
+        const indexRequest = new Request(
+          new URL("/app/index.html", request.url),
+          request
+        );
+        return await env.ASSETS.fetch(indexRequest);
+      }
+
       return await requestHandler({
         request,
         env,
