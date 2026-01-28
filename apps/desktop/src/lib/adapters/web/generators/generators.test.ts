@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { parseHexColor, parseImageConfig, generateImage } from "./image";
+import { generateSqlite, _resetSqlJsCache } from "./sqlite";
 import type { SchemaNode } from "../../../../types/schema";
 
 describe("parseHexColor", () => {
@@ -290,5 +291,240 @@ describe("generateImage", () => {
     });
 
     expect(result).toBeInstanceOf(Uint8Array);
+  });
+});
+
+describe("generateSqlite", () => {
+  // Mock sql.js
+  let mockDatabase: {
+    run: ReturnType<typeof vi.fn>;
+    export: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    // Reset the cached sql.js promise before each test
+    _resetSqlJsCache();
+
+    mockDatabase = {
+      run: vi.fn(),
+      export: vi.fn(() => new Uint8Array([0x53, 0x51, 0x4c, 0x69, 0x74, 0x65])), // "SQLite" bytes
+      close: vi.fn(),
+    };
+
+    // Create a mock Database class
+    const MockDatabase = function() {
+      return mockDatabase;
+    } as unknown as new () => typeof mockDatabase;
+
+    // Mock window.initSqlJs
+    const mockInitSqlJs = vi.fn().mockResolvedValue({
+      Database: MockDatabase,
+    });
+
+    (window as unknown as { initSqlJs: typeof mockInitSqlJs }).initSqlJs = mockInitSqlJs;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (window as unknown as { initSqlJs?: unknown }).initSqlJs;
+    // Reset the cache after each test as well
+    _resetSqlJsCache();
+  });
+
+  it("returns null for dry run", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      content: "CREATE TABLE test (id INTEGER);",
+    };
+
+    const result = await generateSqlite(node, {
+      variables: {},
+      dryRun: true,
+    });
+
+    expect(result).toBeNull();
+    // Database should not be created in dry run
+    expect(mockDatabase.run).not.toHaveBeenCalled();
+  });
+
+  it("executes SQL from content field", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      content: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);",
+    };
+
+    await generateSqlite(node, {
+      variables: {},
+      dryRun: false,
+    });
+
+    expect(mockDatabase.run).toHaveBeenCalledWith(
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)"
+    );
+    expect(mockDatabase.close).toHaveBeenCalled();
+  });
+
+  it("executes SQL from generateConfig with <sql> element", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      generateConfig: "<sql>CREATE TABLE config (key TEXT, value TEXT);</sql>",
+    };
+
+    await generateSqlite(node, {
+      variables: {},
+      dryRun: false,
+    });
+
+    expect(mockDatabase.run).toHaveBeenCalledWith(
+      "CREATE TABLE config (key TEXT, value TEXT)"
+    );
+  });
+
+  it("substitutes variables in SQL", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      content: "INSERT INTO config VALUES ('%KEY%', '%VALUE%');",
+    };
+
+    await generateSqlite(node, {
+      variables: {
+        "%KEY%": "version",
+        "%VALUE%": "1.0.0",
+      },
+      dryRun: false,
+    });
+
+    expect(mockDatabase.run).toHaveBeenCalledWith(
+      "INSERT INTO config VALUES ('version', '1.0.0')"
+    );
+  });
+
+  it("splits multiple SQL statements", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      content: "CREATE TABLE a (id INTEGER); CREATE TABLE b (id INTEGER);",
+    };
+
+    await generateSqlite(node, {
+      variables: {},
+      dryRun: false,
+    });
+
+    expect(mockDatabase.run).toHaveBeenCalledTimes(2);
+    expect(mockDatabase.run).toHaveBeenNthCalledWith(1, "CREATE TABLE a (id INTEGER)");
+    expect(mockDatabase.run).toHaveBeenNthCalledWith(2, "CREATE TABLE b (id INTEGER)");
+  });
+
+  it("handles semicolons within quoted strings", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      content: "INSERT INTO test VALUES ('hello; world');",
+    };
+
+    await generateSqlite(node, {
+      variables: {},
+      dryRun: false,
+    });
+
+    // Should be a single statement, not split
+    expect(mockDatabase.run).toHaveBeenCalledTimes(1);
+    expect(mockDatabase.run).toHaveBeenCalledWith(
+      "INSERT INTO test VALUES ('hello; world')"
+    );
+  });
+
+  it("returns Uint8Array on success", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      content: "CREATE TABLE test (id INTEGER);",
+    };
+
+    const result = await generateSqlite(node, {
+      variables: {},
+      dryRun: false,
+    });
+
+    expect(result).toBeInstanceOf(Uint8Array);
+  });
+
+  it("closes database even on error", async () => {
+    // Reset cache to use the new error mock
+    _resetSqlJsCache();
+
+    // Create a fresh mock that throws
+    const errorDatabase = {
+      run: vi.fn(() => {
+        throw new Error("SQL error");
+      }),
+      export: vi.fn(),
+      close: vi.fn(),
+    };
+
+    const ErrorDatabase = function() {
+      return errorDatabase;
+    } as unknown as new () => typeof errorDatabase;
+
+    const errorInitSqlJs = vi.fn().mockResolvedValue({
+      Database: ErrorDatabase,
+    });
+
+    (window as unknown as { initSqlJs: typeof errorInitSqlJs }).initSqlJs = errorInitSqlJs;
+
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      content: "INVALID SQL;",
+    };
+
+    await expect(
+      generateSqlite(node, {
+        variables: {},
+        dryRun: false,
+      })
+    ).rejects.toThrow("SQL error");
+
+    // Database should still be closed
+    expect(errorDatabase.close).toHaveBeenCalled();
+  });
+
+  it("executes generateConfig before content", async () => {
+    const node: SchemaNode = {
+      type: "file",
+      name: "test.db",
+      generate: "sqlite",
+      generateConfig: "<sql>CREATE TABLE test (id INTEGER);</sql>",
+      content: "INSERT INTO test VALUES (1);",
+    };
+
+    const callOrder: string[] = [];
+    mockDatabase.run.mockImplementation((sql: string) => {
+      callOrder.push(sql);
+    });
+
+    await generateSqlite(node, {
+      variables: {},
+      dryRun: false,
+    });
+
+    expect(callOrder).toEqual([
+      "CREATE TABLE test (id INTEGER)",
+      "INSERT INTO test VALUES (1)",
+    ]);
   });
 });

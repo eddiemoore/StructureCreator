@@ -1,6 +1,15 @@
 /**
  * SQLite generator for web mode.
  * Creates SQLite databases using sql.js (WASM-based SQLite).
+ *
+ * SECURITY NOTE: SQL statements from the schema are executed directly.
+ * Variable substitution occurs before execution, so ensure variable values
+ * come from trusted sources. Do not use untrusted user input as variable
+ * values when generating databases, as this could lead to SQL injection.
+ *
+ * DEPENDENCY NOTE: This module loads sql.js from jsDelivr CDN on first use.
+ * An internet connection is required for the initial load. The WASM module
+ * is cached by the browser after first load.
  */
 
 import type { SchemaNode } from "../../../../types/schema";
@@ -18,34 +27,52 @@ interface SqlJsDatabase {
   close(): void;
 }
 
+// Type for window with initSqlJs
+interface WindowWithSqlJs {
+  initSqlJs?: (config: { locateFile: (file: string) => string }) => Promise<SqlJsStatic>;
+}
+
 // Cached sql.js initialization promise
 let sqlJsPromise: Promise<SqlJsStatic> | null = null;
 
 /**
+ * Reset the cached sql.js initialization promise.
+ * Used for testing to allow re-initialization with mocks.
+ * @internal
+ */
+export const _resetSqlJsCache = (): void => {
+  sqlJsPromise = null;
+};
+
+/**
  * CDN URL for sql.js WASM.
  * Using jsDelivr for reliability and caching.
+ * Pinned to specific version for supply chain security.
  */
 const SQL_JS_CDN = "https://cdn.jsdelivr.net/npm/sql.js@1.11.0/dist";
 
 /**
  * Initialize sql.js by loading from CDN.
  * Caches the initialization promise to avoid multiple loads.
+ * On failure, clears the cache to allow retries.
  */
 const initSqlJs = async (): Promise<SqlJsStatic> => {
   if (sqlJsPromise) {
     return sqlJsPromise;
   }
 
-  sqlJsPromise = (async () => {
-    // Dynamically load sql.js from CDN
-    const scriptUrl = `${SQL_JS_CDN}/sql-wasm.js`;
+  const promise = (async () => {
+    const windowWithSql = window as unknown as WindowWithSqlJs;
 
     // Check if already loaded
-    if (typeof (window as unknown as { initSqlJs?: unknown }).initSqlJs === "function") {
-      return (window as unknown as { initSqlJs: (config: { locateFile: (file: string) => string }) => Promise<SqlJsStatic> }).initSqlJs({
+    if (typeof windowWithSql.initSqlJs === "function") {
+      return windowWithSql.initSqlJs({
         locateFile: (file: string) => `${SQL_JS_CDN}/${file}`,
       });
     }
+
+    // Dynamically load sql.js from CDN
+    const scriptUrl = `${SQL_JS_CDN}/sql-wasm.js`;
 
     // Load the script
     await new Promise<void>((resolve, reject) => {
@@ -53,22 +80,47 @@ const initSqlJs = async (): Promise<SqlJsStatic> => {
       script.src = scriptUrl;
       script.async = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Failed to load sql.js from CDN"));
+      script.onerror = () => {
+        reject(new Error(
+          "Failed to load SQLite library from CDN. " +
+          "Please check your internet connection and try again."
+        ));
+      };
       document.head.appendChild(script);
     });
 
-    // Initialize sql.js with WASM location
-    const initFn = (window as unknown as { initSqlJs: (config: { locateFile: (file: string) => string }) => Promise<SqlJsStatic> }).initSqlJs;
-    if (typeof initFn !== "function") {
-      throw new Error("sql.js failed to initialize");
+    // Re-access window to get the newly loaded initSqlJs function
+    // (TypeScript's control flow analysis doesn't know the script added it)
+    const loadedWindow = window as unknown as WindowWithSqlJs;
+    const initFn = loadedWindow.initSqlJs;
+    if (!initFn) {
+      throw new Error(
+        "SQLite library failed to initialize. " +
+        "The script loaded but initSqlJs is not available."
+      );
     }
 
-    return initFn({
-      locateFile: (file: string) => `${SQL_JS_CDN}/${file}`,
-    });
+    // Initialize sql.js with WASM location
+    try {
+      return await initFn({
+        locateFile: (file: string) => `${SQL_JS_CDN}/${file}`,
+      });
+    } catch (e) {
+      throw new Error(
+        `Failed to initialize SQLite WASM module: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
   })();
 
-  return sqlJsPromise;
+  // Cache the promise
+  sqlJsPromise = promise;
+
+  // On failure, clear the cached promise to allow retries
+  promise.catch(() => {
+    sqlJsPromise = null;
+  });
+
+  return promise;
 };
 
 /**
