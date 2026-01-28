@@ -80,6 +80,41 @@ const extractExtendsFromXml = (xmlContent: string): string | undefined => {
   }
 };
 
+/**
+ * Inject built-in date variables into a variables object.
+ * Built-in variables are injected first, then user-provided variables override them.
+ * Matches the Tauri adapter behavior in lib.rs.
+ */
+const injectBuiltInVariables = (
+  variables: Record<string, string>,
+  projectName?: string
+): Record<string, string> => {
+  const now = new Date();
+  const year = now.getFullYear().toString();
+  const month = (now.getMonth() + 1).toString().padStart(2, "0");
+  const day = now.getDate().toString().padStart(2, "0");
+
+  // Start with built-in variables
+  const allVariables: Record<string, string> = {
+    "%DATE%": `${year}-${month}-${day}`,
+    "%YEAR%": year,
+    "%MONTH%": month,
+    "%DAY%": day,
+  };
+
+  // Inject %PROJECT_NAME% if provided
+  if (projectName) {
+    allVariables["%PROJECT_NAME%"] = projectName;
+  }
+
+  // User-provided variables override built-ins
+  for (const [key, value] of Object.entries(variables)) {
+    allVariables[key] = value;
+  }
+
+  return allVariables;
+};
+
 // ============================================================================
 // Web Schema Adapter
 // ============================================================================
@@ -208,11 +243,8 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
       );
     }
 
-    // Inject built-in variables (project name), allowing user overrides
-    const allVariables = { ...options.variables };
-    if (options.projectName && !allVariables["%PROJECT_NAME%"]) {
-      allVariables["%PROJECT_NAME%"] = options.projectName;
-    }
+    // Inject built-in variables (date, project name), allowing user overrides
+    const allVariables = injectBuiltInVariables(options.variables, options.projectName);
 
     return createStructureFromTree(
       tree,
@@ -237,7 +269,10 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
       );
     }
 
-    return generateDiffPreview(tree, rootHandle, variables, overwrite);
+    // Inject built-in date variables for consistent preview
+    const allVariables = injectBuiltInVariables(variables);
+
+    return generateDiffPreview(tree, rootHandle, allVariables, overwrite);
   }
 
   async undoStructure(
