@@ -32,6 +32,7 @@ import {
   MAX_DIFF_FILE_READ_BYTES,
   validatePathComponent,
 } from "./constants";
+import { generateImage, generateSqlite } from "./generators";
 
 /**
  * Process a downloaded file, applying variable substitution where applicable.
@@ -127,6 +128,7 @@ export const createStructureFromTree = async (
       folders_created: 0,
       files_created: 0,
       files_downloaded: 0,
+      files_generated: 0,
       errors: 0,
       skipped: 0,
       hooks_executed: 0,
@@ -422,6 +424,67 @@ const processFile = async (
         context.summary.errors++;
         return;
       }
+    } else if (node.generate) {
+      // Generate binary file (image or SQLite database)
+      if (context.dryRun) {
+        const generatorType = node.generate === "image" ? "image" : "SQLite database";
+        context.logs.push({
+          log_type: "info",
+          message: `Would generate ${generatorType}: ${filePath}`,
+        });
+        context.summary.files_generated++;
+        return;
+      }
+
+      try {
+        const generatorContext = {
+          variables: context.variables,
+          dryRun: context.dryRun,
+        };
+
+        let data: Uint8Array | null = null;
+
+        if (node.generate === "image") {
+          data = await generateImage(node, generatorContext);
+        } else if (node.generate === "sqlite") {
+          data = await generateSqlite(node, generatorContext);
+        }
+
+        if (data) {
+          // Create the file
+          const fileHandle = await parentHandle.getFileHandle(fileName, {
+            create: true,
+          });
+          const writable = await fileHandle.createWritable();
+
+          try {
+            const buffer = data.buffer.slice(
+              data.byteOffset,
+              data.byteOffset + data.byteLength
+            ) as ArrayBuffer;
+            await writable.write(buffer);
+          } finally {
+            await writable.close();
+          }
+
+          const generatorType = node.generate === "image" ? "image" : "SQLite database";
+          context.logs.push({
+            log_type: "success",
+            message: `Generated ${generatorType}: ${filePath}`,
+          });
+          context.summary.files_generated++;
+        }
+      } catch (genError) {
+        const errorMessage =
+          genError instanceof Error ? genError.message : String(genError);
+        context.logs.push({
+          log_type: "error",
+          message: `Failed to generate: ${filePath}`,
+          details: errorMessage,
+        });
+        context.summary.errors++;
+      }
+      return;
     } else if (node.content) {
       content = substituteVariables(node.content, context.variables);
     }
@@ -833,6 +896,8 @@ const generateDiffFile = async (
     if (!urlValidation.valid) {
       context.warnings.push(`Invalid URL for ${fileName}: ${urlValidation.error}`);
     }
+  } else if (node.generate) {
+    isBinary = true; // Generated files are binary (no text diff)
   } else if (node.content) {
     newContent = substituteVariables(node.content, context.variables);
   }
@@ -847,6 +912,7 @@ const generateDiffFile = async (
     new_content: newContent,
     url: node.url ? substituteVariables(node.url, context.variables) : undefined,
     is_binary: isBinary,
+    generate: node.generate,
   };
 };
 

@@ -79,6 +79,8 @@ export interface ResultSummary {
   folders_created: number;
   files_created: number;
   files_downloaded: number;
+  /** Number of binary files generated (images, SQLite databases) */
+  files_generated: number;
   errors: number;
   skipped: number;
   hooks_executed: number;
@@ -181,6 +183,8 @@ export interface DiffNode {
   url?: string;
   /** Whether this is a binary file (no text diff available) */
   is_binary: boolean;
+  /** Generator type if this file will be generated */
+  generate?: "image" | "sqlite";
   /** Child nodes (for folders) */
   children?: DiffNode[];
 }
