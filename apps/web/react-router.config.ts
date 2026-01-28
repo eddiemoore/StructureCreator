@@ -18,6 +18,8 @@ export default {
       "/docs/guides/templates",
       "/docs/guides/conditionals",
       "/docs/guides/wizard",
+      "/docs/guides/generators",
+      "/docs/guides/binary-variables",
       "/docs/api/schema",
       "/docs/api/transforms",
       // Note: /templates requires D1 database at runtime, cannot be prerendered

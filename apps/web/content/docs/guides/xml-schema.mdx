@@ -112,6 +112,22 @@ Download content from a URL:
 <file name="tsconfig.json" url="https://example.com/tsconfig.json" />
 ```
 
+#### File Generators
+
+Generate binary files directly without needing external sources:
+
+```xml
+<!-- Generate a placeholder image -->
+<file name="logo.png" generate="image" width="200" height="200" background="#3B82F6" />
+
+<!-- Generate a SQLite database -->
+<file name="app.db" generate="sqlite"><![CDATA[
+CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL);
+]]></file>
+```
+
+See the [File Generators guide](/docs/guides/generators) for complete documentation on image and SQLite generation.
+
 ## Variables
 
 Use `%VARIABLE_NAME%` syntax for dynamic values:

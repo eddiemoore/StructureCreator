@@ -17,6 +17,8 @@ const sidebarNav = [
       { to: "/docs/guides/templates", label: "Templates" },
       { to: "/docs/guides/conditionals", label: "Conditionals & Loops" },
       { to: "/docs/guides/wizard", label: "Template Wizard" },
+      { to: "/docs/guides/generators", label: "File Generators" },
+      { to: "/docs/guides/binary-variables", label: "Binary File Variables" },
     ],
   },
   {

@@ -162,3 +162,66 @@ If template C extends both A and B, and both A and B extend D, then D's content 
 │   └── App.test.tsx
 └── .gitignore        (from extension)
 ```
+
+### binary-generators.xml
+
+Demonstrates the `generate` attribute for creating binary files:
+
+#### Image Generation
+
+Create placeholder PNG and JPEG images with custom dimensions and colors:
+
+```xml
+<!-- Simple placeholder (100x100 gray PNG) -->
+<file name="placeholder.png" generate="image" />
+
+<!-- Custom size and color -->
+<file name="logo.png" generate="image" width="200" height="200" background="#3B82F6" />
+
+<!-- JPEG format -->
+<file name="banner.jpg" generate="image" width="1920" height="600" background="#1F2937" />
+
+<!-- Using variables -->
+<file name="avatar.png" generate="image" width="%SIZE%" height="%SIZE%" background="%COLOR%" />
+```
+
+**Image attributes:**
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `width` | 100 | Width in pixels (max 10000) |
+| `height` | 100 | Height in pixels (max 10000) |
+| `background` | #CCCCCC | Hex color (#RGB or #RRGGBB) |
+| `format` | auto | `png` or `jpeg` (auto-detected from extension) |
+
+#### SQLite Database Generation
+
+Create SQLite databases with raw SQL:
+
+```xml
+<file name="app.db" generate="sqlite"><![CDATA[
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+INSERT INTO users (email) VALUES ('%ADMIN_EMAIL%');
+]]></file>
+```
+
+Variables (`%VAR_NAME%`) are substituted in SQL before execution.
+
+**Suggested variables for this example:**
+
+- `PROJECT_NAME`: `my-app`
+- `VERSION`: `1.0.0`
+- `AVATAR_SIZE`: `64`
+- `BRAND_COLOR`: `#3B82F6`

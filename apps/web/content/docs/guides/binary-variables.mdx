@@ -1,0 +1,251 @@
+---
+title: Binary File Variables
+description: Substitute variables in downloaded binary files like Office documents, PDFs, and archives.
+---
+
+# Binary File Variables
+
+When downloading binary files via the `url` attribute, Structure Creator can substitute variables inside supported file formats. This lets you create personalized documents, spreadsheets, and archives from template files.
+
+## How It Works
+
+1. Create a template file (e.g., Word document) with `%VARIABLE%` placeholders
+2. Host it somewhere accessible via URL
+3. Reference it in your schema with the `url` attribute
+4. Variables are substituted when the structure is created
+
+```xml
+<file name="welcome.docx" url="https://example.com/templates/welcome-template.docx" />
+```
+
+If your template contains `%PROJECT_NAME%` or `%AUTHOR%`, those placeholders will be replaced with the actual variable values.
+
+## Supported Formats
+
+### Cross-Platform (Web & Desktop)
+
+These formats work in both the web app and desktop application:
+
+| Format | Extensions | Variable Locations |
+|--------|------------|-------------------|
+| Word | `.docx` | Document text, headers, footers |
+| Excel | `.xlsx` | Cell values, sheet names |
+| PowerPoint | `.pptx` | Slide text, notes |
+| OpenDocument Text | `.odt` | Document text |
+| OpenDocument Spreadsheet | `.ods` | Cell values |
+| OpenDocument Presentation | `.odp` | Slide text |
+| EPUB | `.epub` | Content, metadata |
+| ZIP | `.zip` | Text files inside the archive |
+
+### Desktop Only
+
+> **Desktop Only**: These formats require the desktop application and are not available in the web version.
+
+| Format | Extensions | Variable Locations |
+|--------|------------|-------------------|
+| PDF | `.pdf` | Form field values |
+| Image metadata | `.png`, `.jpg`, `.jpeg`, `.tiff`, `.webp` | XMP metadata |
+| MP3 | `.mp3` | ID3 tags (title, artist, album) |
+| FLAC | `.flac` | Vorbis comments |
+| TAR | `.tar`, `.tar.gz`, `.tgz` | Text files inside the archive |
+
+## Office Documents
+
+### Word (.docx)
+
+Create a Word template with placeholders in the text:
+
+```
+Welcome to %PROJECT_NAME%!
+
+Author: %AUTHOR%
+Created: %DATE%
+```
+
+Reference it in your schema:
+
+```xml
+<file name="readme.docx" url="https://example.com/templates/readme.docx" />
+```
+
+Variables are substituted in:
+- Main document body
+- Headers and footers
+- Text boxes
+
+### Excel (.xlsx)
+
+Create a spreadsheet with placeholder cells:
+
+| A | B |
+|---|---|
+| Project | %PROJECT_NAME% |
+| Version | %VERSION% |
+| Author | %AUTHOR% |
+
+```xml
+<file name="config.xlsx" url="https://example.com/templates/config.xlsx" />
+```
+
+Variables are substituted in cell values. Formulas referencing those cells will recalculate automatically.
+
+### PowerPoint (.pptx)
+
+Create presentation templates with variable placeholders in slide text:
+
+```xml
+<file name="presentation.pptx" url="https://example.com/templates/deck.pptx" />
+```
+
+Variables are substituted in:
+- Slide text
+- Speaker notes
+- Title slides
+
+## OpenDocument Formats
+
+LibreOffice and OpenOffice formats work the same way:
+
+```xml
+<!-- Writer document -->
+<file name="document.odt" url="https://example.com/templates/doc.odt" />
+
+<!-- Calc spreadsheet -->
+<file name="spreadsheet.ods" url="https://example.com/templates/sheet.ods" />
+
+<!-- Impress presentation -->
+<file name="slides.odp" url="https://example.com/templates/slides.odp" />
+```
+
+## EPUB Files
+
+Create ebook templates with variable content:
+
+```xml
+<file name="book.epub" url="https://example.com/templates/book.epub" />
+```
+
+Variables are substituted in:
+- XHTML content files
+- Metadata (title, author, etc.)
+
+## Archives
+
+### ZIP Files
+
+Variables are substituted in text files inside ZIP archives:
+
+```xml
+<file name="starter-kit.zip" url="https://example.com/templates/kit.zip" />
+```
+
+For example, if the ZIP contains a `config.json` with `%PROJECT_NAME%`, it will be substituted.
+
+Binary files inside the archive are copied unchanged.
+
+### TAR Archives
+
+> **Desktop Only**: TAR support requires the desktop application.
+
+```xml
+<file name="backup.tar.gz" url="https://example.com/templates/backup.tar.gz" />
+```
+
+Supports `.tar`, `.tar.gz`, and `.tgz` extensions.
+
+## Desktop-Only Features
+
+The following features are only available in the desktop application:
+
+### PDF Form Fields
+
+> **Desktop Only**: PDF form field substitution requires the desktop application.
+
+Variables are substituted in fillable PDF form field values:
+
+```xml
+<file name="form.pdf" url="https://example.com/templates/application.pdf" />
+```
+
+Create your PDF with form fields named to match your variables, or use `%VARIABLE%` placeholders in default field values.
+
+### Image Metadata (XMP)
+
+> **Desktop Only**: Image metadata substitution requires the desktop application.
+
+Variables are substituted in XMP metadata fields:
+
+```xml
+<file name="photo.jpg" url="https://example.com/templates/photo.jpg" />
+```
+
+Supported metadata fields:
+- Title
+- Description
+- Creator/Author
+- Copyright
+
+### Audio Metadata
+
+> **Desktop Only**: Audio metadata substitution requires the desktop application.
+
+#### MP3 (ID3 Tags)
+
+```xml
+<file name="intro.mp3" url="https://example.com/templates/intro.mp3" />
+```
+
+Variables in ID3 tags (title, artist, album, etc.) are substituted.
+
+#### FLAC (Vorbis Comments)
+
+```xml
+<file name="track.flac" url="https://example.com/templates/track.flac" />
+```
+
+Variables in Vorbis comment fields are substituted.
+
+## Platform Availability Summary
+
+| Feature | Web | Desktop |
+|---------|:---:|:-------:|
+| Office documents (.docx, .xlsx, .pptx) | Yes | Yes |
+| OpenDocument (.odt, .ods, .odp) | Yes | Yes |
+| EPUB files | Yes | Yes |
+| ZIP archives | Yes | Yes |
+| PDF form fields | No | Yes |
+| Image XMP metadata | No | Yes |
+| Audio metadata (MP3/FLAC) | No | Yes |
+| TAR/TAR.GZ archives | No | Yes |
+
+## Example: Project Documentation Kit
+
+Create a complete documentation package with personalized files:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <folder name="docs">
+    <!-- Personalized Word document -->
+    <file name="README.docx" url="https://example.com/templates/readme.docx" />
+
+    <!-- Project tracking spreadsheet -->
+    <file name="tracker.xlsx" url="https://example.com/templates/tracker.xlsx" />
+
+    <!-- Presentation template -->
+    <file name="overview.pptx" url="https://example.com/templates/overview.pptx" />
+  </folder>
+
+  <folder name="assets">
+    <!-- Starter kit with config files -->
+    <file name="starter.zip" url="https://example.com/templates/starter.zip" />
+  </folder>
+</folder>
+```
+
+With variables:
+- `PROJECT_NAME`: my-project
+- `AUTHOR`: Jane Developer
+- `VERSION`: 1.0.0
+- `DATE`: today
+
+All documents will have their placeholders replaced with actual values.

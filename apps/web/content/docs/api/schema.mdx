@@ -31,6 +31,11 @@ Creates a file with optional content.
 |-----------|----------|-------------|
 | `name` | Yes | File name (supports variables) |
 | `url` | No | URL to download content from |
+| `generate` | No | Generator type: `image` or `sqlite` |
+| `width` | No | Image width in pixels (default: 100, max: 10000) |
+| `height` | No | Image height in pixels (default: 100, max: 10000) |
+| `background` | No | Image background hex color (default: #CCCCCC) |
+| `format` | No | Image format: `png` or `jpeg` (auto-detected from extension) |
 
 ```xml
 <!-- Empty file -->
@@ -49,6 +54,14 @@ Description here.
 <!-- File with CDATA for special characters -->
 <file name="App.tsx"><![CDATA[
 export const App = () => <div>Hello</div>;
+]]></file>
+
+<!-- Generated image -->
+<file name="logo.png" generate="image" width="200" height="200" background="#3B82F6" />
+
+<!-- Generated SQLite database -->
+<file name="app.db" generate="sqlite"><![CDATA[
+CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL);
 ]]></file>
 ```
 

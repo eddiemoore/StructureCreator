@@ -1,0 +1,302 @@
+---
+title: File Generators
+description: Generate placeholder images and SQLite databases directly in your schemas.
+---
+
+# File Generators
+
+Structure Creator can generate binary files directly within your schemas. Use the `generate` attribute on `<file>` elements to create placeholder images or SQLite databases without needing external files.
+
+## Image Generation
+
+Generate placeholder PNG and JPEG images with custom dimensions and colors:
+
+```xml
+<file name="logo.png" generate="image" width="200" height="200" background="#3B82F6" />
+```
+
+### Basic Usage
+
+```xml
+<!-- Simple placeholder with defaults (100x100 gray PNG) -->
+<file name="placeholder.png" generate="image" />
+
+<!-- Custom dimensions -->
+<file name="banner.jpg" generate="image" width="1920" height="600" />
+
+<!-- Custom background color -->
+<file name="brand-bg.png" generate="image" background="#10B981" />
+
+<!-- All attributes -->
+<file name="hero.jpeg" generate="image" width="1200" height="630" background="#1F2937" format="jpeg" />
+```
+
+### Image Attributes
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `width` | 100 | Width in pixels (max 10000) |
+| `height` | 100 | Height in pixels (max 10000) |
+| `background` | #CCCCCC | Hex color (#RGB or #RRGGBB) |
+| `format` | auto | `png` or `jpeg` (auto-detected from file extension) |
+
+### Format Auto-Detection
+
+The image format is automatically detected from the file extension:
+
+- `.png` → PNG format
+- `.jpg`, `.jpeg` → JPEG format
+
+Use the `format` attribute to override:
+
+```xml
+<!-- Force JPEG format even with .png extension -->
+<file name="photo.png" generate="image" format="jpeg" />
+```
+
+### Using Variables
+
+All image attributes support variables:
+
+```xml
+<file name="%IMAGE_NAME%.png"
+      generate="image"
+      width="%AVATAR_SIZE%"
+      height="%AVATAR_SIZE%"
+      background="%BRAND_COLOR%" />
+```
+
+### Complete Example
+
+Create a set of placeholder images for a web project:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <folder name="assets">
+    <folder name="images">
+      <!-- Main branding -->
+      <file name="logo.png" generate="image" width="200" height="200" background="#3B82F6" />
+      <file name="favicon.png" generate="image" width="32" height="32" background="#3B82F6" />
+
+      <!-- Hero section -->
+      <file name="hero-banner.jpg" generate="image" width="1920" height="600" background="#1F2937" />
+
+      <!-- Placeholders -->
+      <file name="avatar-default.png" generate="image" width="128" height="128" background="#9CA3AF" />
+      <file name="thumbnail.jpg" generate="image" width="300" height="200" background="#E5E7EB" />
+    </folder>
+
+    <folder name="icons">
+      <!-- App icons at standard sizes -->
+      <file name="icon-16.png" generate="image" width="16" height="16" background="#10B981" />
+      <file name="icon-32.png" generate="image" width="32" height="32" background="#10B981" />
+      <file name="icon-64.png" generate="image" width="64" height="64" background="#10B981" />
+      <file name="icon-128.png" generate="image" width="128" height="128" background="#10B981" />
+      <file name="icon-256.png" generate="image" width="256" height="256" background="#10B981" />
+    </folder>
+  </folder>
+</folder>
+```
+
+## SQLite Database Generation
+
+Generate SQLite databases with your schema and initial data:
+
+```xml
+<file name="app.db" generate="sqlite"><![CDATA[
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL
+);
+]]></file>
+```
+
+### Basic Usage
+
+Place your SQL statements inside a CDATA section:
+
+```xml
+<file name="config.db" generate="sqlite"><![CDATA[
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO settings (key, value) VALUES ('theme', 'light');
+INSERT INTO settings (key, value) VALUES ('language', 'en');
+]]></file>
+```
+
+### SQL Features
+
+Full SQLite SQL support including:
+
+- **Tables** with any column types and constraints
+- **Indexes** for query optimization
+- **Foreign keys** for relationships
+- **Initial data** via INSERT statements
+- **Views, triggers**, and other SQLite features
+
+### Using Variables
+
+Variables are substituted in the SQL before execution:
+
+```xml
+<file name="app.db" generate="sqlite"><![CDATA[
+CREATE TABLE metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+INSERT INTO metadata (key, value) VALUES ('app_name', '%PROJECT_NAME%');
+INSERT INTO metadata (key, value) VALUES ('version', '%VERSION%');
+INSERT INTO metadata (key, value) VALUES ('created_by', '%AUTHOR%');
+]]></file>
+```
+
+### Complete Example
+
+Create a full application database:
+
+```xml
+<file name="app.db" generate="sqlite"><![CDATA[
+-- Enable foreign keys
+PRAGMA foreign_keys = ON;
+
+-- Users table
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  username TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Posts table
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT,
+  published INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Tags table
+CREATE TABLE tags (
+  id INTEGER PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL
+);
+
+-- Many-to-many relationship
+CREATE TABLE post_tags (
+  post_id INTEGER NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (post_id, tag_id),
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+-- Indexes for common queries
+CREATE INDEX idx_posts_user ON posts(user_id);
+CREATE INDEX idx_posts_published ON posts(published);
+CREATE INDEX idx_post_tags_tag ON post_tags(tag_id);
+
+-- Initial data
+INSERT INTO users (email, username, password_hash) VALUES (
+  '%ADMIN_EMAIL%',
+  'admin',
+  'placeholder_hash'
+);
+
+INSERT INTO tags (name) VALUES ('general'), ('announcement'), ('tutorial');
+]]></file>
+```
+
+### Cache Database Example
+
+A simple key-value cache with expiration:
+
+```xml
+<file name="cache.sqlite" generate="sqlite"><![CDATA[
+CREATE TABLE cache (
+  key TEXT PRIMARY KEY,
+  value BLOB,
+  expires_at INTEGER
+);
+
+CREATE INDEX idx_cache_expires ON cache(expires_at);
+]]></file>
+```
+
+## Use Cases
+
+### Project Scaffolding
+
+Generate complete project structures with all necessary assets:
+
+```xml
+<folder name="%PROJECT_NAME%">
+  <folder name="public">
+    <file name="favicon.png" generate="image" width="32" height="32" background="#3B82F6" />
+    <file name="og-image.jpg" generate="image" width="1200" height="630" background="#1F2937" />
+  </folder>
+
+  <folder name="data">
+    <file name="app.db" generate="sqlite"><![CDATA[
+CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT UNIQUE);
+CREATE TABLE sessions (id TEXT PRIMARY KEY, user_id INTEGER, expires_at INTEGER);
+    ]]></file>
+  </folder>
+</folder>
+```
+
+### Prototype Databases
+
+Quickly create database schemas for prototyping:
+
+```xml
+<file name="prototype.db" generate="sqlite"><![CDATA[
+CREATE TABLE products (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  price REAL NOT NULL,
+  stock INTEGER DEFAULT 0
+);
+
+CREATE TABLE orders (
+  id INTEGER PRIMARY KEY,
+  customer_email TEXT NOT NULL,
+  total REAL NOT NULL,
+  status TEXT DEFAULT 'pending',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Sample data for testing
+INSERT INTO products (name, price, stock) VALUES
+  ('Widget A', 9.99, 100),
+  ('Widget B', 19.99, 50),
+  ('Widget C', 29.99, 25);
+]]></file>
+```
+
+### Placeholder Assets
+
+Generate consistent placeholder images for design mockups:
+
+```xml
+<folder name="mockup-assets">
+  <!-- Card images -->
+  <repeat count="6" as="i">
+    <file name="card-%i_1%.jpg" generate="image" width="400" height="300" background="#E5E7EB" />
+  </repeat>
+
+  <!-- Avatar placeholders -->
+  <repeat count="10" as="i">
+    <file name="avatar-%i_1%.png" generate="image" width="64" height="64" background="#9CA3AF" />
+  </repeat>
+</folder>
+```
