@@ -1,0 +1,152 @@
+<!--
+  Binary File Generation Example
+
+  This schema demonstrates the generate attribute for creating:
+  - Placeholder images (PNG/JPEG) with custom dimensions and colors
+  - SQLite databases with SQL schemas
+
+  === Image Generation ===
+  Attributes: width, height, background (hex color), format (png/jpeg)
+  Example: <file name="logo.png" generate="image" width="200" height="200" background="#3B82F6" />
+
+  === SQLite Generation ===
+  Uses raw SQL syntax in CDATA blocks. This gives you full control over:
+  - Table definitions with any SQLite column types and constraints
+  - Indexes for query optimization
+  - Foreign key relationships
+  - Initial data via INSERT statements
+  - Views, triggers, and other SQLite features
+
+  Syntax:
+    <file name="database.db" generate="sqlite"><![CDATA[
+    CREATE TABLE example (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+    INSERT INTO example (name) VALUES ('initial data');
+    ]]></file>
+
+  Variables (%VAR_NAME%) are substituted in SQL before execution.
+-->
+<folder name="%PROJECT_NAME%">
+
+  <!-- Assets folder with generated placeholder images -->
+  <folder name="assets">
+    <folder name="images">
+      <!-- Simple placeholder image with defaults (100x100 gray PNG) -->
+      <file name="placeholder.png" generate="image" />
+
+      <!-- Logo with brand color -->
+      <file name="logo.png" generate="image" width="200" height="200" background="#3B82F6" />
+
+      <!-- Hero banner -->
+      <file name="hero-banner.jpg" generate="image" width="1920" height="600" background="#1F2937" />
+
+      <!-- Avatar placeholder using variables -->
+      <file name="avatar.png" generate="image" width="%AVATAR_SIZE%" height="%AVATAR_SIZE%" background="%BRAND_COLOR%" />
+
+      <!-- Thumbnail -->
+      <file name="thumbnail.jpeg" generate="image" width="150" height="150" background="#E5E7EB" format="jpeg" />
+    </folder>
+
+    <folder name="icons">
+      <!-- App icons at different sizes -->
+      <file name="icon-16.png" generate="image" width="16" height="16" background="#10B981" />
+      <file name="icon-32.png" generate="image" width="32" height="32" background="#10B981" />
+      <file name="icon-64.png" generate="image" width="64" height="64" background="#10B981" />
+      <file name="icon-128.png" generate="image" width="128" height="128" background="#10B981" />
+    </folder>
+  </folder>
+
+  <!-- Database folder with SQLite examples -->
+  <folder name="data">
+
+    <!-- Simple database with raw SQL in content -->
+    <file name="config.db" generate="sqlite"><![CDATA[
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO settings (key, value) VALUES ('app_name', '%PROJECT_NAME%');
+INSERT INTO settings (key, value) VALUES ('version', '%VERSION%');
+INSERT INTO settings (key, value) VALUES ('theme', 'light');
+    ]]></file>
+
+    <!-- Application database with multiple tables -->
+    <file name="app.db" generate="sqlite"><![CDATA[
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  username TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT,
+  published INTEGER DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE tags (
+  id INTEGER PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL
+);
+
+CREATE TABLE post_tags (
+  post_id INTEGER NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (post_id, tag_id),
+  FOREIGN KEY (post_id) REFERENCES posts(id),
+  FOREIGN KEY (tag_id) REFERENCES tags(id)
+);
+    ]]></file>
+
+    <!-- Cache database -->
+    <file name="cache.sqlite" generate="sqlite"><![CDATA[
+CREATE TABLE cache (
+  key TEXT PRIMARY KEY,
+  value BLOB,
+  expires_at INTEGER
+);
+
+CREATE INDEX idx_cache_expires ON cache(expires_at);
+    ]]></file>
+
+  </folder>
+
+  <!-- Regular files alongside generated ones -->
+  <file name="README.md"><![CDATA[# %PROJECT_NAME%
+
+Project created with Structure Creator.
+
+## Assets
+
+The `assets/` folder contains placeholder images that you should replace with your actual assets:
+
+- `logo.png` - Your application logo (200x200)
+- `hero-banner.jpg` - Hero section background (1920x600)
+- `avatar.png` - Default user avatar
+- `icons/` - Application icons at various sizes
+
+## Database
+
+SQLite databases are pre-configured in `data/`:
+
+- `config.db` - Application settings
+- `app.db` - Main application database with users, posts, and tags tables
+- `cache.sqlite` - Simple key-value cache with expiration
+]]></file>
+
+  <file name="package.json"><![CDATA[{
+  "name": "%PROJECT_NAME%",
+  "version": "%VERSION%",
+  "description": "A project with generated binary assets"
+}
+]]></file>
+
+</folder>

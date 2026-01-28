@@ -51,6 +51,18 @@ export interface SchemaNode {
    * @default "i"
    */
   repeat_as?: string;
+  /**
+   * Generator type for binary file creation.
+   * - "image": Creates a placeholder image (PNG/JPEG) with configurable dimensions and color
+   * - "sqlite": Creates a SQLite database with defined schema
+   */
+  generate?: "image" | "sqlite";
+  /**
+   * Generator configuration (child XML content as string for parsing).
+   * For image: width, height, background, format attributes
+   * For sqlite: <table> or <sql> child elements
+   */
+  generateConfig?: string;
 }
 
 export interface SchemaHooks {
@@ -63,6 +75,8 @@ export interface SchemaTree {
     folders: number;
     files: number;
     downloads: number;
+    /** Number of files that will be generated (images, databases) */
+    generated?: number;
   };
   hooks?: SchemaHooks;
 }

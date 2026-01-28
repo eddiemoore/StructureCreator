@@ -7,12 +7,13 @@ use std::io::Read;
 /// Default condition variable name for if blocks without an explicit var attribute
 const DEFAULT_CONDITION_VAR: &str = "CONDITION";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SchemaNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default)]
     pub node_type: String,
+    #[serde(default)]
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
@@ -28,13 +29,21 @@ pub struct SchemaNode {
     /// For repeat nodes: the iteration variable name (e.g., "i" creates %i%)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_as: Option<String>,
+    /// Generator type: "image" or "sqlite"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generate: Option<String>,
+    /// Generator configuration (child XML as string for parsing)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generate_config: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SchemaStats {
     pub folders: usize,
     pub files: usize,
     pub downloads: usize,
+    #[serde(default)]
+    pub generated: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -168,6 +177,8 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
     let mut condition_var: Option<String> = None;
     let mut repeat_count: Option<String> = None;
     let mut repeat_as: Option<String> = None;
+    let mut generate: Option<String> = None;
+    let mut extra_attrs: Vec<String> = Vec::new();
 
     for attr in e.attributes() {
         let attr = attr?;
@@ -180,6 +191,11 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
             "var" => condition_var = Some(value.to_string()),
             "count" => repeat_count = Some(value.to_string()),
             "as" => repeat_as = Some(value.to_string()),
+            "generate" => generate = Some(value.to_string()),
+            // Capture generator-specific attributes (width, height, background, format)
+            "width" | "height" | "background" | "format" => {
+                extra_attrs.push(format!("{}=\"{}\"", key, value));
+            }
             _ => {}
         }
     }
@@ -191,6 +207,13 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         }
     }
 
+    // Build generate_config from extra attributes if any
+    let generate_config = if !extra_attrs.is_empty() {
+        Some(extra_attrs.join(" "))
+    } else {
+        None
+    };
+
     Ok(Some(SchemaNode {
         id: None,
         node_type: node_type.to_string(),
@@ -201,6 +224,8 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         condition_var,
         repeat_count,
         repeat_as,
+        generate,
+        generate_config,
     }))
 }
 
@@ -209,6 +234,7 @@ fn calculate_stats(node: &SchemaNode) -> SchemaStats {
         folders: 0,
         files: 0,
         downloads: 0,
+        generated: 0,
     };
 
     count_nodes(node, &mut stats);
@@ -222,6 +248,9 @@ fn count_nodes(node: &SchemaNode, stats: &mut SchemaStats) {
             stats.files += 1;
             if node.url.is_some() {
                 stats.downloads += 1;
+            }
+            if node.generate.is_some() {
+                stats.generated += 1;
             }
         }
         // if/else/repeat are control structures, not counted
@@ -317,6 +346,8 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
                 condition_var: None,
                 repeat_count: None,
                 repeat_as: None,
+                generate: None,
+                generate_config: None,
             });
         }
     }
@@ -331,6 +362,8 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
         condition_var: None,
         repeat_count: None,
         repeat_as: None,
+        generate: None,
+        generate_config: None,
     })
 }
 
@@ -418,6 +451,22 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
             if let Some(url) = &node.url {
                 xml.push_str(&format!("{}<file name=\"{}\" url=\"{}\" />\n",
                     indent_str, escape_xml(&node.name), escape_xml(url)));
+            } else if let Some(generate) = &node.generate {
+                // File with generate attribute
+                xml.push_str(&format!("{}<file name=\"{}\" generate=\"{}\"",
+                    indent_str, escape_xml(&node.name), escape_xml(generate)));
+                // Add generator config attributes inline if present
+                if let Some(config) = &node.generate_config {
+                    xml.push_str(&format!(" {}", config));
+                }
+                // Add content as CDATA if present (for SQLite SQL)
+                if let Some(content) = &node.content {
+                    xml.push_str(">\n");
+                    xml.push_str(&format!("{}<![CDATA[{}]]>\n", indent_str, content));
+                    xml.push_str(&format!("{}</file>\n", indent_str));
+                } else {
+                    xml.push_str(" />\n");
+                }
             } else if let Some(content) = &node.content {
                 xml.push_str(&format!("{}<file name=\"{}\">\n", indent_str, escape_xml(&node.name)));
                 xml.push_str(&format!("{}<![CDATA[{}]]>\n", indent_str, content));
@@ -558,6 +607,8 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                             condition_var: None,
                             repeat_count: None,
                             repeat_as: None,
+                            generate: None,
+                            generate_config: None,
                         });
                 }
 
@@ -574,6 +625,8 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                     condition_var: None,
                     repeat_count: None,
                     repeat_as: None,
+                    generate: None,
+                    generate_config: None,
                 };
 
                 if is_dir {
@@ -723,6 +776,8 @@ fn build_tree_from_map(
         condition_var: None,
         repeat_count: None,
         repeat_as: None,
+        generate: None,
+        generate_config: None,
     }
 }
 
@@ -1240,11 +1295,14 @@ mod tests {
                 condition_var: None,
                 repeat_count: None,
                 repeat_as: None,
+                generate: None,
+                generate_config: None,
             },
             stats: SchemaStats {
                 folders: 1,
                 files: 0,
                 downloads: 0,
+                generated: 0,
             },
             hooks: Some(SchemaHooks {
                 post_create: vec!["npm install".to_string(), "git init".to_string()],
@@ -1271,11 +1329,14 @@ mod tests {
                 condition_var: None,
                 repeat_count: None,
                 repeat_as: None,
+                generate: None,
+                generate_config: None,
             },
             stats: SchemaStats {
                 folders: 1,
                 files: 0,
                 downloads: 0,
+                generated: 0,
             },
             hooks: None,
         };
@@ -1358,21 +1419,28 @@ mod tests {
                                 condition_var: None,
                                 repeat_count: None,
                                 repeat_as: None,
+                                generate: None,
+                                generate_config: None,
                             }
                         ]),
                         condition_var: None,
                         repeat_count: Some("5".to_string()),
                         repeat_as: Some("idx".to_string()),
+                        generate: None,
+                        generate_config: None,
                     }
                 ]),
                 condition_var: None,
                 repeat_count: None,
                 repeat_as: None,
+                generate: None,
+                generate_config: None,
             },
             stats: SchemaStats {
                 folders: 2,
                 files: 0,
                 downloads: 0,
+                generated: 0,
             },
             hooks: None,
         };
@@ -2097,16 +2165,21 @@ export const Component = () => {
                         condition_var: None,
                         repeat_count: None,
                         repeat_as: None,
+                        generate: None,
+                        generate_config: None,
                     }
                 ]),
                 condition_var: None,
                 repeat_count: None,
                 repeat_as: None,
+                generate: None,
+                generate_config: None,
             },
             stats: SchemaStats {
                 folders: 1,
                 files: 1,
                 downloads: 0,
+                generated: 0,
             },
             hooks: None,
         };
@@ -2213,5 +2286,60 @@ export const EXTENSION = true;
         // Check extension file has content
         let ext_file = children.iter().find(|c| c.name == "extension.ts").unwrap();
         assert!(ext_file.content.as_ref().unwrap().contains("// Extension file content"));
+    }
+
+    // ========================================================================
+    // Generator Attribute Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_schema_with_image_generator() {
+        let xml = r#"
+            <folder name="assets">
+                <file name="logo.png" generate="image" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert_eq!(tree.stats.files, 1);
+        assert_eq!(tree.stats.generated, 1);
+
+        let file = &tree.root.children.as_ref().unwrap()[0];
+        assert_eq!(file.name, "logo.png");
+        assert_eq!(file.generate, Some("image".to_string()));
+    }
+
+    #[test]
+    fn test_parse_schema_with_sqlite_generator() {
+        let xml = r#"
+            <folder name="data">
+                <file name="app.db" generate="sqlite" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert_eq!(tree.stats.files, 1);
+        assert_eq!(tree.stats.generated, 1);
+
+        let file = &tree.root.children.as_ref().unwrap()[0];
+        assert_eq!(file.name, "app.db");
+        assert_eq!(file.generate, Some("sqlite".to_string()));
+    }
+
+    #[test]
+    fn test_parse_schema_mixed_files_and_generators() {
+        let xml = r#"
+            <folder name="project">
+                <file name="readme.txt">Hello World</file>
+                <file name="logo.png" generate="image" />
+                <file name="config.json" url="https://example.com/config.json" />
+                <file name="data.db" generate="sqlite" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert_eq!(tree.stats.files, 4);
+        assert_eq!(tree.stats.downloads, 1);
+        assert_eq!(tree.stats.generated, 2);
     }
 }
