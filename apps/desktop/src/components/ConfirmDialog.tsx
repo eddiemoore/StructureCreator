@@ -66,19 +66,25 @@ export const ConfirmDialog = ({
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={!isLoading ? handleClose : undefined}
+        aria-hidden="true"
       />
 
       {/* Modal */}
-      <div className="relative bg-card-bg rounded-mac-lg shadow-mac-xl w-[420px] overflow-hidden border border-border-muted">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        className="relative bg-card-bg rounded-mac-lg shadow-mac-xl w-[420px] overflow-hidden border border-border-muted"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-muted">
           <div className="flex items-center gap-3">
             {isDangerous && (
-              <div className="w-8 h-8 rounded-full bg-system-red/10 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-system-red/10 flex items-center justify-center" aria-hidden="true">
                 <AlertCircleIcon size={18} className="text-system-red" />
               </div>
             )}
-            <h2 className="text-mac-lg font-semibold text-text-primary">
+            <h2 id="confirm-dialog-title" className="text-mac-lg font-semibold text-text-primary">
               {title}
             </h2>
           </div>
@@ -86,6 +92,7 @@ export const ConfirmDialog = ({
             <button
               onClick={handleClose}
               className="w-7 h-7 flex items-center justify-center rounded-mac text-text-muted hover:bg-mac-bg-hover transition-colors"
+              aria-label="Close dialog"
             >
               <XIcon size={16} />
             </button>
