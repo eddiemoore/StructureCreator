@@ -97,6 +97,31 @@ export interface CreateResult {
   logs: BackendLogEntry[];
   summary: ResultSummary;
   hook_results: HookResult[];
+  created_items: CreatedItem[];
+}
+
+/** Represents a created item for undo tracking */
+export interface CreatedItem {
+  /** Full path of the created item */
+  path: string;
+  /** Type: "folder" or "file" */
+  item_type: "folder" | "file";
+  /** True if this item existed before and was overwritten */
+  pre_existed: boolean;
+}
+
+/** Result of an undo operation */
+export interface UndoResult {
+  logs: BackendLogEntry[];
+  summary: UndoSummary;
+}
+
+/** Summary of undo operation results */
+export interface UndoSummary {
+  files_deleted: number;
+  folders_deleted: number;
+  items_skipped: number;
+  errors: number;
 }
 
 // ============================================================================
@@ -275,6 +300,9 @@ export interface AppState {
   // Update
   updateState: UpdateState;
 
+  // Undo
+  lastCreation: CreatedItem[] | null;
+
   // Actions
   setSchemaPath: (path: string | null) => void;
   setSchemaContent: (content: string | null) => void;
@@ -343,6 +371,10 @@ export interface AppState {
   setWizardStep: (step: number) => void;
   updateWizardAnswer: (questionId: string, value: string | boolean | string[]) => void;
   setWizardPreviewTree: (tree: SchemaTree | null) => void;
+
+  // Undo actions
+  setLastCreation: (items: CreatedItem[] | null) => void;
+  canUndoCreation: () => boolean;
 
   // Update actions
   setUpdateStatus: (status: UpdateStatus) => void;

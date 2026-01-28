@@ -153,6 +153,7 @@ export const createStructureFromTree = async (
     logs: context.logs,
     summary: context.summary,
     hook_results: [],
+    created_items: [], // Web mode doesn't track created items for undo
   };
 };
 

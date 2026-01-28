@@ -16,6 +16,8 @@ import type {
   RecentProject,
   WizardConfig,
   SchemaValidationResult,
+  CreatedItem,
+  UndoResult,
 } from "../../types/schema";
 
 // ============================================================================
@@ -232,6 +234,15 @@ export interface StructureCreatorAdapter {
     variables: Record<string, string>,
     overwrite: boolean
   ): Promise<DiffResult>;
+
+  /**
+   * Undo a previously created structure by deleting created files and folders.
+   * Only deletes items where pre_existed is false.
+   */
+  undoStructure(
+    items: CreatedItem[],
+    dryRun: boolean
+  ): Promise<UndoResult>;
 }
 
 // ============================================================================
