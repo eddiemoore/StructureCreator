@@ -1,14 +1,14 @@
 name = "structure-creator-web"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
-main = "./build/server/index.js"
+main = "./workers/app.ts"
 assets = { directory = "./build/client" }
 
 # D1 Database binding
 [[d1_databases]]
 binding = "DB"
 database_name = "structure-creator-db"
-database_id = "YOUR_DATABASE_ID_HERE"
+database_id = "37e264b1-40e0-40dd-a817-a1dbaf6f619f"
 
 [vars]
 GITHUB_OWNER = "eddiemoore"
