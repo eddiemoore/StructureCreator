@@ -48,8 +48,9 @@ export const _resetSqlJsCache = (): void => {
  * CDN URL for sql.js WASM.
  * Using jsDelivr for reliability and caching.
  * Pinned to specific version for supply chain security.
+ * Note: Keep this in sync with the sql.js version in package.json.
  */
-const SQL_JS_CDN = "https://cdn.jsdelivr.net/npm/sql.js@1.11.0/dist";
+const SQL_JS_CDN = "https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist";
 
 /**
  * Initialize sql.js by loading from CDN.
