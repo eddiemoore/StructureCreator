@@ -200,10 +200,11 @@ import type { SchemaNode } from "../../../types/schema";
  */
 export const calculateSchemaStats = (
   node: SchemaNode
-): { folders: number; files: number; downloads: number } => {
+): { folders: number; files: number; downloads: number; generated: number } => {
   let folders = 0;
   let files = 0;
   let downloads = 0;
+  let generated = 0;
 
   const traverse = (n: SchemaNode) => {
     if (n.type === "folder") {
@@ -213,13 +214,16 @@ export const calculateSchemaStats = (
       if (n.url) {
         downloads++;
       }
+      if (n.generate) {
+        generated++;
+      }
     }
     // if/else/repeat are control structures, not counted
     n.children?.forEach(traverse);
   };
 
   traverse(node);
-  return { folders, files, downloads };
+  return { folders, files, downloads, generated };
 };
 
 // ============================================================================

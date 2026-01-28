@@ -1,4 +1,5 @@
 pub mod database;
+pub mod generators;
 pub mod schema;
 pub mod transforms;
 pub mod validation;
@@ -63,6 +64,8 @@ pub struct ResultSummary {
     pub folders_created: usize,
     pub files_created: usize,
     pub files_downloaded: usize,
+    #[serde(default)]
+    pub files_generated: usize,
     pub errors: usize,
     pub skipped: usize,
     #[serde(default)]
@@ -533,6 +536,7 @@ pub fn create_structure_from_tree(
         folders_created: 0,
         files_created: 0,
         files_downloaded: 0,
+        files_generated: 0,
         errors: 0,
         skipped: 0,
         hooks_executed: 0,
@@ -971,6 +975,17 @@ fn create_node_internal(
                         message: format!("Would download: {}", name),
                         details: Some(url.clone()),
                     });
+                } else if let Some(generator_type) = &node.generate {
+                    let generator_desc = match generator_type.as_str() {
+                        "image" => "image",
+                        "sqlite" => "database",
+                        _ => "file",
+                    };
+                    logs.push(LogEntry {
+                        log_type: "info".to_string(),
+                        message: format!("Would generate {}: {}", generator_desc, name),
+                        details: Some(display_path.clone()),
+                    });
                 } else {
                     logs.push(LogEntry {
                         log_type: "info".to_string(),
@@ -1154,6 +1169,71 @@ fn create_node_internal(
                                 });
                                 // Don't create file on download error
                             }
+                        }
+                    }
+                } else if let Some(generator_type) = &node.generate {
+                    // Generate binary file (image or sqlite)
+                    match generator_type.as_str() {
+                        "image" => {
+                            match generators::generate_image(node, &current_path, variables, dry_run) {
+                                Ok(_) => {
+                                    summary.files_generated += 1;
+                                    if !dry_run {
+                                        created_items.push(CreatedItem {
+                                            path: display_path.clone(),
+                                            item_type: ItemType::File,
+                                            pre_existed,
+                                        });
+                                    }
+                                    logs.push(LogEntry {
+                                        log_type: if dry_run { "info".to_string() } else { "success".to_string() },
+                                        message: format!("{} image: {}", if dry_run { "Would generate" } else { "Generated" }, name),
+                                        details: Some(display_path.clone()),
+                                    });
+                                }
+                                Err(e) => {
+                                    summary.errors += 1;
+                                    logs.push(LogEntry {
+                                        log_type: "error".to_string(),
+                                        message: format!("Failed to generate image: {}", name),
+                                        details: Some(e),
+                                    });
+                                }
+                            }
+                        }
+                        "sqlite" => {
+                            match generators::generate_sqlite(node, &current_path, variables, dry_run) {
+                                Ok(_) => {
+                                    summary.files_generated += 1;
+                                    if !dry_run {
+                                        created_items.push(CreatedItem {
+                                            path: display_path.clone(),
+                                            item_type: ItemType::File,
+                                            pre_existed,
+                                        });
+                                    }
+                                    logs.push(LogEntry {
+                                        log_type: if dry_run { "info".to_string() } else { "success".to_string() },
+                                        message: format!("{} database: {}", if dry_run { "Would generate" } else { "Generated" }, name),
+                                        details: Some(display_path.clone()),
+                                    });
+                                }
+                                Err(e) => {
+                                    summary.errors += 1;
+                                    logs.push(LogEntry {
+                                        log_type: "error".to_string(),
+                                        message: format!("Failed to generate database: {}", name),
+                                        details: Some(e),
+                                    });
+                                }
+                            }
+                        }
+                        _ => {
+                            logs.push(LogEntry {
+                                log_type: "warning".to_string(),
+                                message: format!("Unknown generator type: {}", generator_type),
+                                details: Some(format!("File '{}' was skipped. Supported generators: image, sqlite", name)),
+                            });
                         }
                     }
                 } else {
@@ -4555,17 +4635,20 @@ mod tests {
                         condition_var: None,
                         repeat_count: None,
                         repeat_as: None,
+                        ..Default::default()
                     }]),
                     url: None,
                     content: None,
                     condition_var: None,
                     repeat_count: None,
                     repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 1,
                     downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };
@@ -4612,17 +4695,20 @@ mod tests {
                         condition_var: None,
                         repeat_count: None,
                         repeat_as: None,
+                        ..Default::default()
                     }]),
                     url: None,
                     content: None,
                     condition_var: None,
                     repeat_count: None,
                     repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 1,
                     downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };
@@ -4660,17 +4746,20 @@ mod tests {
                         condition_var: None,
                         repeat_count: None,
                         repeat_as: None,
+                        ..Default::default()
                     }]),
                     url: None,
                     content: None,
                     condition_var: None,
                     repeat_count: None,
                     repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 1,
                     downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };
@@ -4707,11 +4796,13 @@ mod tests {
                     condition_var: None,
                     repeat_count: None,
                     repeat_as: None,
+                        ..Default::default()
                 },
                 stats: SchemaStats {
                     folders: 1,
                     files: 0,
                     downloads: 0,
+                    ..Default::default()
                 },
                 hooks: None,
             };

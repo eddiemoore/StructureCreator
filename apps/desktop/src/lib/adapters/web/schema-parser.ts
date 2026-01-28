@@ -161,10 +161,46 @@ const parseNode = (element: Element, depth: number): SchemaNode => {
       node.url = url;
     }
 
-    // Check for content
-    const content = getTextContent(element);
-    if (content && !url) {
-      node.content = content;
+    // Check for generator
+    const generate = element.getAttribute("generate");
+    if (generate === "image" || generate === "sqlite") {
+      node.generate = generate;
+
+      // Build generateConfig from generator-specific attributes
+      // These match the Rust parser's attribute consolidation
+      const configAttrs: string[] = [];
+      const generatorAttrs = ["width", "height", "background", "format"];
+      for (const attr of generatorAttrs) {
+        const value = element.getAttribute(attr);
+        if (value) {
+          configAttrs.push(`${attr}="${value}"`);
+        }
+      }
+
+      // If there are inline attributes, use them as generateConfig
+      if (configAttrs.length > 0) {
+        node.generateConfig = configAttrs.join(" ");
+      }
+
+      // Also capture any child content for complex configs (e.g., SQL)
+      const content = getTextContent(element);
+      if (content) {
+        // For sqlite, content may contain SQL statements
+        // For image, content may have additional attributes
+        if (node.generateConfig) {
+          node.generateConfig += "\n" + content;
+        } else {
+          node.generateConfig = content;
+        }
+      }
+    }
+
+    // Check for content (only if not a generator and no URL)
+    if (!generate) {
+      const content = getTextContent(element);
+      if (content && !url) {
+        node.content = content;
+      }
     }
   }
 
@@ -243,6 +279,10 @@ export const exportSchemaXml = (tree: SchemaTree): string => {
 
     if (node.url) {
       attrs.push(`url="${escapeXml(node.url)}"`);
+    }
+
+    if (node.generate) {
+      attrs.push(`generate="${escapeXml(node.generate)}"`);
     }
 
     if (node.condition_var) {

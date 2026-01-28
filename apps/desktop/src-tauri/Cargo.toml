@@ -55,6 +55,8 @@ tempfile = "3"
 dirs = "5"
 # Text diff algorithm
 similar = "2"
+# Image generation for placeholders
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # File system watcher for watch mode
 notify = "6"
 notify-debouncer-mini = "0.4"

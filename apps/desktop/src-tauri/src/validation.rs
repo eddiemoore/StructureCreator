@@ -453,7 +453,7 @@ mod tests {
                     children: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None,
+                    repeat_as: None, ..Default::default()
                 },
                 SchemaNode {
                     id: None,
@@ -464,12 +464,12 @@ mod tests {
                     children: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None,
+                    repeat_as: None, ..Default::default()
                 },
             ]),
             condition_var: None,
             repeat_count: None,
-            repeat_as: None,
+            repeat_as: None, ..Default::default()
         };
 
         let result = check_duplicate_names(&node);
@@ -495,7 +495,7 @@ mod tests {
                     children: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None,
+                    repeat_as: None, ..Default::default()
                 },
                 SchemaNode {
                     id: None,
@@ -506,12 +506,12 @@ mod tests {
                     children: None,
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None,
+                    repeat_as: None, ..Default::default()
                 },
             ]),
             condition_var: None,
             repeat_count: None,
-            repeat_as: None,
+            repeat_as: None, ..Default::default()
         };
 
         let result = check_duplicate_names(&node);
@@ -549,11 +549,11 @@ mod tests {
                         children: None,
                         condition_var: None,
                         repeat_count: None,
-                        repeat_as: None,
+                        repeat_as: None, ..Default::default()
                     }]),
                     condition_var: Some("USE_JSON".to_string()),
                     repeat_count: None,
-                    repeat_as: None,
+                    repeat_as: None, ..Default::default()
                 },
                 SchemaNode {
                     id: None,
@@ -570,16 +570,16 @@ mod tests {
                         children: None,
                         condition_var: None,
                         repeat_count: None,
-                        repeat_as: None,
+                        repeat_as: None, ..Default::default()
                     }]),
                     condition_var: None,
                     repeat_count: None,
-                    repeat_as: None,
+                    repeat_as: None, ..Default::default()
                 },
             ]),
             condition_var: None,
             repeat_count: None,
-            repeat_as: None,
+            repeat_as: None, ..Default::default()
         };
 
         let result = check_duplicate_names(&node);
@@ -606,11 +606,11 @@ mod tests {
                 children: None,
                 condition_var: None,
                 repeat_count: None,
-                repeat_as: None,
+                repeat_as: None, ..Default::default()
             }]),
             condition_var: None,
             repeat_count: None,
-            repeat_as: None,
+            repeat_as: None, ..Default::default()
         };
 
         let result = validate_urls(&node);
@@ -635,11 +635,11 @@ mod tests {
                 children: None,
                 condition_var: None,
                 repeat_count: None,
-                repeat_as: None,
+                repeat_as: None, ..Default::default()
             }]),
             condition_var: None,
             repeat_count: None,
-            repeat_as: None,
+            repeat_as: None, ..Default::default()
         };
 
         let result = validate_urls(&node);
@@ -660,7 +660,7 @@ mod tests {
             children: None,
             condition_var: None,
             repeat_count: None,
-            repeat_as: None,
+            repeat_as: None, ..Default::default()
         };
 
         let result = validate_urls(&node);
