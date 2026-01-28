@@ -2,7 +2,7 @@
 //!
 //! This module provides generators that create binary files from XML schema definitions:
 //! - Image generator: Creates solid color PNG/JPEG placeholder images
-//! - SQLite generator: Creates SQLite databases with defined schemas
+//! - SQLite generator: Creates SQLite databases from raw SQL statements
 
 mod image;
 mod sqlite;
@@ -11,7 +11,31 @@ pub use image::generate_image;
 pub use sqlite::generate_sqlite;
 
 use crate::schema::SchemaNode;
+use regex::Regex;
 use std::collections::HashMap;
+use std::sync::OnceLock;
+
+// Pre-compiled regexes for image attribute parsing
+static RE_WIDTH: OnceLock<Regex> = OnceLock::new();
+static RE_HEIGHT: OnceLock<Regex> = OnceLock::new();
+static RE_BACKGROUND: OnceLock<Regex> = OnceLock::new();
+static RE_FORMAT: OnceLock<Regex> = OnceLock::new();
+
+fn get_image_regexes() -> (&'static Regex, &'static Regex, &'static Regex, &'static Regex) {
+    let re_width = RE_WIDTH.get_or_init(|| {
+        Regex::new(r#"width\s*=\s*["']?([^"'\s]+)["']?"#).unwrap()
+    });
+    let re_height = RE_HEIGHT.get_or_init(|| {
+        Regex::new(r#"height\s*=\s*["']?([^"'\s]+)["']?"#).unwrap()
+    });
+    let re_background = RE_BACKGROUND.get_or_init(|| {
+        Regex::new(r#"background\s*=\s*["']?([^"'\s]+)["']?"#).unwrap()
+    });
+    let re_format = RE_FORMAT.get_or_init(|| {
+        Regex::new(r#"format\s*=\s*["']?([^"'\s]+)["']?"#).unwrap()
+    });
+    (re_width, re_height, re_background, re_format)
+}
 
 /// Configuration parsed from image generator attributes
 #[derive(Debug, Clone)]
@@ -65,45 +89,33 @@ pub fn parse_image_config(node: &SchemaNode, variables: &HashMap<String, String>
 
 /// Parse image attributes from a string containing width/height/background/format
 fn parse_image_attributes(input: &str, variables: &HashMap<String, String>, mut config: ImageConfig) -> ImageConfig {
-    // Simple attribute parsing: look for key="value" patterns
-    let re_width = regex::Regex::new(r#"width\s*=\s*["']?([^"'\s]+)["']?"#).ok();
-    let re_height = regex::Regex::new(r#"height\s*=\s*["']?([^"'\s]+)["']?"#).ok();
-    let re_background = regex::Regex::new(r#"background\s*=\s*["']?([^"'\s]+)["']?"#).ok();
-    let re_format = regex::Regex::new(r#"format\s*=\s*["']?([^"'\s]+)["']?"#).ok();
+    let (re_width, re_height, re_background, re_format) = get_image_regexes();
 
-    if let Some(re) = &re_width {
-        if let Some(caps) = re.captures(input) {
-            let value = crate::transforms::substitute_variables(&caps[1], variables);
-            if let Ok(w) = value.trim().parse::<u32>() {
-                config.width = w.clamp(1, 10000);
-            }
+    if let Some(caps) = re_width.captures(input) {
+        let value = crate::transforms::substitute_variables(&caps[1], variables);
+        if let Ok(w) = value.trim().parse::<u32>() {
+            config.width = w.clamp(1, 10000);
         }
     }
 
-    if let Some(re) = &re_height {
-        if let Some(caps) = re.captures(input) {
-            let value = crate::transforms::substitute_variables(&caps[1], variables);
-            if let Ok(h) = value.trim().parse::<u32>() {
-                config.height = h.clamp(1, 10000);
-            }
+    if let Some(caps) = re_height.captures(input) {
+        let value = crate::transforms::substitute_variables(&caps[1], variables);
+        if let Ok(h) = value.trim().parse::<u32>() {
+            config.height = h.clamp(1, 10000);
         }
     }
 
-    if let Some(re) = &re_background {
-        if let Some(caps) = re.captures(input) {
-            let value = crate::transforms::substitute_variables(&caps[1], variables);
-            config.background = value.trim().to_string();
-        }
+    if let Some(caps) = re_background.captures(input) {
+        let value = crate::transforms::substitute_variables(&caps[1], variables);
+        config.background = value.trim().to_string();
     }
 
-    if let Some(re) = &re_format {
-        if let Some(caps) = re.captures(input) {
-            let value = caps[1].to_lowercase();
-            match value.as_str() {
-                "jpeg" | "jpg" => config.format = ImageFormat::Jpeg,
-                "png" => config.format = ImageFormat::Png,
-                _ => {}
-            }
+    if let Some(caps) = re_format.captures(input) {
+        let value = caps[1].to_lowercase();
+        match value.as_str() {
+            "jpeg" | "jpg" => config.format = ImageFormat::Jpeg,
+            "png" => config.format = ImageFormat::Png,
+            _ => {}
         }
     }
 
@@ -190,17 +202,10 @@ mod tests {
         let vars = HashMap::new();
 
         let mut node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "image.png".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("image".to_string()),
-            generate_config: None,
+            ..Default::default()
         };
 
         let config = parse_image_config(&node, &vars);

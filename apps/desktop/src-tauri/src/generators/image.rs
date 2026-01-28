@@ -72,17 +72,11 @@ mod tests {
         let path = dir.path().join("test.png");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "test.png".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("image".to_string()),
             generate_config: Some(r##"width="100" height="50" background="#FF0000""##.to_string()),
+            ..Default::default()
         };
 
         let vars = HashMap::new();
@@ -101,17 +95,11 @@ mod tests {
         let path = dir.path().join("test.jpg");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "test.jpg".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("image".to_string()),
             generate_config: Some(r##"width="200" height="100" background="#00FF00""##.to_string()),
+            ..Default::default()
         };
 
         let vars = HashMap::new();
@@ -130,17 +118,10 @@ mod tests {
         let path = dir.path().join("dry_run.png");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "dry_run.png".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("image".to_string()),
-            generate_config: None,
+            ..Default::default()
         };
 
         let vars = HashMap::new();
@@ -156,17 +137,11 @@ mod tests {
         let path = dir.path().join("var_test.png");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "var_test.png".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("image".to_string()),
             generate_config: Some(r##"width="%WIDTH%" height="%HEIGHT%" background="%COLOR%""##.to_string()),
+            ..Default::default()
         };
 
         let mut vars = HashMap::new();
@@ -185,17 +160,10 @@ mod tests {
         let path = dir.path().join("default.png");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "default.png".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("image".to_string()),
-            generate_config: None,
+            ..Default::default()
         };
 
         let vars = HashMap::new();

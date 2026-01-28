@@ -1,6 +1,6 @@
-//! SQLite database generator for creating databases with defined schemas.
+//! SQLite database generator for creating databases from raw SQL.
 //!
-//! Supports both declarative table definitions and raw SQL execution.
+//! Uses raw SQL statements in CDATA blocks for full control over schema definition.
 
 use crate::schema::SchemaNode;
 use crate::transforms::substitute_variables;
@@ -8,11 +8,10 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Generate a SQLite database file.
+/// Generate a SQLite database file from raw SQL statements.
 ///
-/// Supports two modes:
-/// 1. Raw SQL: Execute SQL statements from `<sql>` child elements or CDATA content
-/// 2. Declarative: Create tables from `<table>` child elements (parsed from generate_config)
+/// SQL can be provided in the file content as CDATA, giving full control over
+/// table definitions, indexes, foreign keys, triggers, and initial data.
 ///
 /// # Arguments
 /// * `node` - The schema node with generate="sqlite" attribute
@@ -220,17 +219,11 @@ mod tests {
         let path = dir.path().join("test.db");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "test.db".to_string(),
-            url: None,
             content: Some("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);".to_string()),
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("sqlite".to_string()),
-            generate_config: None,
+            ..Default::default()
         };
 
         let vars = HashMap::new();
@@ -252,17 +245,11 @@ mod tests {
         let path = dir.path().join("test2.db");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "test2.db".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("sqlite".to_string()),
             generate_config: Some(r#"<sql>CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT);</sql>"#.to_string()),
+            ..Default::default()
         };
 
         let vars = HashMap::new();
@@ -291,17 +278,11 @@ mod tests {
         "#;
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "declarative.db".to_string(),
-            url: None,
-            content: None,
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("sqlite".to_string()),
             generate_config: Some(config.to_string()),
+            ..Default::default()
         };
 
         let vars = HashMap::new();
@@ -322,17 +303,12 @@ mod tests {
         let path = dir.path().join("vars.db");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "vars.db".to_string(),
-            url: None,
             content: Some("INSERT INTO config VALUES ('version', '%VERSION%');".to_string()),
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("sqlite".to_string()),
             generate_config: Some("<sql>CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT);</sql>".to_string()),
+            ..Default::default()
         };
 
         let mut vars = HashMap::new();
@@ -353,17 +329,11 @@ mod tests {
         let path = dir.path().join("dry_run.db");
 
         let node = SchemaNode {
-            id: None,
             node_type: "file".to_string(),
             name: "dry_run.db".to_string(),
-            url: None,
             content: Some("CREATE TABLE test (id INTEGER);".to_string()),
-            children: None,
-            condition_var: None,
-            repeat_count: None,
-            repeat_as: None,
             generate: Some("sqlite".to_string()),
-            generate_config: None,
+            ..Default::default()
         };
 
         let vars = HashMap::new();
