@@ -147,15 +147,15 @@ export default function Home() {
   return (
     <>
       {/* Hero Section */}
-      <section className="relative min-h-[90vh] flex items-center overflow-hidden">
+      <section className="relative min-h-[calc(100vh-4rem)] sm:min-h-[90vh] flex items-center overflow-x-hidden">
         {/* Background effects */}
         <div className="absolute inset-0 -z-10">
           <div className="gradient-mesh absolute inset-0" />
           <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] gradient-radial animate-glow-pulse" />
         </div>
 
-        <div className="mx-auto max-w-7xl px-6 py-24 sm:py-32 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12 sm:py-24 lg:py-32 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
             {/* Left: Text content */}
             <div className="text-center lg:text-left">
               <div className="animate-fade-down opacity-0 inline-flex items-center gap-2 rounded-full bg-surface px-4 py-1.5 text-sm text-muted-foreground mb-8 border border-border">
@@ -166,12 +166,12 @@ export default function Home() {
                 Now available for macOS
               </div>
 
-              <h1 className="animate-fade-up opacity-0 text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.1]">
+              <h1 className="animate-fade-up opacity-0 text-3xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.1]">
                 Create folder{" "}
                 <br className="hidden sm:block" />
                 structures{" "}
                 <br className="hidden sm:block" />
-                <span className="text-gradient">in seconds</span>
+                <span className="text-gradient whitespace-nowrap">in seconds</span>
               </h1>
 
               <p className="animate-fade-up opacity-0 delay-100 mt-6 text-lg sm:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed">
@@ -203,7 +203,7 @@ export default function Home() {
             </div>
 
             {/* Right: Code window */}
-            <div className="relative lg:pl-8">
+            <div className="relative lg:pl-8 hidden sm:block">
               <div className="animate-float">
                 <CodeWindow />
               </div>
@@ -218,7 +218,7 @@ export default function Home() {
       <section className="relative py-24 sm:py-32">
         <div className="section-divider mb-24" />
 
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
               Everything you need
@@ -228,7 +228,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature, i) => (
               <div
                 key={feature.title}
@@ -254,7 +254,7 @@ export default function Home() {
       <section className="relative py-24 sm:py-32">
         <div className="section-divider mb-24" />
 
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
               Built for everyone
@@ -264,22 +264,22 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-3">
-            <div className="rounded-2xl border border-border bg-surface p-8">
+          <div className="grid gap-4 sm:gap-8 md:grid-cols-3">
+            <div className="rounded-2xl border border-border bg-surface p-5 sm:p-8">
               <div className="text-2xl mb-4">📁</div>
               <h3 className="text-lg font-semibold mb-2">Client Projects</h3>
               <p className="text-muted-foreground text-[15px] leading-relaxed">
                 Create standardized folder structures for each client with pre-filled contracts, briefs, and deliverable folders.
               </p>
             </div>
-            <div className="rounded-2xl border border-border bg-surface p-8">
+            <div className="rounded-2xl border border-border bg-surface p-5 sm:p-8">
               <div className="text-2xl mb-4">📝</div>
               <h3 className="text-lg font-semibold mb-2">Document Templates</h3>
               <p className="text-muted-foreground text-[15px] leading-relaxed">
                 Generate reports, proposals, or documentation with placeholders that auto-fill with names, dates, and project details.
               </p>
             </div>
-            <div className="rounded-2xl border border-border bg-surface p-8">
+            <div className="rounded-2xl border border-border bg-surface p-5 sm:p-8">
               <div className="text-2xl mb-4">💻</div>
               <h3 className="text-lg font-semibold mb-2">Development Teams</h3>
               <p className="text-muted-foreground text-[15px] leading-relaxed">
@@ -294,14 +294,14 @@ export default function Home() {
       <section className="relative py-24 sm:py-32">
         <div className="section-divider mb-24" />
 
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="relative overflow-hidden rounded-3xl">
             {/* Background */}
             <div className="absolute inset-0 bg-surface" />
             <div className="absolute inset-0 gradient-mesh opacity-50" />
 
             {/* Content */}
-            <div className="relative px-8 py-16 sm:px-16 sm:py-24 text-center">
+            <div className="relative px-5 py-12 sm:px-16 sm:py-24 text-center">
               <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight max-w-xl mx-auto">
                 Stop creating folders manually
               </h2>
@@ -326,7 +326,7 @@ export default function Home() {
               </div>
 
               {/* Stats */}
-              <div className="mt-16 grid grid-cols-3 gap-8 max-w-lg mx-auto">
+              <div className="mt-16 grid grid-cols-3 gap-4 sm:gap-8 max-w-lg mx-auto">
                 <div>
                   <div className="text-2xl sm:text-3xl font-semibold text-gradient">Open</div>
                   <div className="mt-1 text-sm text-muted-foreground">Source</div>

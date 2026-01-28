@@ -35,7 +35,7 @@ export default function DocsLayout() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div className="flex gap-8 py-8 lg:py-12">
+      <div className="flex flex-col lg:flex-row gap-8 py-8 lg:py-12">
         {/* Sidebar */}
         <aside className="hidden w-64 shrink-0 lg:block">
           <nav className="sticky top-24 space-y-8">
