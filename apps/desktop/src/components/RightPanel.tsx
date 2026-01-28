@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect, useEffect } from "react";
+import { useState, useRef, useLayoutEffect, useEffect, useMemo } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import {
@@ -421,15 +421,28 @@ export const RightPanel = () => {
     }
   };
 
-  // Get undo summary for dialog
-  const getUndoSummary = () => {
+  // Memoized undo summary for dialog
+  const undoSummary = useMemo(() => {
     if (!lastCreation) return { deletableFiles: 0, deletableFolders: 0, skippedCount: 0 };
     const deletable = lastCreation.filter((item) => !item.pre_existed);
     const deletableFiles = deletable.filter((item) => item.item_type === "file").length;
     const deletableFolders = deletable.filter((item) => item.item_type === "folder").length;
     const skippedCount = lastCreation.filter((item) => item.pre_existed).length;
     return { deletableFiles, deletableFolders, skippedCount };
-  };
+  }, [lastCreation]);
+
+  // Memoized undo confirmation message
+  const undoConfirmMessage = useMemo(() => {
+    const { deletableFiles, deletableFolders, skippedCount } = undoSummary;
+    const total = deletableFiles + deletableFolders;
+    let msg = `This will delete ${total} item(s) that were created:`;
+    if (deletableFiles > 0) msg += ` ${deletableFiles} file(s)`;
+    if (deletableFolders > 0) msg += `${deletableFiles > 0 ? " and" : ""} ${deletableFolders} folder(s)`;
+    if (skippedCount > 0) {
+      msg += `. ${skippedCount} overwritten item(s) will be preserved.`;
+    }
+    return msg;
+  }, [undoSummary]);
 
   const handleCreate = async () => {
     if (!canExecute) return;
@@ -686,10 +699,7 @@ export const RightPanel = () => {
               Undo Last Creation
             </button>
             <p className="text-mac-xs text-text-muted mt-1 text-center">
-              {(() => {
-                const { deletableFiles, deletableFolders } = getUndoSummary();
-                return `${deletableFiles} file(s), ${deletableFolders} folder(s)`;
-              })()}
+              {`${undoSummary.deletableFiles} file(s), ${undoSummary.deletableFolders} folder(s)`}
             </p>
           </div>
         )}
@@ -827,17 +837,7 @@ export const RightPanel = () => {
         onClose={() => setShowUndoConfirm(false)}
         onConfirm={handleUndoConfirm}
         title="Undo Last Creation"
-        message={(() => {
-          const { deletableFiles, deletableFolders, skippedCount } = getUndoSummary();
-          const total = deletableFiles + deletableFolders;
-          let msg = `This will delete ${total} item(s) that were created:`;
-          if (deletableFiles > 0) msg += ` ${deletableFiles} file(s)`;
-          if (deletableFolders > 0) msg += `${deletableFiles > 0 ? " and" : ""} ${deletableFolders} folder(s)`;
-          if (skippedCount > 0) {
-            msg += `. ${skippedCount} overwritten item(s) will be preserved.`;
-          }
-          return msg;
-        })()}
+        message={undoConfirmMessage}
         warning="This action cannot be undone. Files and folders will be permanently deleted."
         confirmLabel={undoLoading ? "Undoing..." : "Delete Items"}
         isDangerous

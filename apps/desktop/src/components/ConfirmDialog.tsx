@@ -52,10 +52,10 @@ export const ConfirmDialog = ({
   );
 
   useEffect(() => {
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      return () => document.removeEventListener("keydown", handleKeyDown);
-    }
+    if (!isOpen) return;
+    const controller = new AbortController();
+    document.addEventListener("keydown", handleKeyDown, { signal: controller.signal });
+    return () => controller.abort();
   }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;

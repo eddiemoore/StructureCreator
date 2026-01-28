@@ -71,13 +71,21 @@ pub struct ResultSummary {
     pub hooks_failed: usize,
 }
 
+/// Type of created item for undo tracking
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ItemType {
+    Folder,
+    File,
+}
+
 /// Represents a created item for undo tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatedItem {
     /// Full path of the created item
     pub path: String,
-    /// Type: "folder" or "file"
-    pub item_type: String,
+    /// Type of the item
+    pub item_type: ItemType,
     /// True if this item existed before and was overwritten
     pub pre_existed: bool,
 }
@@ -354,16 +362,9 @@ pub fn undo_structure(
             continue;
         }
 
-        match item.item_type.as_str() {
-            "file" => files_to_delete.push(item),
-            "folder" => folders_to_delete.push(item),
-            _ => {
-                logs.push(LogEntry {
-                    log_type: "warning".to_string(),
-                    message: format!("Unknown item type: {}", item.item_type),
-                    details: Some(item.path.clone()),
-                });
-            }
+        match item.item_type {
+            ItemType::File => files_to_delete.push(item),
+            ItemType::Folder => folders_to_delete.push(item),
         }
     }
 
@@ -373,12 +374,22 @@ pub fn undo_structure(
         let path = PathBuf::from(&item.path);
 
         if dry_run {
-            logs.push(LogEntry {
-                log_type: "info".to_string(),
-                message: format!("Would delete file: {}", item.path),
-                details: None,
-            });
-            summary.files_deleted += 1;
+            // Check if file exists for accurate dry-run preview
+            if path.exists() {
+                logs.push(LogEntry {
+                    log_type: "info".to_string(),
+                    message: format!("Would delete file: {}", item.path),
+                    details: None,
+                });
+                summary.files_deleted += 1;
+            } else {
+                summary.items_skipped += 1;
+                logs.push(LogEntry {
+                    log_type: "info".to_string(),
+                    message: format!("File already deleted: {}", item.path),
+                    details: None,
+                });
+            }
         } else if path.exists() {
             match fs::remove_file(&path) {
                 Ok(_) => {
@@ -415,12 +426,44 @@ pub fn undo_structure(
         let path = PathBuf::from(&item.path);
 
         if dry_run {
-            logs.push(LogEntry {
-                log_type: "info".to_string(),
-                message: format!("Would delete folder (if empty): {}", item.path),
-                details: None,
-            });
-            summary.folders_deleted += 1;
+            // Check folder state for accurate dry-run preview
+            if path.exists() {
+                match fs::read_dir(&path) {
+                    Ok(entries) => {
+                        let is_empty = entries.count() == 0;
+                        if is_empty {
+                            logs.push(LogEntry {
+                                log_type: "info".to_string(),
+                                message: format!("Would delete folder: {}", item.path),
+                                details: None,
+                            });
+                            summary.folders_deleted += 1;
+                        } else {
+                            summary.items_skipped += 1;
+                            logs.push(LogEntry {
+                                log_type: "info".to_string(),
+                                message: format!("Would skip folder (not empty): {}", item.path),
+                                details: None,
+                            });
+                        }
+                    }
+                    Err(_) => {
+                        summary.items_skipped += 1;
+                        logs.push(LogEntry {
+                            log_type: "info".to_string(),
+                            message: format!("Would skip folder (unreadable): {}", item.path),
+                            details: None,
+                        });
+                    }
+                }
+            } else {
+                summary.items_skipped += 1;
+                logs.push(LogEntry {
+                    log_type: "info".to_string(),
+                    message: format!("Folder already deleted: {}", item.path),
+                    details: None,
+                });
+            }
         } else if path.exists() {
             // Only delete if folder is empty
             match fs::read_dir(&path) {
@@ -875,7 +918,7 @@ fn create_node_internal(
                         summary.folders_created += 1;
                         created_items.push(CreatedItem {
                             path: display_path.clone(),
-                            item_type: "folder".to_string(),
+                            item_type: ItemType::Folder,
                             pre_existed: false,
                         });
                         logs.push(LogEntry {
@@ -975,7 +1018,7 @@ fn create_node_internal(
                                                 summary.files_downloaded += 1;
                                                 created_items.push(CreatedItem {
                                                     path: display_path.clone(),
-                                                    item_type: "file".to_string(),
+                                                    item_type: ItemType::File,
                                                     pre_existed,
                                                 });
                                                 logs.push(LogEntry {
@@ -1036,7 +1079,7 @@ fn create_node_internal(
                                         summary.files_downloaded += 1;
                                         created_items.push(CreatedItem {
                                             path: display_path.clone(),
-                                            item_type: "file".to_string(),
+                                            item_type: ItemType::File,
                                             pre_existed,
                                         });
                                         logs.push(LogEntry {
@@ -1076,7 +1119,7 @@ fn create_node_internal(
                                         summary.files_downloaded += 1;
                                         created_items.push(CreatedItem {
                                             path: display_path.clone(),
-                                            item_type: "file".to_string(),
+                                            item_type: ItemType::File,
                                             pre_existed,
                                         });
                                         let details = if is_svg_file(&name) {
@@ -1122,7 +1165,7 @@ fn create_node_internal(
                             summary.files_created += 1;
                             created_items.push(CreatedItem {
                                 path: display_path.clone(),
-                                item_type: "file".to_string(),
+                                item_type: ItemType::File,
                                 pre_existed,
                             });
                             let has_content = node.content.is_some();
@@ -4687,6 +4730,174 @@ mod tests {
             // Verify the injected name was NOT used
             let injected_folder = temp_dir.path().join("injected-name");
             assert!(!injected_folder.exists(), "Injected name should not be used when user overrides");
+        }
+    }
+
+    mod undo_structure_tests {
+        use super::*;
+
+        #[test]
+        fn undo_deletes_newly_created_files() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let file_path = temp_dir.path().join("test.txt");
+
+            // Create a file
+            fs::write(&file_path, "test content").unwrap();
+            assert!(file_path.exists());
+
+            let items = vec![CreatedItem {
+                path: file_path.to_string_lossy().to_string(),
+                item_type: ItemType::File,
+                pre_existed: false,
+            }];
+
+            let result = undo_structure(&items, false).unwrap();
+
+            assert_eq!(result.summary.files_deleted, 1);
+            assert_eq!(result.summary.errors, 0);
+            assert!(!file_path.exists(), "File should be deleted");
+        }
+
+        #[test]
+        fn undo_preserves_pre_existing_files() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let file_path = temp_dir.path().join("pre_existing.txt");
+
+            // Create a file
+            fs::write(&file_path, "original content").unwrap();
+            assert!(file_path.exists());
+
+            let items = vec![CreatedItem {
+                path: file_path.to_string_lossy().to_string(),
+                item_type: ItemType::File,
+                pre_existed: true, // This was overwritten, not newly created
+            }];
+
+            let result = undo_structure(&items, false).unwrap();
+
+            assert_eq!(result.summary.files_deleted, 0);
+            assert_eq!(result.summary.items_skipped, 1);
+            assert!(file_path.exists(), "Pre-existing file should be preserved");
+        }
+
+        #[test]
+        fn undo_deletes_empty_folders() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let folder_path = temp_dir.path().join("empty_folder");
+
+            // Create an empty folder
+            fs::create_dir(&folder_path).unwrap();
+            assert!(folder_path.exists());
+
+            let items = vec![CreatedItem {
+                path: folder_path.to_string_lossy().to_string(),
+                item_type: ItemType::Folder,
+                pre_existed: false,
+            }];
+
+            let result = undo_structure(&items, false).unwrap();
+
+            assert_eq!(result.summary.folders_deleted, 1);
+            assert_eq!(result.summary.errors, 0);
+            assert!(!folder_path.exists(), "Empty folder should be deleted");
+        }
+
+        #[test]
+        fn undo_skips_non_empty_folders() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let folder_path = temp_dir.path().join("non_empty_folder");
+
+            // Create a folder with a file inside
+            fs::create_dir(&folder_path).unwrap();
+            fs::write(folder_path.join("file.txt"), "content").unwrap();
+            assert!(folder_path.exists());
+
+            let items = vec![CreatedItem {
+                path: folder_path.to_string_lossy().to_string(),
+                item_type: ItemType::Folder,
+                pre_existed: false,
+            }];
+
+            let result = undo_structure(&items, false).unwrap();
+
+            assert_eq!(result.summary.folders_deleted, 0);
+            assert_eq!(result.summary.items_skipped, 1);
+            assert!(folder_path.exists(), "Non-empty folder should be preserved");
+        }
+
+        #[test]
+        fn undo_dry_run_does_not_delete() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let file_path = temp_dir.path().join("dry_run_test.txt");
+
+            // Create a file
+            fs::write(&file_path, "test content").unwrap();
+            assert!(file_path.exists());
+
+            let items = vec![CreatedItem {
+                path: file_path.to_string_lossy().to_string(),
+                item_type: ItemType::File,
+                pre_existed: false,
+            }];
+
+            let result = undo_structure(&items, true).unwrap();
+
+            assert_eq!(result.summary.files_deleted, 1); // Would be deleted
+            assert!(file_path.exists(), "File should still exist after dry run");
+        }
+
+        #[test]
+        fn undo_handles_already_deleted_files() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let file_path = temp_dir.path().join("nonexistent.txt");
+
+            // Don't create the file - it doesn't exist
+            assert!(!file_path.exists());
+
+            let items = vec![CreatedItem {
+                path: file_path.to_string_lossy().to_string(),
+                item_type: ItemType::File,
+                pre_existed: false,
+            }];
+
+            let result = undo_structure(&items, false).unwrap();
+
+            assert_eq!(result.summary.files_deleted, 0);
+            assert_eq!(result.summary.items_skipped, 1);
+            assert_eq!(result.summary.errors, 0);
+        }
+
+        #[test]
+        fn undo_deletes_files_before_folders() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let folder_path = temp_dir.path().join("folder");
+            let file_path = folder_path.join("file.txt");
+
+            // Create folder and file
+            fs::create_dir(&folder_path).unwrap();
+            fs::write(&file_path, "content").unwrap();
+
+            // Items in creation order (folder first, then file)
+            let items = vec![
+                CreatedItem {
+                    path: folder_path.to_string_lossy().to_string(),
+                    item_type: ItemType::Folder,
+                    pre_existed: false,
+                },
+                CreatedItem {
+                    path: file_path.to_string_lossy().to_string(),
+                    item_type: ItemType::File,
+                    pre_existed: false,
+                },
+            ];
+
+            let result = undo_structure(&items, false).unwrap();
+
+            // Both should be deleted - file first, then empty folder
+            assert_eq!(result.summary.files_deleted, 1);
+            assert_eq!(result.summary.folders_deleted, 1);
+            assert!(!file_path.exists());
+            assert!(!folder_path.exists());
         }
     }
 }
