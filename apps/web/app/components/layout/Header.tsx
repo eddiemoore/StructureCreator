@@ -47,6 +47,12 @@ export function Header() {
               {item.label}
             </NavLink>
           ))}
+          <a
+            href="/app?action=new"
+            className="rounded-lg px-4 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-surface hover:text-foreground"
+          >
+            Create Schema
+          </a>
         </nav>
 
         <div className="flex items-center gap-3">

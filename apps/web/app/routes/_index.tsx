@@ -190,15 +190,15 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </a>
-                <Link
-                  to="/docs/getting-started"
+                <a
+                  href="/app?action=new"
                   className="btn btn-ghost px-6 py-3 text-base font-medium rounded-xl inline-flex items-center gap-2 group"
                 >
-                  <span>Read the docs</span>
+                  <span>Try online</span>
                   <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
-                </Link>
+                </a>
               </div>
             </div>
 
@@ -317,12 +317,12 @@ export default function Home() {
                   <AppleIcon />
                   <span>Download for macOS</span>
                 </a>
-                <Link
-                  to="/templates"
+                <a
+                  href="/app?action=new"
                   className="btn btn-secondary px-8 py-3.5 text-base font-medium rounded-xl"
                 >
-                  Browse Templates
-                </Link>
+                  Try Online
+                </a>
               </div>
 
               {/* Stats */}

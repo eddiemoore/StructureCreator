@@ -43,6 +43,16 @@ function App() {
         await api.initialize();
         setIsInitialized(true);
         await loadSettings();
+
+        // Handle URL parameters for web mode
+        if (!api.isTauri()) {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get("action") === "new") {
+            createNewSchema();
+            // Clean up the URL without reloading
+            window.history.replaceState({}, "", window.location.pathname);
+          }
+        }
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : String(e);
         console.error("Failed to initialize app:", e);
