@@ -5,6 +5,7 @@ A cross-platform desktop application that generates folder and file structures f
 ## Features
 
 - **XML Schema-Based Structure Generation** - Define project structures using XML schemas with nested folders and files
+- **Multiple Editing Modes** - Switch between Preview, Visual (drag-and-drop), and XML editor modes
 - **Folder Scanning** - Convert existing folder structures into reusable schemas
 - **Variable Templating** - Use variables like `%PROJECT_NAME%` and `%DATE%` for dynamic customization
 - **File Downloads** - Download files from URLs during structure creation
@@ -89,8 +90,10 @@ structure-creator/
 │   ├── main.tsx                  # React entry point
 │   ├── index.css                 # Global styles and CSS variables
 │   ├── components/               # React components
-│   │   ├── LeftPanel.tsx         # Schema input, templates, variables
-│   │   ├── TreePreview.tsx       # Visual tree display
+│   │   ├── LeftPanel.tsx         # File selection, templates, variables
+│   │   ├── TreePreview.tsx       # Schema editor (Preview/Visual/XML modes)
+│   │   ├── XmlSchemaEditor.tsx   # CodeMirror-based XML editor
+│   │   ├── VisualSchemaEditor.tsx # Drag-and-drop tree editor
 │   │   ├── RightPanel.tsx        # Execute & activity logs
 │   │   ├── SettingsModal.tsx     # Theme/accent color settings
 │   │   ├── Footer.tsx            # Status bar
@@ -144,22 +147,28 @@ Create project structures using XML:
 ## Usage
 
 1. **Define a Schema**
-   - Enter XML schema directly, or
-   - Scan an existing folder structure
+   - Load an XML schema file, or
+   - Scan an existing folder structure, or
+   - Create a new schema from scratch
 
-2. **Set Variables**
+2. **Edit Your Schema**
+   - **Preview mode**: View the structure as a tree
+   - **Visual mode**: Drag-and-drop editor for building structures
+   - **XML mode**: Direct XML editing with syntax highlighting
+
+3. **Set Variables**
    - Define custom variables like `%PROJECT_NAME%`
    - Values are substituted during creation
 
-3. **Choose Output Location**
+4. **Choose Output Location**
    - Select destination folder
    - Enter project name
 
-4. **Preview & Execute**
+5. **Preview & Execute**
    - Use dry-run mode to preview changes
    - Execute to create the structure
 
-5. **Save as Template**
+6. **Save as Template**
    - Save frequently used schemas
    - Mark favorites for quick access
 
