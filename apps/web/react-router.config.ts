@@ -20,7 +20,7 @@ export default {
       "/docs/guides/wizard",
       "/docs/api/schema",
       "/docs/api/transforms",
-      "/templates",
+      // Note: /templates requires D1 database at runtime, cannot be prerendered
     ];
   },
 } satisfies Config;

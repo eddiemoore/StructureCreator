@@ -1,4 +1,4 @@
-import { Form, useNavigation } from "react-router";
+import { Form, useNavigation, useActionData } from "react-router";
 import type { Route } from "./+types/submit";
 
 export function meta(_args: Route.MetaArgs) {
@@ -11,9 +11,21 @@ export function meta(_args: Route.MetaArgs) {
   ];
 }
 
+interface ActionData {
+  errors?: Record<string, string[]>;
+}
+
+function FieldError({ errors, field }: { errors?: Record<string, string[]>; field: string }) {
+  const fieldErrors = errors?.[field];
+  if (!fieldErrors?.length) return null;
+  return <p className="mt-1 text-sm text-red-500">{fieldErrors[0]}</p>;
+}
+
 export default function SubmitTemplate() {
   const navigation = useNavigation();
+  const actionData = useActionData<ActionData>();
   const isSubmitting = navigation.state === "submitting";
+  const hasErrors = actionData?.errors && Object.keys(actionData.errors).length > 0;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
@@ -25,6 +37,14 @@ export default function SubmitTemplate() {
           Share your template with the Structure Creator community. All submissions are reviewed before being published.
         </p>
       </div>
+
+      {hasErrors && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
+          <p className="text-sm font-medium text-red-800 dark:text-red-200">
+            Please fix the errors below and try again.
+          </p>
+        </div>
+      )}
 
       <Form method="post" action="/api/templates/submit" className="space-y-8">
         {/* Template Info */}
@@ -44,6 +64,7 @@ export default function SubmitTemplate() {
                 className="input mt-1"
                 placeholder="e.g., React Component"
               />
+              <FieldError errors={actionData?.errors} field="name" />
             </div>
 
             <div>
@@ -58,6 +79,7 @@ export default function SubmitTemplate() {
                 className="input mt-1"
                 placeholder="Describe what your template creates and when to use it..."
               />
+              <FieldError errors={actionData?.errors} field="description" />
             </div>
 
             <div>
@@ -93,6 +115,7 @@ export default function SubmitTemplate() {
   <file name="index.ts" />
 </folder>`}
             />
+            <FieldError errors={actionData?.errors} field="schema_xml" />
             <p className="mt-2 text-sm text-muted-foreground">
               Your XML schema that defines the folder/file structure.{" "}
               <a href="/docs/guides/xml-schema" className="text-accent hover:underline">
@@ -120,6 +143,7 @@ export default function SubmitTemplate() {
   "AUTHOR": "Your Name"
 }`}
             />
+            <FieldError errors={actionData?.errors} field="variables" />
             <p className="mt-2 text-sm text-muted-foreground">
               JSON object with variable names and default values
             </p>
@@ -143,6 +167,7 @@ export default function SubmitTemplate() {
                 className="input mt-1"
                 placeholder="Your name"
               />
+              <FieldError errors={actionData?.errors} field="author_name" />
             </div>
 
             <div>
@@ -157,6 +182,7 @@ export default function SubmitTemplate() {
                 className="input mt-1"
                 placeholder="your@email.com"
               />
+              <FieldError errors={actionData?.errors} field="author_email" />
               <p className="mt-1 text-sm text-muted-foreground">
                 Not displayed publicly. Used for submission updates.
               </p>
