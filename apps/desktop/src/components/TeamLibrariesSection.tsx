@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
+import { isTauri } from "../lib/platform";
 import {
   FolderIcon,
   PlusIcon,
@@ -143,6 +144,9 @@ export const TeamLibrariesSection = () => {
     addLog,
   } = useAppStore();
 
+  // Team libraries require file system access, only available in desktop app
+  const isDesktop = isTauri();
+
   const [isExpanded, setIsExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedLibraries, setExpandedLibraries] = useState<Set<string>>(new Set());
@@ -252,6 +256,11 @@ export const TeamLibrariesSection = () => {
       loadTeamLibraries();
     }
   }, [isExpanded, teamLibraries.length, teamLibrariesLoading, loadTeamLibraries]);
+
+  // Don't render in web mode - team libraries require file system access
+  if (!isDesktop) {
+    return null;
+  }
 
   return (
     <div className="p-4 border-b border-border-muted">

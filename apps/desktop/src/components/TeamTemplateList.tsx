@@ -191,10 +191,10 @@ export const TeamTemplateList = () => {
             value={duplicateStrategy}
             onChange={(e) => setDuplicateStrategy(e.target.value as DuplicateStrategy)}
             className="appearance-none bg-card-bg border border-border-muted rounded px-2 py-0.5 pr-5 text-[10px] text-text-secondary cursor-pointer hover:border-border-default focus:border-accent focus:outline-none"
-            title="How to handle duplicate template names"
+            title={STRATEGY_OPTIONS.find((o) => o.value === duplicateStrategy)?.description}
           >
             {STRATEGY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <option key={option.value} value={option.value} title={option.description}>
                 {option.label}
               </option>
             ))}
