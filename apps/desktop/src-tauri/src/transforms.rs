@@ -17,7 +17,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
-/// Built-in variables that should not be extracted as user-defined variables
+/// Built-in variables that should not be extracted as user-defined variables.
+/// NOTE: Keep in sync with BUILTIN_VARIABLES in apps/desktop/src/lib/adapters/web/transforms.ts
 const BUILTIN_VARIABLES: &[&str] = &["%DATE%", "%YEAR%", "%MONTH%", "%DAY%", "%PROJECT_NAME%"];
 
 /// Pre-compiled regex for variable references - compiled once at first use

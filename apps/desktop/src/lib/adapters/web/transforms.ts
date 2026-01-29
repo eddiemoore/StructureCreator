@@ -222,6 +222,7 @@ const VARIABLE_REGEX = /%([A-Z_][A-Z0-9_]*)(?::([^%]+))?%/gi;
 
 /**
  * Built-in variables that should not be extracted as user-defined variables.
+ * NOTE: Keep in sync with BUILTIN_VARIABLES in apps/desktop/src-tauri/src/transforms.rs
  */
 const BUILTIN_VARIABLES = new Set([
   "%DATE%",
