@@ -63,6 +63,11 @@ export interface SchemaNode {
    * For sqlite: <table> or <sql> child elements
    */
   generateConfig?: string;
+  /**
+   * If true, process {{if}}/{{for}} template directives in file content.
+   * When false/undefined, {{...}} syntax is preserved as-is.
+   */
+  template?: boolean;
 }
 
 export interface SchemaHooks {

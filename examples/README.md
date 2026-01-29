@@ -225,3 +225,86 @@ Variables (`%VAR_NAME%`) are substituted in SQL before execution.
 - `VERSION`: `1.0.0`
 - `AVATAR_SIZE`: `64`
 - `BRAND_COLOR`: `#3B82F6`
+
+### file-content-templating.xml
+
+Demonstrates `{{if}}/{{for}}` template directives within file content. This is opt-in via the `template="true"` attribute to avoid conflicts with Handlebars/Mustache files.
+
+#### Conditional Content
+
+```xml
+<file name="README.md" template="true"><![CDATA[
+{{if USE_NPM}}
+npm install
+{{else}}
+yarn install
+{{endif}}
+]]></file>
+```
+
+#### Loop Content
+
+```xml
+<file name="features.md" template="true"><![CDATA[
+## Features
+
+{{for feature in FEATURES}}
+- {{feature}}
+{{endfor}}
+]]></file>
+```
+
+Set `FEATURES=auth,api,database` to generate a bullet list of features.
+
+#### Preserving Handlebars/Mustache Syntax
+
+Files **without** `template="true"` preserve `{{}}` syntax as-is:
+
+```xml
+<!-- This Handlebars template is NOT processed -->
+<file name="layout.hbs"><![CDATA[
+{{> header}}
+<main>{{{body}}}</main>
+{{> footer}}
+]]></file>
+```
+
+#### Key Differences: Structure vs Content Conditionals
+
+| Feature | `<if var="X">` (XML) | `{{if X}}` (Content) |
+|---------|---------------------|----------------------|
+| Controls | Which files/folders are created | Content within a file |
+| Syntax location | XML element | Inside file content |
+| Opt-in | Always available | Requires `template="true"` |
+
+**Example combining both:**
+
+```xml
+<!-- File is only created if INCLUDE_TESTS is truthy -->
+<if var="INCLUDE_TESTS">
+  <file name="test-setup.ts" template="true"><![CDATA[
+// Test setup
+{{if USE_NPM}}
+// Using npm
+{{else}}
+// Using yarn
+{{endif}}
+]]></file>
+</if>
+```
+
+**Truthiness rules for `{{if VAR}}`:**
+
+A variable is **truthy** if it:
+- Exists (is defined)
+- Is not empty
+- Is not `"false"` (case-insensitive)
+- Is not `"0"`
+
+**Suggested variables for this example:**
+
+- `PROJECT_NAME`: `my-app`
+- `AUTHOR`: `Your Name`
+- `USE_NPM`: `true` or `false`
+- `INCLUDE_TESTS`: `true` or `false`
+- `FEATURES`: `auth,api,database`

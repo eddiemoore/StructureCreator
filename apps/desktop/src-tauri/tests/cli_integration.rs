@@ -997,3 +997,155 @@ fn test_create_with_repeat_variable_name_ending_in_1() {
     assert!(output_dir.join("project/item_0.txt").exists());
     assert!(output_dir.join("project/item_1.txt").exists());
 }
+
+// ==================== File Content Templating Tests ====================
+
+/// Schema with template="true" for conditional content
+const TEMPLATE_CONTENT_SCHEMA: &str = r#"<folder name="project">
+    <file name="readme.md" template="true">
+<![CDATA[# Project
+
+{{if USE_NPM}}
+npm install
+{{else}}
+yarn install
+{{endif}}
+]]>
+    </file>
+</folder>"#;
+
+/// Schema with template="true" for loop content
+const TEMPLATE_LOOP_SCHEMA: &str = r#"<folder name="project">
+    <file name="features.md" template="true">
+<![CDATA[# Features
+
+{{for feature in FEATURES}}
+- {{feature}}
+{{endfor}}
+]]>
+    </file>
+</folder>"#;
+
+/// Schema without template attribute - preserves {{}} syntax
+const NON_TEMPLATE_SCHEMA: &str = r#"<folder name="project">
+    <file name="index.hbs"><![CDATA[{{> header}}
+<div>{{title}}</div>
+{{> footer}}]]></file>
+</folder>"#;
+
+#[test]
+fn test_create_with_template_conditional_true() {
+    let temp = TempDir::new().unwrap();
+    let schema_path = create_schema_file(&temp, TEMPLATE_CONTENT_SCHEMA);
+    let output_dir = temp.path().join("output");
+
+    let output = run_cli(&[
+        "create",
+        "--schema",
+        schema_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+        "--var",
+        "USE_NPM=true",
+    ]);
+
+    assert!(output.status.success(), "CLI failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    let readme_content = fs::read_to_string(output_dir.join("project/readme.md")).unwrap();
+    assert!(readme_content.contains("npm install"), "Expected npm install in output");
+    assert!(!readme_content.contains("yarn install"), "Should not contain yarn install");
+    assert!(!readme_content.contains("{{if"), "Template directives should be processed");
+}
+
+#[test]
+fn test_create_with_template_conditional_false() {
+    let temp = TempDir::new().unwrap();
+    let schema_path = create_schema_file(&temp, TEMPLATE_CONTENT_SCHEMA);
+    let output_dir = temp.path().join("output");
+
+    let output = run_cli(&[
+        "create",
+        "--schema",
+        schema_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+        "--var",
+        "USE_NPM=false",
+    ]);
+
+    assert!(output.status.success(), "CLI failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    let readme_content = fs::read_to_string(output_dir.join("project/readme.md")).unwrap();
+    assert!(readme_content.contains("yarn install"), "Expected yarn install in output");
+    assert!(!readme_content.contains("npm install"), "Should not contain npm install");
+}
+
+#[test]
+fn test_create_with_template_loop() {
+    let temp = TempDir::new().unwrap();
+    let schema_path = create_schema_file(&temp, TEMPLATE_LOOP_SCHEMA);
+    let output_dir = temp.path().join("output");
+
+    let output = run_cli(&[
+        "create",
+        "--schema",
+        schema_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+        "--var",
+        "FEATURES=auth,api,database",
+    ]);
+
+    assert!(output.status.success(), "CLI failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    let content = fs::read_to_string(output_dir.join("project/features.md")).unwrap();
+    assert!(content.contains("- auth"), "Expected auth in features list");
+    assert!(content.contains("- api"), "Expected api in features list");
+    assert!(content.contains("- database"), "Expected database in features list");
+    assert!(!content.contains("{{for"), "Template directives should be processed");
+    assert!(!content.contains("{{endfor"), "Template directives should be processed");
+}
+
+#[test]
+fn test_create_without_template_preserves_handlebars() {
+    let temp = TempDir::new().unwrap();
+    let schema_path = create_schema_file(&temp, NON_TEMPLATE_SCHEMA);
+    let output_dir = temp.path().join("output");
+
+    let output = run_cli(&[
+        "create",
+        "--schema",
+        schema_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+
+    assert!(output.status.success(), "CLI failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    let content = fs::read_to_string(output_dir.join("project/index.hbs")).unwrap();
+    assert!(content.contains("{{> header}}"), "Should preserve Handlebars partial syntax");
+    assert!(content.contains("{{title}}"), "Should preserve Handlebars variable syntax");
+    assert!(content.contains("{{> footer}}"), "Should preserve Handlebars partial syntax");
+}
+
+#[test]
+fn test_create_template_with_empty_variable() {
+    let temp = TempDir::new().unwrap();
+    let schema_path = create_schema_file(&temp, TEMPLATE_CONTENT_SCHEMA);
+    let output_dir = temp.path().join("output");
+
+    // Missing USE_NPM variable means it's falsy
+    let output = run_cli(&[
+        "create",
+        "--schema",
+        schema_path.to_str().unwrap(),
+        "--output",
+        output_dir.to_str().unwrap(),
+    ]);
+
+    assert!(output.status.success(), "CLI failed: {}", String::from_utf8_lossy(&output.stderr));
+
+    let content = fs::read_to_string(output_dir.join("project/readme.md")).unwrap();
+    // Variable not defined means falsy, so else branch should be taken
+    assert!(content.contains("yarn install"), "Expected yarn install when var is not set");
+}
