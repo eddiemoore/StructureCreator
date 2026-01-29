@@ -244,6 +244,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         schemaHistory: [],
         schemaHistoryIndex: -1,
         schemaDirty: false,
+        xmlEditorContent: null,
+        xmlParseError: null,
       });
     }
   },
