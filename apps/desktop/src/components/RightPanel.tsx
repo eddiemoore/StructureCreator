@@ -16,6 +16,7 @@ import { DiffPreviewModal } from "./DiffPreviewModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { CreateResult, ResultSummary, ValidationRule, UndoResult } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
+import { getPluginRuntime, processTreeContent } from "../lib/plugins";
 
 export const RightPanel = () => {
   const {
@@ -54,6 +55,7 @@ export const RightPanel = () => {
     lastCreation,
     setLastCreation,
     canUndoCreation,
+    plugins,
   } = useAppStore();
 
   const [summary, setSummary] = useState<ResultSummary | null>(null);
@@ -269,6 +271,29 @@ export const RightPanel = () => {
     try {
       addLog({ type: "info", message: isDryRun ? "Starting dry run..." : "Starting structure creation..." });
 
+      // Load and process plugins for file-processor capability
+      const enabledFileProcessors = plugins.filter(
+        (p) => p.isEnabled && p.capabilities.includes("file-processor")
+      );
+
+      let treeToCreate = effectiveTree;
+
+      if (enabledFileProcessors.length > 0 && effectiveTree) {
+        try {
+          const runtime = getPluginRuntime();
+          await runtime.loadPlugins(enabledFileProcessors);
+
+          if (runtime.hasProcessors()) {
+            addLog({ type: "info", message: `Processing files with ${enabledFileProcessors.length} plugin(s)...` });
+            treeToCreate = await processTreeContent(effectiveTree, runtime, varsMap, projectName);
+          }
+        } catch (pluginError) {
+          const message = pluginError instanceof Error ? pluginError.message : String(pluginError);
+          addLog({ type: "warning", message: `Plugin processing warning: ${message}` });
+          // Continue with original tree if plugin processing fails
+        }
+      }
+
       let result: CreateResult;
 
       if (effectiveContent) {
@@ -279,8 +304,8 @@ export const RightPanel = () => {
           overwrite,
           projectName,
         });
-      } else if (effectiveTree) {
-        result = await api.structureCreator.createStructureFromTree(effectiveTree, {
+      } else if (treeToCreate) {
+        result = await api.structureCreator.createStructureFromTree(treeToCreate, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
