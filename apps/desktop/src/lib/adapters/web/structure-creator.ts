@@ -494,11 +494,10 @@ const processFile = async (
           content = substituteVariables(templateResult.value, context.variables);
         } else {
           // Template error - log warning and fall back to raw content with variable substitution
-          const error = templateResult.error;
           context.logs.push({
             log_type: "warning",
             message: `Template error in ${fileName}`,
-            details: error.message,
+            details: templateResult.error.message,
           });
           content = substituteVariables(node.content, context.variables);
         }
@@ -924,8 +923,7 @@ const generateDiffFile = async (
         newContent = substituteVariables(templateResult.value, context.variables);
       } else {
         // Template error - show error in preview
-        const error = templateResult.error;
-        context.warnings.push(`Template error in ${fileName}: ${error.message}`);
+        context.warnings.push(`Template error in ${fileName}: ${templateResult.error.message}`);
         newContent = substituteVariables(node.content, context.variables);
       }
     } else {
