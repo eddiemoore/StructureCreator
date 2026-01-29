@@ -69,7 +69,11 @@ yarn test
 MIT
 ]]></file>
 
-  <!-- Package.json with conditional scripts -->
+  <!--
+    Package.json with conditional scripts.
+    Note: For loops in JSON require a static property after the loop to avoid
+    trailing comma issues. Here "vite" comes after the feature dependencies.
+  -->
   <file name="package.json" template="true"><![CDATA[{
   "name": "%PROJECT_NAME%",
   "version": "1.0.0",
@@ -80,10 +84,8 @@ MIT
     "test": "vitest"{{endif}}
   },
   "dependencies": {
-{{for feature in FEATURES}}
-    "@%PROJECT_NAME%/{{feature}}": "^1.0.0",
-{{endfor}}
-    "vite": "^5.0.0"
+{{for feature in FEATURES}}    "@%PROJECT_NAME%/{{feature}}": "^1.0.0",
+{{endfor}}    "vite": "^5.0.0"
   }{{if INCLUDE_TESTS}},
   "devDependencies": {
     "vitest": "^1.0.0"
@@ -178,16 +180,15 @@ export function setupTests() {
 ]]></file>
   </folder>
 
-  <!-- Configuration file showing nested conditionals -->
+  <!--
+    Configuration file showing nested conditionals.
+    Note: "_version" acts as a sentinel to avoid trailing comma after the loop.
+  -->
   <file name="config.json" template="true"><![CDATA[{
   "name": "%PROJECT_NAME%",
   "features": {
-{{for feature in FEATURES}}
-    "{{feature}}": {
-      "enabled": true
-    },
-{{endfor}}
-    "_version": "1.0.0"
+{{for feature in FEATURES}}    "{{feature}}": { "enabled": true },
+{{endfor}}    "_version": "1.0.0"
   }{{if INCLUDE_TESTS}},
   "testing": {
     "framework": "vitest",

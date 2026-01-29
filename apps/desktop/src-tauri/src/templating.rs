@@ -163,7 +163,7 @@ fn process_for_loops(
 
         // Find the matching endfor
         let remaining = &result[for_end..];
-        let endfor_pos = find_matching_endfor(remaining)?;
+        let endfor_pos = find_matching_endfor(remaining, &item_var, &source_var)?;
         let block_content = &remaining[..endfor_pos];
         let endfor_end = for_end + endfor_pos + "{{endfor}}".len();
 
@@ -194,7 +194,7 @@ fn process_for_loops(
 
 /// Find the position of the matching {{endfor}} for a {{for}} block.
 /// Handles nested for loops.
-fn find_matching_endfor(content: &str) -> Result<usize, TemplateError> {
+fn find_matching_endfor(content: &str, item_var: &str, source_var: &str) -> Result<usize, TemplateError> {
     let mut depth = 1;
     let mut pos = 0;
 
@@ -225,8 +225,8 @@ fn find_matching_endfor(content: &str) -> Result<usize, TemplateError> {
     }
 
     Err(TemplateError::UnclosedFor {
-        var: "unknown".to_string(),
-        item: "unknown".to_string(),
+        var: source_var.to_string(),
+        item: item_var.to_string(),
     })
 }
 
@@ -260,7 +260,7 @@ fn process_if_conditionals(
 
         // Find the matching endif (and optional else)
         let remaining = &result[if_end..];
-        let (then_content, else_content, block_end) = find_if_block_parts(remaining)?;
+        let (then_content, else_content, block_end) = find_if_block_parts(remaining, &condition_var)?;
         let endif_end = if_end + block_end;
 
         // Evaluate the condition
@@ -290,7 +290,7 @@ fn process_if_conditionals(
 
 /// Find the parts of an if block: then content, optional else content, and end position.
 /// Returns (then_content, else_content, end_position_after_endif)
-fn find_if_block_parts(content: &str) -> Result<(String, Option<String>, usize), TemplateError> {
+fn find_if_block_parts(content: &str, condition_var: &str) -> Result<(String, Option<String>, usize), TemplateError> {
     let mut depth = 1;
     let mut pos = 0;
     let mut else_pos: Option<usize> = None;
@@ -354,7 +354,7 @@ fn find_if_block_parts(content: &str) -> Result<(String, Option<String>, usize),
     }
 
     Err(TemplateError::UnclosedIf {
-        var: "unknown".to_string(),
+        var: condition_var.to_string(),
     })
 }
 

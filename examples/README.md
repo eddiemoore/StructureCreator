@@ -301,6 +301,29 @@ A variable is **truthy** if it:
 - Is not `"false"` (case-insensitive)
 - Is not `"0"`
 
+#### Tips and Limitations
+
+**JSON and trailing commas:**
+
+When using `{{for}}` loops in JSON, place a static property after the loop to avoid trailing comma issues:
+
+```json
+{
+  "dependencies": {
+{{for dep in DEPS}}    "{{dep}}": "^1.0.0",
+{{endfor}}    "always-last": "^1.0.0"
+  }
+}
+```
+
+**Loop variable naming:**
+
+Loop variables use `{{item}}` syntax (lowercase, double braces), which is distinct from user variables that use `%ITEM%` syntax (uppercase, percent signs). If you have both:
+- `{{feature}}` - refers to the current loop iteration value
+- `%FEATURE%` - refers to the user-defined variable (unrelated to the loop)
+
+Choose distinct names to avoid confusion.
+
 **Suggested variables for this example:**
 
 - `PROJECT_NAME`: `my-app`
