@@ -26,6 +26,7 @@ import type {
   ValidationAdapter,
   TemplateImportExportAdapter,
   WatchAdapter,
+  TeamLibraryAdapter,
   FileFilter,
   CreateTemplateInput,
   UpdateTemplateInput,
@@ -47,6 +48,10 @@ import type {
   SchemaValidationResult,
   CreatedItem,
   UndoResult,
+  TeamLibrary,
+  TeamTemplate,
+  SyncLogEntry,
+  TeamImportResult,
 } from "../../../types/schema";
 
 // Rust returns snake_case fields, this interface matches the Rust struct
@@ -539,6 +544,165 @@ class TauriWatchAdapter implements WatchAdapter {
 }
 
 // ============================================================================
+// Team Library Adapter (Tauri)
+// ============================================================================
+
+// Rust returns snake_case fields, these interfaces match the Rust structs
+interface RustTeamLibrary {
+  id: string;
+  name: string;
+  path: string;
+  sync_interval: number;
+  last_sync_at: string | null;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RustTeamTemplate {
+  name: string;
+  description: string | null;
+  file_path: string;
+  modified_at: string;
+  size_bytes: number;
+}
+
+interface RustSyncLogEntry {
+  id: string;
+  library_id: string;
+  action: string;
+  template_name: string | null;
+  details: string | null;
+  created_at: string;
+}
+
+interface RustTeamImportResult {
+  imported: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+/** Convert Rust snake_case TeamLibrary to TypeScript camelCase */
+function toTeamLibrary(lib: RustTeamLibrary): TeamLibrary {
+  return {
+    id: lib.id,
+    name: lib.name,
+    path: lib.path,
+    syncInterval: lib.sync_interval,
+    lastSyncAt: lib.last_sync_at,
+    isEnabled: lib.is_enabled,
+    createdAt: lib.created_at,
+    updatedAt: lib.updated_at,
+  };
+}
+
+/** Convert Rust snake_case TeamTemplate to TypeScript camelCase */
+function toTeamTemplate(t: RustTeamTemplate): TeamTemplate {
+  return {
+    name: t.name,
+    description: t.description,
+    filePath: t.file_path,
+    modifiedAt: t.modified_at,
+    sizeBytes: t.size_bytes,
+  };
+}
+
+/** Convert Rust snake_case SyncLogEntry to TypeScript camelCase */
+function toSyncLogEntry(entry: RustSyncLogEntry): SyncLogEntry {
+  return {
+    id: entry.id,
+    libraryId: entry.library_id,
+    action: entry.action as "scan" | "import" | "error",
+    templateName: entry.template_name,
+    details: entry.details,
+    createdAt: entry.created_at,
+  };
+}
+
+class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
+  async listTeamLibraries(): Promise<TeamLibrary[]> {
+    const libraries = await invoke<RustTeamLibrary[]>("cmd_list_team_libraries");
+    return libraries.map(toTeamLibrary);
+  }
+
+  async addTeamLibrary(name: string, path: string): Promise<TeamLibrary> {
+    const lib = await invoke<RustTeamLibrary>("cmd_add_team_library", { name, path });
+    return toTeamLibrary(lib);
+  }
+
+  async updateTeamLibrary(
+    id: string,
+    updates: {
+      name?: string;
+      path?: string;
+      syncInterval?: number;
+      isEnabled?: boolean;
+    }
+  ): Promise<TeamLibrary | null> {
+    const lib = await invoke<RustTeamLibrary | null>("cmd_update_team_library", {
+      id,
+      name: updates.name,
+      path: updates.path,
+      syncInterval: updates.syncInterval,
+      isEnabled: updates.isEnabled,
+    });
+    return lib ? toTeamLibrary(lib) : null;
+  }
+
+  async removeTeamLibrary(id: string): Promise<boolean> {
+    return invoke<boolean>("cmd_remove_team_library", { id });
+  }
+
+  async scanTeamLibrary(libraryId: string): Promise<TeamTemplate[]> {
+    const templates = await invoke<RustTeamTemplate[]>("cmd_scan_team_library", { libraryId });
+    return templates.map(toTeamTemplate);
+  }
+
+  async getTeamTemplate(filePath: string): Promise<{
+    template?: {
+      name: string;
+      description: string | null;
+      schema_xml: string;
+      variables?: Record<string, string>;
+      icon_color: string | null;
+      tags?: string[];
+    };
+    templates?: Array<{
+      name: string;
+      description: string | null;
+      schema_xml: string;
+      variables?: Record<string, string>;
+      icon_color: string | null;
+      tags?: string[];
+    }>;
+  }> {
+    return invoke("cmd_get_team_template", { filePath });
+  }
+
+  async importTeamTemplate(
+    libraryId: string,
+    filePath: string,
+    strategy: DuplicateStrategy
+  ): Promise<TeamImportResult> {
+    const result = await invoke<RustTeamImportResult>("cmd_import_team_template", {
+      libraryId,
+      filePath,
+      strategy,
+    });
+    return {
+      imported: result.imported,
+      skipped: result.skipped,
+      errors: result.errors,
+    };
+  }
+
+  async getSyncLog(libraryId: string | null, limit: number): Promise<SyncLogEntry[]> {
+    const entries = await invoke<RustSyncLogEntry[]>("cmd_get_sync_log", { libraryId, limit });
+    return entries.map(toSyncLogEntry);
+  }
+}
+
+// ============================================================================
 // Combined Tauri Platform Adapter
 // ============================================================================
 
@@ -550,6 +714,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
   validation: ValidationAdapter;
   templateImportExport: TemplateImportExportAdapter;
   watch: WatchAdapter;
+  teamLibrary: TeamLibraryAdapter;
 
   constructor() {
     this.fileSystem = new TauriFileSystemAdapter();
@@ -559,6 +724,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     this.validation = new TauriValidationAdapter();
     this.templateImportExport = new TauriTemplateImportExportAdapter();
     this.watch = new TauriWatchAdapter();
+    this.teamLibrary = new TauriTeamLibraryAdapter();
   }
 
   async initialize(): Promise<void> {

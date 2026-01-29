@@ -10,6 +10,8 @@ export type {
   StructureCreatorAdapter,
   ValidationAdapter,
   TemplateImportExportAdapter,
+  WatchAdapter,
+  TeamLibraryAdapter,
   FileFilter,
   CreateTemplateInput,
   UpdateTemplateInput,

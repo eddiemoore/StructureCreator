@@ -43,10 +43,15 @@ export type {
   ValidationIssueType,
   ValidationIssue,
   SchemaValidationResult,
+  // Team Library types
+  TeamLibrary,
+  TeamTemplate,
+  SyncLogEntry,
+  TeamImportResult,
 } from '@structure-creator/shared';
 
 // Import types needed for desktop-specific types
-import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode } from '@structure-creator/shared';
+import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode, TeamLibrary, TeamTemplate } from '@structure-creator/shared';
 
 // ============================================================================
 // Desktop-specific Types
@@ -283,6 +288,13 @@ export interface AppState {
   recentProjects: RecentProject[];
   recentProjectsLoading: boolean;
 
+  // Team Libraries
+  teamLibraries: TeamLibrary[];
+  teamLibrariesLoading: boolean;
+  activeTeamLibrary: string | null;
+  teamTemplates: TeamTemplate[];
+  teamTemplatesLoading: boolean;
+
   // Template filtering
   templateSearchQuery: string;
   templateFilterTags: string[];
@@ -335,6 +347,13 @@ export interface AppState {
   setTemplatesLoading: (loading: boolean) => void;
   setRecentProjects: (projects: RecentProject[]) => void;
   setRecentProjectsLoading: (loading: boolean) => void;
+
+  // Team Library actions
+  setTeamLibraries: (libraries: TeamLibrary[]) => void;
+  setTeamLibrariesLoading: (loading: boolean) => void;
+  setActiveTeamLibrary: (id: string | null) => void;
+  setTeamTemplates: (templates: TeamTemplate[]) => void;
+  setTeamTemplatesLoading: (loading: boolean) => void;
 
   // Template filtering actions
   setTemplateSearchQuery: (query: string) => void;

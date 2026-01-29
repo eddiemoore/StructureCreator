@@ -18,6 +18,10 @@ import type {
   SchemaValidationResult,
   CreatedItem,
   UndoResult,
+  TeamLibrary,
+  TeamTemplate,
+  SyncLogEntry,
+  TeamImportResult,
 } from "../../types/schema";
 
 // ============================================================================
@@ -339,6 +343,81 @@ export interface WatchAdapter {
 }
 
 // ============================================================================
+// Team Library Adapter
+// ============================================================================
+
+export interface TeamLibraryAdapter {
+  /**
+   * List all configured team libraries.
+   */
+  listTeamLibraries(): Promise<TeamLibrary[]>;
+
+  /**
+   * Add a new team library.
+   */
+  addTeamLibrary(name: string, path: string): Promise<TeamLibrary>;
+
+  /**
+   * Update an existing team library.
+   */
+  updateTeamLibrary(
+    id: string,
+    updates: {
+      name?: string;
+      path?: string;
+      syncInterval?: number;
+      isEnabled?: boolean;
+    }
+  ): Promise<TeamLibrary | null>;
+
+  /**
+   * Remove a team library.
+   */
+  removeTeamLibrary(id: string): Promise<boolean>;
+
+  /**
+   * Scan a team library folder for templates.
+   */
+  scanTeamLibrary(libraryId: string): Promise<TeamTemplate[]>;
+
+  /**
+   * Get the full content of a team template file.
+   */
+  getTeamTemplate(filePath: string): Promise<{
+    template?: {
+      name: string;
+      description: string | null;
+      schema_xml: string;
+      variables?: Record<string, string>;
+      icon_color: string | null;
+      tags?: string[];
+    };
+    templates?: Array<{
+      name: string;
+      description: string | null;
+      schema_xml: string;
+      variables?: Record<string, string>;
+      icon_color: string | null;
+      tags?: string[];
+    }>;
+  }>;
+
+  /**
+   * Import a template from a team library to the local database.
+   */
+  importTeamTemplate(
+    libraryId: string,
+    filePath: string,
+    strategy: DuplicateStrategy
+  ): Promise<TeamImportResult>;
+
+  /**
+   * Get sync log entries.
+   */
+  getSyncLog(libraryId: string | null, limit: number): Promise<SyncLogEntry[]>;
+}
+
+// ============================================================================
 // Combined Platform Adapter
 // ============================================================================
 
@@ -354,6 +433,7 @@ export interface PlatformAdapter {
   validation: ValidationAdapter;
   templateImportExport: TemplateImportExportAdapter;
   watch: WatchAdapter;
+  teamLibrary: TeamLibraryAdapter;
 
   /**
    * Initialize all adapters.

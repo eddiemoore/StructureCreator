@@ -169,6 +169,13 @@ export const api = {
   get watch() {
     return getAdapter().watch;
   },
+
+  /**
+   * Team library operations.
+   */
+  get teamLibrary() {
+    return getAdapter().teamLibrary;
+  },
 };
 
 export default api;

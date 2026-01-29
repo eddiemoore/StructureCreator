@@ -12,6 +12,7 @@ import type {
   ValidationAdapter,
   TemplateImportExportAdapter,
   WatchAdapter,
+  TeamLibraryAdapter,
   CreateStructureOptions,
 } from "../types";
 
@@ -25,6 +26,11 @@ import type {
   SchemaValidationResult,
   CreatedItem,
   UndoResult,
+  TeamLibrary,
+  TeamTemplate,
+  SyncLogEntry,
+  TeamImportResult,
+  DuplicateStrategy,
 } from "../../../types/schema";
 
 import { IndexedDBAdapter } from "./indexeddb";
@@ -357,6 +363,74 @@ class WebWatchAdapter implements WatchAdapter {
 }
 
 // ============================================================================
+// Web Team Library Adapter (Stub - team libraries not supported in browsers)
+// ============================================================================
+
+class WebTeamLibraryAdapter implements TeamLibraryAdapter {
+  async listTeamLibraries(): Promise<TeamLibrary[]> {
+    // Team libraries require file system access that isn't available in web mode
+    return [];
+  }
+
+  async addTeamLibrary(_name: string, _path: string): Promise<TeamLibrary> {
+    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+  }
+
+  async updateTeamLibrary(
+    _id: string,
+    _updates: {
+      name?: string;
+      path?: string;
+      syncInterval?: number;
+      isEnabled?: boolean;
+    }
+  ): Promise<TeamLibrary | null> {
+    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+  }
+
+  async removeTeamLibrary(_id: string): Promise<boolean> {
+    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+  }
+
+  async scanTeamLibrary(_libraryId: string): Promise<TeamTemplate[]> {
+    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+  }
+
+  async getTeamTemplate(_filePath: string): Promise<{
+    template?: {
+      name: string;
+      description: string | null;
+      schema_xml: string;
+      variables?: Record<string, string>;
+      icon_color: string | null;
+      tags?: string[];
+    };
+    templates?: Array<{
+      name: string;
+      description: string | null;
+      schema_xml: string;
+      variables?: Record<string, string>;
+      icon_color: string | null;
+      tags?: string[];
+    }>;
+  }> {
+    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+  }
+
+  async importTeamTemplate(
+    _libraryId: string,
+    _filePath: string,
+    _strategy: DuplicateStrategy
+  ): Promise<TeamImportResult> {
+    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+  }
+
+  async getSyncLog(_libraryId: string | null, _limit: number): Promise<SyncLogEntry[]> {
+    return [];
+  }
+}
+
+// ============================================================================
 // Combined Web Platform Adapter
 // ============================================================================
 
@@ -368,6 +442,7 @@ export class WebPlatformAdapter implements PlatformAdapter {
   validation: ValidationAdapter;
   templateImportExport: TemplateImportExportAdapter;
   watch: WatchAdapter;
+  teamLibrary: TeamLibraryAdapter;
 
   private indexedDB: IndexedDBAdapter;
 
@@ -380,6 +455,7 @@ export class WebPlatformAdapter implements PlatformAdapter {
     this.validation = new WebValidationAdapter();
     this.templateImportExport = new WebTemplateImportExportAdapter(this.database);
     this.watch = new WebWatchAdapter();
+    this.teamLibrary = new WebTeamLibraryAdapter();
   }
 
   async initialize(): Promise<void> {
