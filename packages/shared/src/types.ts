@@ -453,3 +453,69 @@ export interface TeamImportResult {
   /** Error messages for templates that failed to import */
   errors: string[];
 }
+
+// ============================================================================
+// Plugin Types
+// ============================================================================
+
+/**
+ * Plugin capabilities define what hooks a plugin provides.
+ */
+export type PluginCapability =
+  | "file-processor"
+  | "variable-transformer"
+  | "schema-validator"
+  | "post-create-hook";
+
+/**
+ * A registered plugin in the system.
+ */
+export interface Plugin {
+  /** Unique identifier */
+  id: string;
+  /** Plugin name (from plugin.json) */
+  name: string;
+  /** Semantic version */
+  version: string;
+  /** Human-readable description */
+  description: string | null;
+  /** Full path to the plugin directory */
+  path: string;
+  /** Plugin capabilities (what hooks it provides) */
+  capabilities: PluginCapability[];
+  /** File extensions this plugin processes (for file-processor capability) */
+  fileTypes: string[];
+  /** User-configurable settings */
+  userSettings: Record<string, unknown>;
+  /** Whether the plugin is enabled */
+  isEnabled: boolean;
+  /** Load order (lower numbers load first) */
+  loadOrder: number;
+  /** ISO timestamp when the plugin was installed */
+  installedAt: string;
+  /** ISO timestamp when the plugin was last updated */
+  updatedAt: string;
+}
+
+/**
+ * Plugin manifest structure (plugin.json).
+ * This is the format plugins use to describe themselves.
+ */
+export interface PluginManifest {
+  /** Unique plugin name */
+  name: string;
+  /** Semantic version */
+  version: string;
+  /** Human-readable description */
+  description?: string;
+  /** Plugin capabilities */
+  capabilities: PluginCapability[];
+  /** File extensions for file processors */
+  fileTypes?: string[];
+  /** Main entry point (default: "index.js") */
+  main?: string;
+  /** Plugin author */
+  author?: string;
+  /** License */
+  license?: string;
+}

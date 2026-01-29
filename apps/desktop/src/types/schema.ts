@@ -48,10 +48,14 @@ export type {
   TeamTemplate,
   SyncLogEntry,
   TeamImportResult,
+  // Plugin types
+  PluginCapability,
+  Plugin,
+  PluginManifest,
 } from '@structure-creator/shared';
 
 // Import types needed for desktop-specific types
-import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode, TeamLibrary, TeamTemplate } from '@structure-creator/shared';
+import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode, TeamLibrary, TeamTemplate, Plugin } from '@structure-creator/shared';
 
 // ============================================================================
 // Desktop-specific Types
@@ -295,6 +299,10 @@ export interface AppState {
   teamTemplates: TeamTemplate[];
   teamTemplatesLoading: boolean;
 
+  // Plugins
+  plugins: Plugin[];
+  pluginsLoading: boolean;
+
   // Template filtering
   templateSearchQuery: string;
   templateFilterTags: string[];
@@ -354,6 +362,11 @@ export interface AppState {
   setActiveTeamLibrary: (id: string | null) => void;
   setTeamTemplates: (templates: TeamTemplate[]) => void;
   setTeamTemplatesLoading: (loading: boolean) => void;
+
+  // Plugin actions
+  setPlugins: (plugins: Plugin[]) => void;
+  setPluginsLoading: (loading: boolean) => void;
+  getEnabledPlugins: () => Plugin[];
 
   // Template filtering actions
   setTemplateSearchQuery: (query: string) => void;

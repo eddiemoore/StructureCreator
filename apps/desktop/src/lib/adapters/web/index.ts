@@ -13,6 +13,7 @@ import type {
   TemplateImportExportAdapter,
   WatchAdapter,
   TeamLibraryAdapter,
+  PluginAdapter,
   CreateStructureOptions,
 } from "../types";
 
@@ -31,6 +32,8 @@ import type {
   SyncLogEntry,
   TeamImportResult,
   DuplicateStrategy,
+  Plugin,
+  PluginManifest,
 } from "../../../types/schema";
 
 import { IndexedDBAdapter } from "./indexeddb";
@@ -431,6 +434,53 @@ class WebTeamLibraryAdapter implements TeamLibraryAdapter {
 }
 
 // ============================================================================
+// Web Plugin Adapter (Stub - plugins not supported in browsers)
+// ============================================================================
+
+class WebPluginAdapter implements PluginAdapter {
+  async listPlugins(): Promise<Plugin[]> {
+    // Plugins require file system access that isn't available in web mode
+    return [];
+  }
+
+  async getPlugin(_id: string): Promise<Plugin | null> {
+    return null;
+  }
+
+  async installPlugin(_sourcePath: string): Promise<Plugin> {
+    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+  }
+
+  async uninstallPlugin(_id: string): Promise<boolean> {
+    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+  }
+
+  async enablePlugin(_id: string): Promise<Plugin | null> {
+    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+  }
+
+  async disablePlugin(_id: string): Promise<Plugin | null> {
+    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+  }
+
+  async getPluginSettings(_id: string): Promise<Record<string, unknown> | null> {
+    return null;
+  }
+
+  async savePluginSettings(_id: string, _settings: Record<string, unknown>): Promise<Plugin | null> {
+    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+  }
+
+  async scanPlugins(): Promise<PluginManifest[]> {
+    return [];
+  }
+
+  async syncPlugins(): Promise<Plugin[]> {
+    return [];
+  }
+}
+
+// ============================================================================
 // Combined Web Platform Adapter
 // ============================================================================
 
@@ -443,6 +493,7 @@ export class WebPlatformAdapter implements PlatformAdapter {
   templateImportExport: TemplateImportExportAdapter;
   watch: WatchAdapter;
   teamLibrary: TeamLibraryAdapter;
+  plugin: PluginAdapter;
 
   private indexedDB: IndexedDBAdapter;
 
@@ -456,6 +507,7 @@ export class WebPlatformAdapter implements PlatformAdapter {
     this.templateImportExport = new WebTemplateImportExportAdapter(this.database);
     this.watch = new WebWatchAdapter();
     this.teamLibrary = new WebTeamLibraryAdapter();
+    this.plugin = new WebPluginAdapter();
   }
 
   async initialize(): Promise<void> {

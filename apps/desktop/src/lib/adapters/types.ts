@@ -22,6 +22,8 @@ import type {
   TeamTemplate,
   SyncLogEntry,
   TeamImportResult,
+  Plugin,
+  PluginManifest,
 } from "../../types/schema";
 
 // ============================================================================
@@ -418,6 +420,66 @@ export interface TeamLibraryAdapter {
 }
 
 // ============================================================================
+// Plugin Adapter
+// ============================================================================
+
+export interface PluginAdapter {
+  /**
+   * List all installed plugins.
+   */
+  listPlugins(): Promise<Plugin[]>;
+
+  /**
+   * Get a plugin by ID.
+   */
+  getPlugin(id: string): Promise<Plugin | null>;
+
+  /**
+   * Install a plugin from a directory path.
+   * The directory should contain a valid plugin.json manifest.
+   */
+  installPlugin(sourcePath: string): Promise<Plugin>;
+
+  /**
+   * Uninstall a plugin by ID.
+   * Removes both the database entry and plugin files.
+   */
+  uninstallPlugin(id: string): Promise<boolean>;
+
+  /**
+   * Enable a plugin.
+   */
+  enablePlugin(id: string): Promise<Plugin | null>;
+
+  /**
+   * Disable a plugin.
+   */
+  disablePlugin(id: string): Promise<Plugin | null>;
+
+  /**
+   * Get plugin user settings.
+   */
+  getPluginSettings(id: string): Promise<Record<string, unknown> | null>;
+
+  /**
+   * Save plugin user settings.
+   */
+  savePluginSettings(id: string, settings: Record<string, unknown>): Promise<Plugin | null>;
+
+  /**
+   * Scan the plugins directory for available plugins.
+   * Returns manifests for plugins found on disk.
+   */
+  scanPlugins(): Promise<PluginManifest[]>;
+
+  /**
+   * Sync plugins between filesystem and database.
+   * Adds newly discovered plugins and removes entries for deleted plugins.
+   */
+  syncPlugins(): Promise<Plugin[]>;
+}
+
+// ============================================================================
 // Combined Platform Adapter
 // ============================================================================
 
@@ -434,6 +496,7 @@ export interface PlatformAdapter {
   templateImportExport: TemplateImportExportAdapter;
   watch: WatchAdapter;
   teamLibrary: TeamLibraryAdapter;
+  plugin: PluginAdapter;
 
   /**
    * Initialize all adapters.

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem, EditorMode, TeamLibrary, TeamTemplate } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem, EditorMode, TeamLibrary, TeamTemplate, Plugin } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 import { api } from "../lib/api";
@@ -195,6 +195,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   teamTemplates: [],
   teamTemplatesLoading: false,
 
+  // Plugins
+  plugins: [],
+  pluginsLoading: false,
+
   // Template filtering
   templateSearchQuery: "",
   templateFilterTags: [],
@@ -345,6 +349,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTeamTemplates: (teamTemplates: TeamTemplate[]) => set({ teamTemplates }),
 
   setTeamTemplatesLoading: (teamTemplatesLoading: boolean) => set({ teamTemplatesLoading }),
+
+  // Plugin actions
+  setPlugins: (plugins: Plugin[]) => set({ plugins }),
+
+  setPluginsLoading: (pluginsLoading: boolean) => set({ pluginsLoading }),
+
+  getEnabledPlugins: () => {
+    const state = get();
+    return state.plugins.filter((p) => p.isEnabled);
+  },
 
   // Template filtering actions
   setTemplateSearchQuery: (templateSearchQuery: string) => set({ templateSearchQuery }),
