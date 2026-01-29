@@ -106,6 +106,22 @@ Without CDATA, you'd need to escape these characters (`&lt;`, `&gt;`, `&amp;`). 
 
 For plain text like Markdown or config files without special characters, CDATA is not required.
 
+#### Dynamic File Content
+
+For files that need conditional content or loops inside them, add `template="true"`:
+
+```xml
+<file name="README.md" template="true">
+{{if INCLUDE_BADGES}}
+![Build Status](https://img.shields.io/badge/build-passing-green)
+{{endif}}
+
+# %PROJECT_NAME%
+</file>
+```
+
+This enables `{{if VAR}}...{{endif}}` conditionals and `{{for item in VAR}}...{{endfor}}` loops within file content. See the [Conditionals & Loops guide](/docs/guides/conditionals#file-content-templating) for full documentation.
+
 #### File from URL
 
 Download content from a URL:

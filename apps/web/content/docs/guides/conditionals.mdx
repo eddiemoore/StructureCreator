@@ -202,3 +202,187 @@ Use conditionals inside loops:
   </if>
 </folder>
 ```
+
+## File Content Templating
+
+The conditionals and loops above control **which files and folders are created**. But what about dynamic content **inside** files? For that, Structure Creator provides file content templating.
+
+### Enabling Templates
+
+To use template directives inside a file's content, add `template="true"` to the file element:
+
+```xml
+<file name="README.md" template="true">
+{{if INCLUDE_BADGES}}
+![Build](https://img.shields.io/badge/build-passing-green)
+{{endif}}
+
+# %PROJECT_NAME%
+
+Welcome to the project!
+</file>
+```
+
+Without `template="true"`, the `{{if}}` syntax is treated as literal text. This opt-in approach ensures compatibility with Handlebars, Mustache, and other templating languages that use double curly braces.
+
+### If Conditionals
+
+Include content conditionally based on a variable:
+
+```xml
+<file name="config.json" template="true"><![CDATA[
+{
+  "name": "%PROJECT_NAME%",
+{{if ENABLE_LOGGING}}
+  "logging": true,
+{{endif}}
+  "version": "1.0.0"
+}
+]]></file>
+```
+
+#### If-Else
+
+Add an alternative with `{{else}}`:
+
+```xml
+<file name=".env" template="true">
+{{if USE_PRODUCTION}}
+API_URL=https://api.example.com
+{{else}}
+API_URL=http://localhost:3000
+{{endif}}
+</file>
+```
+
+### For Loops
+
+Iterate over comma-separated values with `{{for item in VAR}}`:
+
+```xml
+<file name="exports.ts" template="true">
+{{for module in MODULES}}
+export * from './{{module}}';
+{{endfor}}
+</file>
+```
+
+If `MODULES` is set to `auth, user, billing`, this produces:
+
+```ts
+export * from './auth';
+export * from './user';
+export * from './billing';
+```
+
+The loop variable (e.g., `{{module}}`) is replaced with each value in turn.
+
+### Truthiness in Templates
+
+A variable is considered **truthy** when:
+- It exists and is non-empty
+- It is not `"false"` or `"0"` (case-insensitive)
+
+A variable is **falsy** when:
+- It doesn't exist or is empty
+- Its value is `"false"` or `"0"`
+
+### Nesting
+
+Template directives can be nested:
+
+```xml
+<file name="features.md" template="true">
+# Features
+
+{{for feature in FEATURES}}
+## {{feature}}
+
+{{if INCLUDE_DESCRIPTIONS}}
+Description for {{feature}} goes here.
+{{endif}}
+
+{{endfor}}
+</file>
+```
+
+### Handlebars Compatibility
+
+The `template="true"` attribute is required because many projects use Handlebars (`{{variable}}`), Mustache, or similar templating systems. Without this opt-in:
+
+```xml
+<!-- This Handlebars template is preserved as-is -->
+<file name="template.hbs">
+<h1>{{title}}</h1>
+<p>{{description}}</p>
+</file>
+```
+
+Only when you explicitly enable templating will Structure Creator process the `{{if}}`/`{{for}}` directives.
+
+### Content Templating Examples
+
+#### Dynamic README
+
+```xml
+<file name="README.md" template="true"><![CDATA[
+# %PROJECT_NAME%
+
+{{if INCLUDE_BADGES}}
+[![License](https://img.shields.io/badge/license-%LICENSE%-blue.svg)]()
+{{endif}}
+
+## Description
+
+%DESCRIPTION%
+
+{{for contributor in CONTRIBUTORS}}
+- {{contributor}}
+{{endfor}}
+]]></file>
+```
+
+#### Package.json with Optional Dependencies
+
+```xml
+<file name="package.json" template="true"><![CDATA[
+{
+  "name": "%PROJECT_NAME:kebab-case%",
+  "version": "1.0.0",
+  "dependencies": {
+{{if USE_REACT}}
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+{{endif}}
+{{if USE_TYPESCRIPT}}
+    "typescript": "^5.0.0",
+{{endif}}
+    "lodash": "^4.17.21"
+  }
+}
+]]></file>
+```
+
+#### Config File with Feature Flags
+
+```xml
+<file name="config.ts" template="true"><![CDATA[
+export const config = {
+  appName: '%PROJECT_NAME%',
+{{if ENABLE_ANALYTICS}}
+  analytics: {
+    enabled: true,
+    provider: '%ANALYTICS_PROVIDER%',
+  },
+{{endif}}
+{{if ENABLE_AUTH}}
+  auth: {
+    provider: '%AUTH_PROVIDER%',
+{{if USE_SSO}}
+    sso: true,
+{{endif}}
+  },
+{{endif}}
+};
+]]></file>
+```
