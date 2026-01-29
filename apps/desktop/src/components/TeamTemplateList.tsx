@@ -1,42 +1,14 @@
 import { useState, useCallback } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
-import { LayersIcon } from "./Icons";
+import { LayersIcon, DownloadIcon, CheckIcon, ChevronDownIcon } from "./Icons";
 import type { TeamTemplate, DuplicateStrategy } from "../types/schema";
 
-const DownloadIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-);
-
-const CheckIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
-  <svg
-    className={className}
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
+const STRATEGY_OPTIONS: { value: DuplicateStrategy; label: string; description: string }[] = [
+  { value: "rename", label: "Rename", description: "Create with unique name if exists" },
+  { value: "skip", label: "Skip", description: "Skip if template already exists" },
+  { value: "replace", label: "Replace", description: "Overwrite existing template" },
+];
 
 interface TeamTemplateItemProps {
   template: TeamTemplate;
@@ -128,6 +100,7 @@ export const TeamTemplateList = () => {
 
   const [importingTemplates, setImportingTemplates] = useState<Set<string>>(new Set());
   const [importStatuses, setImportStatuses] = useState<Record<string, "idle" | "success" | "error">>({});
+  const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>("rename");
 
   const handleImport = useCallback(async (template: TeamTemplate) => {
     if (!activeTeamLibrary) return;
@@ -136,11 +109,10 @@ export const TeamTemplateList = () => {
     setImportStatuses((prev) => ({ ...prev, [template.filePath]: "idle" }));
 
     try {
-      const strategy: DuplicateStrategy = "rename"; // Default to rename to avoid conflicts
       const result = await api.teamLibrary.importTeamTemplate(
         activeTeamLibrary,
         template.filePath,
-        strategy
+        duplicateStrategy
       );
 
       if (result.imported.length > 0) {
@@ -191,7 +163,7 @@ export const TeamTemplateList = () => {
         return next;
       });
     }
-  }, [activeTeamLibrary, setTemplates, addLog]);
+  }, [activeTeamLibrary, duplicateStrategy, setTemplates, addLog]);
 
   if (teamTemplatesLoading) {
     return (
@@ -211,6 +183,29 @@ export const TeamTemplateList = () => {
 
   return (
     <div className="ml-4 mt-1 space-y-1">
+      {/* Duplicate Strategy Selector */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] text-text-muted">If exists:</span>
+        <div className="relative">
+          <select
+            value={duplicateStrategy}
+            onChange={(e) => setDuplicateStrategy(e.target.value as DuplicateStrategy)}
+            className="appearance-none bg-card-bg border border-border-muted rounded px-2 py-0.5 pr-5 text-[10px] text-text-secondary cursor-pointer hover:border-border-default focus:border-accent focus:outline-none"
+            title="How to handle duplicate template names"
+          >
+            {STRATEGY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon
+            size={10}
+            className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted"
+          />
+        </div>
+      </div>
+
       {teamTemplates.map((template) => (
         <TeamTemplateItem
           key={template.filePath}
