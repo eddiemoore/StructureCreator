@@ -27,7 +27,6 @@ pub enum TemplateError {
     UnexpectedEndfor,
     UnexpectedElse,
     MaxDepthExceeded,
-    InvalidForSyntax { details: String },
 }
 
 impl std::fmt::Display for TemplateError {
@@ -50,9 +49,6 @@ impl std::fmt::Display for TemplateError {
             }
             TemplateError::MaxDepthExceeded => {
                 write!(f, "Maximum nesting depth ({}) exceeded", MAX_NESTING_DEPTH)
-            }
-            TemplateError::InvalidForSyntax { details } => {
-                write!(f, "Invalid {{{{for}}}} syntax: {}", details)
             }
         }
     }
