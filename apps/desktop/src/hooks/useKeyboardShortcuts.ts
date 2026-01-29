@@ -31,6 +31,7 @@ function isInputFocused(): boolean {
  *
  * Event flow:
  * - Cmd+Enter → SHORTCUT_EVENTS.CREATE_STRUCTURE → RightPanel.handleCreateRef
+ * - Cmd+N     → SHORTCUT_EVENTS.NEW_SCHEMA       → App.createNewSchema
  * - Cmd+O     → SHORTCUT_EVENTS.OPEN_FILE        → LeftPanel.handleSelectSchemaRef
  * - Cmd+S     → SHORTCUT_EVENTS.SAVE_TEMPLATE    → LeftPanel.setIsSavingTemplate
  * - Cmd+F     → (direct) searchInputRef.focus()   (no event, hence no FOCUS_SEARCH in SHORTCUT_EVENTS)
@@ -71,6 +72,13 @@ export function useKeyboardShortcuts({
       if (isMod && event.key === "Enter") {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent(SHORTCUT_EVENTS.CREATE_STRUCTURE));
+        return;
+      }
+
+      // Cmd/Ctrl + N: New schema
+      if (isMod && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent(SHORTCUT_EVENTS.NEW_SCHEMA));
         return;
       }
 

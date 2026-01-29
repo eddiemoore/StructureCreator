@@ -9,7 +9,10 @@ import {
   EyeIcon,
   GridIcon,
   XmlIcon,
+  PlusIcon,
 } from "./Icons";
+import { getShortcutLabel } from "../constants/shortcuts";
+import { api } from "../lib/api";
 import type { SchemaNode, EditorMode } from "../types/schema";
 import { VisualSchemaEditor } from "./VisualSchemaEditor";
 import { XmlSchemaEditor } from "./XmlSchemaEditor";
@@ -165,7 +168,7 @@ const EditorModeToggle = ({ mode, onChange, disabled }: EditorModeToggleProps) =
 };
 
 export const TreePreview = () => {
-  const { schemaTree, projectName, editorMode, setEditorMode, xmlParseError } = useAppStore();
+  const { schemaTree, projectName, editorMode, setEditorMode, xmlParseError, createNewSchema } = useAppStore();
 
   const handleModeChange = async (newMode: EditorMode) => {
     await setEditorMode(newMode);
@@ -187,6 +190,16 @@ export const TreePreview = () => {
       {/* Header */}
       <div className="px-4 py-3 border-b border-border-muted flex items-center justify-between bg-mac-bg-secondary">
         <div className="flex items-center gap-3">
+          {!api.isTauri() && (
+            <button
+              onClick={createNewSchema}
+              title={`New Schema (${getShortcutLabel("NEW_SCHEMA")})`}
+              aria-label="New Schema"
+              className="p-1.5 rounded-mac text-text-secondary hover:text-text-primary hover:bg-mac-bg-hover transition-colors"
+            >
+              <PlusIcon size={16} />
+            </button>
+          )}
           <div className="text-mac-base font-medium text-text-primary">
             {getModeTitle()}
           </div>

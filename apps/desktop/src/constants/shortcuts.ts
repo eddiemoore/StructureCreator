@@ -14,6 +14,7 @@ export const SHORTCUT_EVENTS = {
   CREATE_STRUCTURE: "shortcut:create-structure",
   OPEN_FILE: "shortcut:open-file",
   SAVE_TEMPLATE: "shortcut:save-template",
+  NEW_SCHEMA: "shortcut:new-schema",
 } as const;
 
 /**
@@ -57,6 +58,7 @@ const SHORTCUT_LABELS_MAC = {
   OPEN_FILE: "\u2318O", // ⌘O
   SAVE_TEMPLATE: "\u2318S", // ⌘S
   FOCUS_SEARCH: "\u2318F", // ⌘F
+  NEW_SCHEMA: "\u2318N", // ⌘N
 } as const;
 
 const SHORTCUT_LABELS_OTHER = {
@@ -64,6 +66,7 @@ const SHORTCUT_LABELS_OTHER = {
   OPEN_FILE: "Ctrl+O",
   SAVE_TEMPLATE: "Ctrl+S",
   FOCUS_SEARCH: "Ctrl+F",
+  NEW_SCHEMA: "Ctrl+N",
 } as const;
 
 export type ShortcutKey = keyof typeof SHORTCUT_LABELS_MAC;
