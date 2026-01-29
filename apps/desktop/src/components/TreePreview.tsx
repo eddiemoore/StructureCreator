@@ -194,6 +194,7 @@ export const TreePreview = () => {
             <button
               onClick={createNewSchema}
               title={`New Schema (${getShortcutLabel("NEW_SCHEMA")})`}
+              aria-label="New Schema"
               className="p-1.5 rounded-mac text-text-secondary hover:text-text-primary hover:bg-mac-bg-hover transition-colors"
             >
               <PlusIcon size={16} />
