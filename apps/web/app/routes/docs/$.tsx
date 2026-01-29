@@ -22,7 +22,7 @@ for (const [path, module] of Object.entries(mdxModules)) {
 }
 
 export function meta({ params }: Route.MetaArgs) {
-  const slug = params["*"] || "index";
+  const slug = (params["*"] || "index").replace(/\/$/, "");
   const doc = docs[slug];
   const title = doc?.frontmatter?.title || "Documentation";
   const description = doc?.frontmatter?.description || "Structure Creator documentation";
@@ -35,7 +35,7 @@ export function meta({ params }: Route.MetaArgs) {
 
 export default function DocPage() {
   const params = useParams();
-  const slug = params["*"] || "index";
+  const slug = (params["*"] || "index").replace(/\/$/, "");
   const doc = docs[slug];
 
   if (!doc) {
