@@ -327,8 +327,12 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
       }
 
       // Detect and merge variables that may not be in template's saved variables
-      const detectedVars = await api.schema.extractVariables(template.schema_xml);
-      mergeDetectedVariables(detectedVars);
+      try {
+        const detectedVars = await api.schema.extractVariables(template.schema_xml);
+        mergeDetectedVariables(detectedVars);
+      } catch {
+        // Variable extraction is non-critical - don't block template loading
+      }
 
       loadData(); // Refresh to update use count
     } catch (e: unknown) {
@@ -487,6 +491,15 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
           try {
             const tree = await api.schema.scanZip(data, filename);
             setSchemaTree(tree);
+
+            // Extract variables from ZIP - export to XML first
+            try {
+              const xml = await api.schema.exportSchemaXml(tree);
+              const detectedVars = await api.schema.extractVariables(xml);
+              mergeDetectedVariables(detectedVars);
+            } catch {
+              // Variable extraction is non-critical - don't block schema loading
+            }
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e);
             addLog({
@@ -520,8 +533,12 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
             }
 
             // Extract and merge detected variables from schema
-            const detectedVars = await api.schema.extractVariables(content);
-            mergeDetectedVariables(detectedVars);
+            try {
+              const detectedVars = await api.schema.extractVariables(content);
+              mergeDetectedVariables(detectedVars);
+            } catch {
+              // Variable extraction is non-critical - don't block schema loading
+            }
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e);
             addLog({
@@ -565,9 +582,13 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
           setSchemaTree(tree);
 
           // For folder scans, export XML first then extract variables
-          const xml = await api.schema.exportSchemaXml(tree);
-          const detectedVars = await api.schema.extractVariables(xml);
-          mergeDetectedVariables(detectedVars);
+          try {
+            const xml = await api.schema.exportSchemaXml(tree);
+            const detectedVars = await api.schema.extractVariables(xml);
+            mergeDetectedVariables(detectedVars);
+          } catch {
+            // Variable extraction is non-critical - don't block folder scanning
+          }
         } catch (e: unknown) {
           const errorMessage = e instanceof Error ? e.message : String(e);
           addLog({
