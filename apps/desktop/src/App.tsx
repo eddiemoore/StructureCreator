@@ -8,6 +8,7 @@ import { UpdateModal } from "./components/UpdateModal";
 import { TemplateWizard } from "./components/wizard";
 import { useAppStore } from "./store/appStore";
 import { useKeyboardShortcuts, useUpdater } from "./hooks";
+import { SHORTCUT_EVENTS } from "./constants/shortcuts";
 import { api } from "./lib/api";
 import type { Settings, ThemeMode, AccentColor } from "./types/schema";
 import { DEFAULT_SETTINGS } from "./types/schema";
@@ -108,6 +109,18 @@ function App() {
 
     return () => clearTimeout(timer);
   }, [isInitialized, checkForUpdates]);
+
+  // Listen for new-schema shortcut event (works in both browser and Tauri modes)
+  useEffect(() => {
+    const handleNewSchema = () => {
+      createNewSchema();
+    };
+
+    window.addEventListener(SHORTCUT_EVENTS.NEW_SCHEMA, handleNewSchema);
+    return () => {
+      window.removeEventListener(SHORTCUT_EVENTS.NEW_SCHEMA, handleNewSchema);
+    };
+  }, [createNewSchema]);
 
   const loadSettings = async () => {
     try {
