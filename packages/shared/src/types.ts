@@ -378,3 +378,78 @@ export interface SchemaValidationResult {
   /** Warning-level issues that are advisory */
   warnings: ValidationIssue[];
 }
+
+// ============================================================================
+// Team Library Types
+// ============================================================================
+
+/**
+ * A configured team library (shared folder containing .sct template files).
+ * Team libraries allow sharing templates across team members via network folders,
+ * Dropbox, OneDrive, or other shared storage.
+ */
+export interface TeamLibrary {
+  /** Unique identifier */
+  id: string;
+  /** Display name for the library */
+  name: string;
+  /** Full path to the shared folder */
+  path: string;
+  /** Sync interval in seconds (default: 300 = 5 minutes) */
+  syncInterval: number;
+  /** ISO timestamp of last successful scan, or null if never scanned */
+  lastSyncAt: string | null;
+  /** Whether this library is enabled for scanning */
+  isEnabled: boolean;
+  /** ISO timestamp when the library was added */
+  createdAt: string;
+  /** ISO timestamp when the library was last modified */
+  updatedAt: string;
+}
+
+/**
+ * A template found in a team library folder.
+ * Represents metadata about a .sct file without loading its full content.
+ */
+export interface TeamTemplate {
+  /** Template name (from the .sct file metadata) */
+  name: string;
+  /** Description from the template, if available */
+  description: string | null;
+  /** Full path to the .sct file */
+  filePath: string;
+  /** ISO timestamp when the file was last modified */
+  modifiedAt: string;
+  /** File size in bytes */
+  sizeBytes: number;
+}
+
+/**
+ * A sync log entry for auditing team library operations.
+ */
+export interface SyncLogEntry {
+  /** Unique identifier */
+  id: string;
+  /** ID of the library this entry relates to */
+  libraryId: string;
+  /** Type of action: "scan", "import", or "error" */
+  action: "scan" | "import" | "error";
+  /** Name of the template involved (for import actions) */
+  templateName: string | null;
+  /** Additional details about the action */
+  details: string | null;
+  /** ISO timestamp when the action occurred */
+  createdAt: string;
+}
+
+/**
+ * Result of importing templates from a team library.
+ */
+export interface TeamImportResult {
+  /** Names of successfully imported templates */
+  imported: string[];
+  /** Names of templates that were skipped (already exist) */
+  skipped: string[];
+  /** Error messages for templates that failed to import */
+  errors: string[];
+}

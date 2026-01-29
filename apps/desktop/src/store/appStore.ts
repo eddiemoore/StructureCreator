@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem, EditorMode } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem, EditorMode, TeamLibrary, TeamTemplate } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 import { api } from "../lib/api";
@@ -188,6 +188,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   recentProjects: [],
   recentProjectsLoading: false,
 
+  // Team Libraries
+  teamLibraries: [],
+  teamLibrariesLoading: false,
+  activeTeamLibrary: null,
+  teamTemplates: [],
+  teamTemplatesLoading: false,
+
   // Template filtering
   templateSearchQuery: "",
   templateFilterTags: [],
@@ -327,6 +334,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   setRecentProjects: (recentProjects: RecentProject[]) => set({ recentProjects }),
 
   setRecentProjectsLoading: (recentProjectsLoading: boolean) => set({ recentProjectsLoading }),
+
+  // Team Library actions
+  setTeamLibraries: (teamLibraries: TeamLibrary[]) => set({ teamLibraries }),
+
+  setTeamLibrariesLoading: (teamLibrariesLoading: boolean) => set({ teamLibrariesLoading }),
+
+  setActiveTeamLibrary: (activeTeamLibrary: string | null) => set({ activeTeamLibrary }),
+
+  setTeamTemplates: (teamTemplates: TeamTemplate[]) => set({ teamTemplates }),
+
+  setTeamTemplatesLoading: (teamTemplatesLoading: boolean) => set({ teamTemplatesLoading }),
 
   // Template filtering actions
   setTemplateSearchQuery: (templateSearchQuery: string) => set({ templateSearchQuery }),

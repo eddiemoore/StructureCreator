@@ -19,6 +19,7 @@ import {
 import { ImportExportModal } from "./ImportExportModal";
 import { TagInput } from "./TagInput";
 import { RecentProjectsSection } from "./RecentProjectsSection";
+import { TeamLibrariesSection } from "./TeamLibrariesSection";
 import type { Template, ValidationRule, TemplateSortOption } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
@@ -1092,6 +1093,9 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
 
       {/* Recent Projects Section */}
       <RecentProjectsSection />
+
+      {/* Team Libraries Section */}
+      <TeamLibrariesSection />
 
       {/* Templates Section */}
       <div className="p-4 flex-1 flex flex-col">
