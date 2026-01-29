@@ -325,6 +325,10 @@ class TauriSchemaAdapter implements SchemaAdapter {
   async exportSchemaXml(tree: SchemaTree): Promise<string> {
     return invoke<string>("cmd_export_schema_xml", { tree });
   }
+
+  async extractVariables(content: string): Promise<string[]> {
+    return invoke<string[]>("cmd_extract_variables", { content });
+  }
 }
 
 // ============================================================================

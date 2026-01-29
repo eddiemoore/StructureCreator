@@ -221,6 +221,85 @@ const applyTransform = (value: string, transform: string): string => {
 const VARIABLE_REGEX = /%([A-Z_][A-Z0-9_]*)(?::([^%]+))?%/gi;
 
 /**
+ * Built-in variables that should not be extracted as user-defined variables.
+ * NOTE: Keep in sync with BUILTIN_VARIABLES in apps/desktop/src-tauri/src/transforms.rs
+ */
+const BUILTIN_VARIABLES = new Set([
+  "%DATE%",
+  "%YEAR%",
+  "%MONTH%",
+  "%DAY%",
+  "%PROJECT_NAME%",
+]);
+
+/**
+ * Check if a variable name is all uppercase (letters, digits, underscores).
+ * This distinguishes user-defined variables (%PROJECT_NAME%) from repeat loop variables (%i%, %item%).
+ */
+const isUppercaseVariable = (name: string): boolean => {
+  return /^[A-Z_][A-Z0-9_]*$/.test(name);
+};
+
+/**
+ * Regex for condition variables in if/else blocks: var="VARNAME" or var='VARNAME'
+ */
+const CONDITION_VAR_REGEX = /<(?:if|else)\s+var\s*=\s*["']([A-Za-z_][A-Za-z0-9_]*)["']/gi;
+
+/**
+ * Extract unique user-defined variable names from content.
+ * Returns variable names like "%NAME%", "%VERSION%", excluding built-in variables.
+ *
+ * Detects variables from:
+ * - %VAR% patterns in names, content, URLs
+ * - <if var="VAR"> and <else var="VAR"> condition attributes
+ *
+ * Only UPPERCASE variables are detected - lowercase variables (like %i% or %item% in repeat blocks)
+ * are ignored as they are typically loop variables, not user-defined.
+ */
+export const extractVariablesFromContent = (content: string): string[] => {
+  // Reset regex lastIndex to ensure we match from the beginning
+  VARIABLE_REGEX.lastIndex = 0;
+  CONDITION_VAR_REGEX.lastIndex = 0;
+  const seen = new Set<string>();
+  const variables: string[] = [];
+
+  // Extract %VAR% pattern variables
+  let match;
+  while ((match = VARIABLE_REGEX.exec(content)) !== null) {
+    const varName = match[1]; // Original case from the match
+
+    // Only include UPPERCASE variables (not loop variables like %i% or %item%)
+    if (!isUppercaseVariable(varName)) {
+      continue;
+    }
+
+    const baseName = `%${varName}%`;
+    if (!BUILTIN_VARIABLES.has(baseName) && !seen.has(baseName)) {
+      seen.add(baseName);
+      variables.push(baseName);
+    }
+  }
+
+  // Extract condition variables from <if var="..."> and <else var="...">
+  while ((match = CONDITION_VAR_REGEX.exec(content)) !== null) {
+    const varName = match[1];
+
+    // Only include uppercase condition variables
+    if (!isUppercaseVariable(varName)) {
+      continue;
+    }
+
+    const baseName = `%${varName}%`;
+    if (!BUILTIN_VARIABLES.has(baseName) && !seen.has(baseName)) {
+      seen.add(baseName);
+      variables.push(baseName);
+    }
+  }
+
+  return variables;
+};
+
+/**
  * Substitute variables in a string.
  */
 export const substituteVariables = (

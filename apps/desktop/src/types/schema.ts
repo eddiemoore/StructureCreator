@@ -325,6 +325,7 @@ export interface AppState {
   updateVariable: (name: string, value: string) => void;
   addVariable: (name: string, value: string) => void;
   removeVariable: (name: string) => void;
+  mergeDetectedVariables: (detectedVarNames: string[]) => void;
   updateVariableValidation: (
     name: string,
     validation: ValidationRule | undefined

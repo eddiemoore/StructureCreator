@@ -294,6 +294,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
+  mergeDetectedVariables: (detectedVarNames: string[]) =>
+    set((state) => {
+      const existingNames = new Set(state.variables.map((v) => v.name));
+      const newVariables = detectedVarNames
+        .filter((name) => !existingNames.has(name))
+        .map((name) => ({ name, value: "" }));
+
+      if (newVariables.length === 0) return state;
+      return { variables: [...state.variables, ...newVariables] };
+    }),
+
   updateVariableValidation: (
     name: string,
     validation: ValidationRule | undefined

@@ -297,6 +297,12 @@ fn cmd_export_schema_xml(tree: SchemaTree) -> String {
 
 #[cfg(feature = "tauri-app")]
 #[tauri::command]
+fn cmd_extract_variables(content: String) -> Vec<String> {
+    transforms::extract_variables_from_content(&content)
+}
+
+#[cfg(feature = "tauri-app")]
+#[tauri::command]
 fn cmd_create_structure(
     content: String,
     output_path: String,
@@ -3961,6 +3967,7 @@ pub fn run() {
             cmd_scan_folder,
             cmd_scan_zip,
             cmd_export_schema_xml,
+            cmd_extract_variables,
             cmd_create_structure,
             cmd_create_structure_from_tree,
             cmd_undo_structure,
