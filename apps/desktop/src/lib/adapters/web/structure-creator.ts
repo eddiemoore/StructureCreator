@@ -33,6 +33,7 @@ import {
   validatePathComponent,
 } from "./constants";
 import { generateImage, generateSqlite } from "./generators";
+import { processTemplate } from "@structure-creator/shared";
 
 /**
  * Process a downloaded file, applying variable substitution where applicable.
@@ -486,7 +487,23 @@ const processFile = async (
       }
       return;
     } else if (node.content) {
-      content = substituteVariables(node.content, context.variables);
+      // Process template directives if template="true", then substitute variables
+      if (node.template) {
+        const templateResult = processTemplate(node.content, context.variables);
+        if (templateResult.ok) {
+          content = substituteVariables(templateResult.value, context.variables);
+        } else {
+          // Template error - log warning and fall back to raw content with variable substitution
+          context.logs.push({
+            log_type: "warning",
+            message: `Template error in ${fileName}`,
+            details: templateResult.error.message,
+          });
+          content = substituteVariables(node.content, context.variables);
+        }
+      } else {
+        content = substituteVariables(node.content, context.variables);
+      }
     }
 
     if (context.dryRun) {
@@ -899,7 +916,19 @@ const generateDiffFile = async (
   } else if (node.generate) {
     isBinary = true; // Generated files are binary (no text diff)
   } else if (node.content) {
-    newContent = substituteVariables(node.content, context.variables);
+    // Process template directives if template="true", then substitute variables
+    if (node.template) {
+      const templateResult = processTemplate(node.content, context.variables);
+      if (templateResult.ok) {
+        newContent = substituteVariables(templateResult.value, context.variables);
+      } else {
+        // Template error - show error in preview
+        context.warnings.push(`Template error in ${fileName}: ${templateResult.error.message}`);
+        newContent = substituteVariables(node.content, context.variables);
+      }
+    } else {
+      newContent = substituteVariables(node.content, context.variables);
+    }
   }
 
   return {

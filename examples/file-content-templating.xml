@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  File Content Templating Example
+
+  This example demonstrates the {{if}}/{{for}} template directives in file content.
+  These are opt-in via the template="true" attribute to avoid conflicts with
+  Handlebars/Mustache template files.
+
+  Variables used:
+    - %PROJECT_NAME% - Name of the project
+    - %AUTHOR% - Author name
+    - %USE_NPM% - Set to "true" for npm, anything else for yarn
+    - %INCLUDE_TESTS% - Set to "true" to include test configuration
+    - %FEATURES% - Comma-separated list of features (e.g., "auth,api,database")
+
+  Example usage:
+    structure-creator create \
+      -schema examples/file-content-templating.xml \
+      -output ./my-project \
+      -var PROJECT_NAME=my-app \
+      -var AUTHOR="John Doe" \
+      -var USE_NPM=true \
+      -var INCLUDE_TESTS=true \
+      -var FEATURES=auth,api,database
+-->
+<folder name="%PROJECT_NAME%">
+
+  <!-- README with conditional and loop content -->
+  <file name="README.md" template="true"><![CDATA[# %PROJECT_NAME%
+
+Created by %AUTHOR%
+
+## Getting Started
+
+{{if USE_NPM}}
+```bash
+npm install
+npm run dev
+```
+{{else}}
+```bash
+yarn install
+yarn dev
+```
+{{endif}}
+
+{{if INCLUDE_TESTS}}
+## Running Tests
+
+{{if USE_NPM}}
+```bash
+npm test
+```
+{{else}}
+```bash
+yarn test
+```
+{{endif}}
+{{endif}}
+
+## Features
+
+{{for feature in FEATURES}}
+- **{{feature}}** - Implementation for {{feature}} functionality
+{{endfor}}
+
+## License
+
+MIT
+]]></file>
+
+  <!--
+    Package.json with conditional scripts.
+    Note: For loops in JSON require a static property after the loop to avoid
+    trailing comma issues. Here "vite" comes after the feature dependencies.
+  -->
+  <file name="package.json" template="true"><![CDATA[{
+  "name": "%PROJECT_NAME%",
+  "version": "1.0.0",
+  "author": "%AUTHOR%",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"{{if INCLUDE_TESTS}},
+    "test": "vitest"{{endif}}
+  },
+  "dependencies": {
+{{for feature in FEATURES}}    "@%PROJECT_NAME%/{{feature}}": "^1.0.0",
+{{endfor}}    "vite": "^5.0.0"
+  }{{if INCLUDE_TESTS}},
+  "devDependencies": {
+    "vitest": "^1.0.0"
+  }{{endif}}
+}
+]]></file>
+
+  <folder name="src">
+    <!-- Main entry point -->
+    <file name="index.ts" template="true"><![CDATA[// %PROJECT_NAME% - Main Entry Point
+
+{{for feature in FEATURES}}
+import { init{{feature}} } from './features/{{feature}}';
+{{endfor}}
+
+async function main() {
+  console.log('Starting %PROJECT_NAME%...');
+
+{{for feature in FEATURES}}
+  await init{{feature}}();
+{{endfor}}
+
+  console.log('%PROJECT_NAME% is ready!');
+}
+
+main();
+]]></file>
+
+    <folder name="features">
+      <!-- Feature index that exports all features -->
+      <file name="index.ts" template="true"><![CDATA[// Feature exports for %PROJECT_NAME%
+
+{{for feature in FEATURES}}
+export * from './{{feature}}';
+{{endfor}}
+]]></file>
+    </folder>
+  </folder>
+
+  <!-- Test folder only included when INCLUDE_TESTS is set -->
+  <if var="INCLUDE_TESTS">
+    <folder name="tests">
+      <file name="setup.ts" template="true"><![CDATA[// Test setup for %PROJECT_NAME%
+
+{{if USE_NPM}}
+// Using npm test runner
+{{else}}
+// Using yarn test runner
+{{endif}}
+
+export function setupTests() {
+  // Test initialization
+}
+]]></file>
+    </folder>
+  </if>
+
+  <!--
+    Example: File WITHOUT template="true"
+    The {{}} syntax is preserved as-is for Handlebars templates
+  -->
+  <folder name="views">
+    <file name="layout.hbs"><![CDATA[<!DOCTYPE html>
+<html>
+<head>
+  <title>{{title}} - %PROJECT_NAME%</title>
+</head>
+<body>
+  {{> header}}
+
+  <main>
+    {{{body}}}
+  </main>
+
+  {{> footer}}
+</body>
+</html>
+]]></file>
+
+    <file name="index.hbs"><![CDATA[{{#each items}}
+  <article>
+    <h2>{{this.title}}</h2>
+    <p>{{this.description}}</p>
+  </article>
+{{/each}}
+
+{{#if user}}
+  <p>Welcome, {{user.name}}!</p>
+{{else}}
+  <p>Please log in.</p>
+{{/if}}
+]]></file>
+  </folder>
+
+  <!--
+    Configuration file showing nested conditionals.
+    Note: "_version" acts as a sentinel to avoid trailing comma after the loop.
+  -->
+  <file name="config.json" template="true"><![CDATA[{
+  "name": "%PROJECT_NAME%",
+  "features": {
+{{for feature in FEATURES}}    "{{feature}}": { "enabled": true },
+{{endfor}}    "_version": "1.0.0"
+  }{{if INCLUDE_TESTS}},
+  "testing": {
+    "framework": "vitest",
+    "coverage": true
+  }{{endif}}
+}
+]]></file>
+
+</folder>

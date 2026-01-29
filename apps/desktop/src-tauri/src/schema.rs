@@ -35,6 +35,10 @@ pub struct SchemaNode {
     /// Generator configuration (child XML as string for parsing)
     #[serde(skip_serializing_if = "Option::is_none", rename = "generateConfig")]
     pub generate_config: Option<String>,
+    /// If true, process {{if}}/{{for}} template directives in file content.
+    /// When false/None, {{...}} syntax is preserved as-is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -178,6 +182,7 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
     let mut repeat_count: Option<String> = None;
     let mut repeat_as: Option<String> = None;
     let mut generate: Option<String> = None;
+    let mut template: Option<bool> = None;
     let mut extra_attrs: Vec<String> = Vec::new();
 
     for attr in e.attributes() {
@@ -192,6 +197,7 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
             "count" => repeat_count = Some(value.to_string()),
             "as" => repeat_as = Some(value.to_string()),
             "generate" => generate = Some(value.to_string()),
+            "template" => template = Some(value.to_lowercase() == "true"),
             // Capture generator-specific attributes (width, height, background, format)
             "width" | "height" | "background" | "format" => {
                 extra_attrs.push(format!("{}=\"{}\"", key, value));
@@ -226,6 +232,7 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         repeat_as,
         generate,
         generate_config,
+        template,
     }))
 }
 
@@ -348,6 +355,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
                 repeat_as: None,
                 generate: None,
                 generate_config: None,
+                template: None,
             });
         }
     }
@@ -364,6 +372,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
         repeat_as: None,
         generate: None,
         generate_config: None,
+        template: None,
     })
 }
 
@@ -448,6 +457,13 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
             }
         }
         "file" => {
+            // Build template attribute string if present
+            let template_attr = if node.template == Some(true) {
+                " template=\"true\""
+            } else {
+                ""
+            };
+
             if let Some(url) = &node.url {
                 xml.push_str(&format!("{}<file name=\"{}\" url=\"{}\" />\n",
                     indent_str, escape_xml(&node.name), escape_xml(url)));
@@ -468,7 +484,7 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
                     xml.push_str(" />\n");
                 }
             } else if let Some(content) = &node.content {
-                xml.push_str(&format!("{}<file name=\"{}\">\n", indent_str, escape_xml(&node.name)));
+                xml.push_str(&format!("{}<file name=\"{}\"{}>\n", indent_str, escape_xml(&node.name), template_attr));
                 xml.push_str(&format!("{}<![CDATA[{}]]>\n", indent_str, content));
                 xml.push_str(&format!("{}</file>\n", indent_str));
             } else {
@@ -609,6 +625,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                             repeat_as: None,
                             generate: None,
                             generate_config: None,
+                            template: None,
                         });
                 }
 
@@ -627,6 +644,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                     repeat_as: None,
                     generate: None,
                     generate_config: None,
+                    template: None,
                 };
 
                 if is_dir {
@@ -778,6 +796,7 @@ fn build_tree_from_map(
         repeat_as: None,
         generate: None,
         generate_config: None,
+        template: None,
     }
 }
 
@@ -1297,6 +1316,7 @@ mod tests {
                 repeat_as: None,
                 generate: None,
                 generate_config: None,
+                template: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -1331,6 +1351,7 @@ mod tests {
                 repeat_as: None,
                 generate: None,
                 generate_config: None,
+                template: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -1421,6 +1442,7 @@ mod tests {
                                 repeat_as: None,
                                 generate: None,
                                 generate_config: None,
+                                template: None,
                             }
                         ]),
                         condition_var: None,
@@ -1428,6 +1450,7 @@ mod tests {
                         repeat_as: Some("idx".to_string()),
                         generate: None,
                         generate_config: None,
+                        template: None,
                     }
                 ]),
                 condition_var: None,
@@ -1435,6 +1458,7 @@ mod tests {
                 repeat_as: None,
                 generate: None,
                 generate_config: None,
+                template: None,
             },
             stats: SchemaStats {
                 folders: 2,
@@ -2167,6 +2191,7 @@ export const Component = () => {
                         repeat_as: None,
                         generate: None,
                         generate_config: None,
+                        template: None,
                     }
                 ]),
                 condition_var: None,
@@ -2174,6 +2199,7 @@ export const Component = () => {
                 repeat_as: None,
                 generate: None,
                 generate_config: None,
+                template: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -2341,5 +2367,110 @@ export const EXTENSION = true;
         assert_eq!(tree.stats.files, 4);
         assert_eq!(tree.stats.downloads, 1);
         assert_eq!(tree.stats.generated, 2);
+    }
+
+    // ========================================================================
+    // Template Attribute Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_file_with_template_attribute() {
+        let xml = r#"
+            <folder name="project">
+                <file name="readme.md" template="true">
+<![CDATA[{{if USE_NPM}}npm{{else}}yarn{{endif}}]]>
+                </file>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let file = &tree.root.children.as_ref().unwrap()[0];
+        assert_eq!(file.template, Some(true));
+    }
+
+    #[test]
+    fn test_parse_file_template_attribute_false() {
+        let xml = r#"
+            <folder name="project">
+                <file name="template.hbs" template="false">{{> header}}</file>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let file = &tree.root.children.as_ref().unwrap()[0];
+        assert_eq!(file.template, Some(false));
+    }
+
+    #[test]
+    fn test_parse_file_without_template_attribute() {
+        let xml = r#"
+            <folder name="project">
+                <file name="plain.txt">Hello</file>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let file = &tree.root.children.as_ref().unwrap()[0];
+        assert_eq!(file.template, None);
+    }
+
+    #[test]
+    fn test_schema_to_xml_preserves_template_attribute() {
+        let tree = SchemaTree {
+            root: SchemaNode {
+                id: None,
+                node_type: "folder".to_string(),
+                name: "project".to_string(),
+                url: None,
+                content: None,
+                children: Some(vec![
+                    SchemaNode {
+                        id: None,
+                        node_type: "file".to_string(),
+                        name: "readme.md".to_string(),
+                        url: None,
+                        content: Some("{{if VAR}}yes{{endif}}".to_string()),
+                        children: None,
+                        condition_var: None,
+                        repeat_count: None,
+                        repeat_as: None,
+                        generate: None,
+                        generate_config: None,
+                        template: Some(true),
+                    }
+                ]),
+                condition_var: None,
+                repeat_count: None,
+                repeat_as: None,
+                generate: None,
+                generate_config: None,
+                template: None,
+            },
+            stats: SchemaStats {
+                folders: 1,
+                files: 1,
+                downloads: 0,
+                generated: 0,
+            },
+            hooks: None,
+        };
+
+        let xml = schema_to_xml(&tree);
+        assert!(xml.contains("template=\"true\""));
+    }
+
+    #[test]
+    fn test_template_attribute_case_insensitive() {
+        let xml = r#"
+            <folder name="project">
+                <file name="a.md" template="TRUE">content</file>
+                <file name="b.md" template="True">content</file>
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let children = tree.root.children.as_ref().unwrap();
+        assert_eq!(children[0].template, Some(true));
+        assert_eq!(children[1].template, Some(true));
     }
 }

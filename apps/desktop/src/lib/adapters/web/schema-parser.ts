@@ -202,6 +202,12 @@ const parseNode = (element: Element, depth: number): SchemaNode => {
         node.content = content;
       }
     }
+
+    // Handle template attribute for file nodes
+    const templateAttr = element.getAttribute("template");
+    if (templateAttr && templateAttr.toLowerCase() === "true") {
+      node.template = true;
+    }
   }
 
   if (type === "if") {
@@ -283,6 +289,10 @@ export const exportSchemaXml = (tree: SchemaTree): string => {
 
     if (node.generate) {
       attrs.push(`generate="${escapeXml(node.generate)}"`);
+    }
+
+    if (node.template) {
+      attrs.push(`template="true"`);
     }
 
     if (node.condition_var) {

@@ -146,6 +146,7 @@ static CONDITION_VAR_REGEX: Lazy<Regex> = Lazy::new(|| {
 /// Detects variables from:
 /// - %VAR% patterns in names, content, URLs
 /// - <if var="VAR"> and <else var="VAR"> condition attributes
+/// - {{if VAR}} and {{for item in VAR}} template directives
 ///
 /// Only UPPERCASE variables are detected - lowercase variables (like %i% or %item% in repeat blocks)
 /// are ignored as they are typically loop variables, not user-defined.
@@ -181,6 +182,14 @@ pub fn extract_variables_from_content(content: &str) -> Vec<String> {
             if !BUILTIN_VARIABLES.contains(&base_name.as_str()) && seen.insert(base_name.clone()) {
                 variables.push(base_name);
             }
+        }
+    }
+
+    // Extract template directive variables ({{if VAR}} and {{for item in VAR}})
+    let template_vars = crate::templating::extract_template_variables(content);
+    for var in template_vars {
+        if !BUILTIN_VARIABLES.contains(&var.as_str()) && seen.insert(var.clone()) {
+            variables.push(var);
         }
     }
 

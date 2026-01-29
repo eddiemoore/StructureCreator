@@ -1,6 +1,7 @@
 pub mod database;
 pub mod generators;
 pub mod schema;
+pub mod templating;
 pub mod transforms;
 pub mod validation;
 
@@ -1244,8 +1245,23 @@ fn create_node_internal(
                     }
                 } else {
                     // Create file with content (or empty if no content)
-                    // Replace variables in file content
-                    let file_content = substitute_variables(&node.content.clone().unwrap_or_default(), variables);
+                    // Process template directives if template="true", then replace variables
+                    let raw_content = node.content.clone().unwrap_or_default();
+                    let file_content = if node.template == Some(true) {
+                        match templating::process_template(&raw_content, variables) {
+                            Ok(processed) => substitute_variables(&processed, variables),
+                            Err(e) => {
+                                logs.push(LogEntry {
+                                    log_type: "warning".to_string(),
+                                    message: format!("Template error in {}", name),
+                                    details: Some(e.to_string()),
+                                });
+                                substitute_variables(&raw_content, variables)
+                            }
+                        }
+                    } else {
+                        substitute_variables(&raw_content, variables)
+                    };
                     match fs::write(&current_path, &file_content) {
                         Ok(_) => {
                             summary.files_created += 1;
