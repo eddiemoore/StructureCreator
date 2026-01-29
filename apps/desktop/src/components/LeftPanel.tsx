@@ -183,6 +183,12 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
   const parsedTreesRef = useRef<Map<string, SchemaTree>>(parsedTrees);
   parsedTreesRef.current = parsedTrees;
 
+  // Memoize hovered template lookup to avoid IIFE in JSX
+  const hoveredTemplate = useMemo(() => {
+    if (!hoveredTemplateId) return null;
+    return templates.find(t => t.id === hoveredTemplateId) ?? null;
+  }, [hoveredTemplateId, templates]);
+
   // Refs for click-away detection
   const validationPopoverRef = useRef<HTMLDivElement>(null);
   const transformHelpRef = useRef<HTMLDivElement>(null);
@@ -1557,19 +1563,16 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
       />
 
       {/* Hover preview popover */}
-      {(() => {
-        const hoveredTemplate = hoveredTemplateId ? templates.find(t => t.id === hoveredTemplateId) : null;
-        return hoveredTemplate && hoveredAnchorEl ? (
-          <TemplateHoverPreview
-            template={hoveredTemplate}
-            schemaTree={parsedTrees.get(hoveredTemplateId!) || null}
-            isLoading={previewLoading}
-            anchorEl={hoveredAnchorEl}
-            onMouseEnter={handleHoverPreviewMouseEnter}
-            onMouseLeave={handleHoverPreviewMouseLeave}
-          />
-        ) : null;
-      })()}
+      {hoveredTemplate && hoveredAnchorEl && (
+        <TemplateHoverPreview
+          template={hoveredTemplate}
+          schemaTree={parsedTrees.get(hoveredTemplate.id) || null}
+          isLoading={previewLoading}
+          anchorEl={hoveredAnchorEl}
+          onMouseEnter={handleHoverPreviewMouseEnter}
+          onMouseLeave={handleHoverPreviewMouseLeave}
+        />
+      )}
 
       {/* Full preview modal */}
       <TemplatePreviewModal
