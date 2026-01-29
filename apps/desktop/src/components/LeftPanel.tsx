@@ -15,11 +15,15 @@ import {
   ImportIcon,
   ExportIcon,
   SearchIcon,
+  EyeIcon,
 } from "./Icons";
 import { ImportExportModal } from "./ImportExportModal";
 import { TagInput } from "./TagInput";
 import { RecentProjectsSection } from "./RecentProjectsSection";
-import type { Template, ValidationRule, TemplateSortOption } from "../types/schema";
+import { TemplatePreviewThumbnail } from "./TemplatePreviewThumbnail";
+import { TemplateHoverPreview } from "./TemplateHoverPreview";
+import { TemplatePreviewModal } from "./TemplatePreviewModal";
+import type { Template, ValidationRule, TemplateSortOption, SchemaTree } from "../types/schema";
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
 import type { ReactNode } from "react";
@@ -168,6 +172,15 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
   const [exportTemplateId, setExportTemplateId] = useState<string | undefined>();
   const [focusedTemplateIndex, setFocusedTemplateIndex] = useState<number>(-1);
 
+  // Template preview state
+  const [parsedTrees, setParsedTrees] = useState<Map<string, SchemaTree>>(new Map());
+  const [hoveredTemplateId, setHoveredTemplateId] = useState<string | null>(null);
+  const [hoveredAnchorEl, setHoveredAnchorEl] = useState<HTMLElement | null>(null);
+  const [previewModalTemplate, setPreviewModalTemplate] = useState<Template | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const hoverEnterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverLeaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Refs for click-away detection
   const validationPopoverRef = useRef<HTMLDivElement>(null);
   const transformHelpRef = useRef<HTMLDivElement>(null);
@@ -196,6 +209,95 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
       });
     }
   }, [addLog]);
+
+  // Helper to get or parse a schema tree for a template
+  const getOrParseTree = useCallback(async (templateId: string, schemaXml: string): Promise<SchemaTree | null> => {
+    // Check cache first
+    const cached = parsedTrees.get(templateId);
+    if (cached) return cached;
+
+    try {
+      const result = await api.schema.parseSchemaWithInheritance(schemaXml);
+      const tree = result.tree;
+      setParsedTrees(prev => new Map(prev).set(templateId, tree));
+      return tree;
+    } catch (e) {
+      console.error("Failed to parse template schema:", e);
+      return null;
+    }
+  }, [parsedTrees]);
+
+  // Hover handlers for template preview
+  const handleTemplateMouseEnter = useCallback((e: React.MouseEvent, template: Template) => {
+    // Clear any pending leave timeout
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+      hoverLeaveTimeoutRef.current = null;
+    }
+
+    // If already showing this template, don't restart timer
+    if (hoveredTemplateId === template.id) return;
+
+    // Start enter delay
+    const target = e.currentTarget as HTMLElement;
+    hoverEnterTimeoutRef.current = setTimeout(async () => {
+      setHoveredTemplateId(template.id);
+      setHoveredAnchorEl(target);
+      setPreviewLoading(true);
+      hoverEnterTimeoutRef.current = null;
+
+      // Parse the tree
+      await getOrParseTree(template.id, template.schema_xml);
+      setPreviewLoading(false);
+    }, 300);
+  }, [hoveredTemplateId, getOrParseTree]);
+
+  const handleTemplateMouseLeave = useCallback(() => {
+    // Clear any pending enter timeout
+    if (hoverEnterTimeoutRef.current) {
+      clearTimeout(hoverEnterTimeoutRef.current);
+      hoverEnterTimeoutRef.current = null;
+    }
+
+    // Start leave delay (allows moving to popover)
+    hoverLeaveTimeoutRef.current = setTimeout(() => {
+      setHoveredTemplateId(null);
+      setHoveredAnchorEl(null);
+      hoverLeaveTimeoutRef.current = null;
+    }, 100);
+  }, []);
+
+  const handleHoverPreviewMouseEnter = useCallback(() => {
+    // Cancel any pending leave
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+      hoverLeaveTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleHoverPreviewMouseLeave = useCallback(() => {
+    // Start leave delay
+    hoverLeaveTimeoutRef.current = setTimeout(() => {
+      setHoveredTemplateId(null);
+      setHoveredAnchorEl(null);
+      hoverLeaveTimeoutRef.current = null;
+    }, 100);
+  }, []);
+
+  // Preview modal handlers
+  const handleOpenPreviewModal = useCallback(async (e: React.MouseEvent, template: Template) => {
+    e.stopPropagation();
+    setPreviewModalTemplate(template);
+    setPreviewLoading(true);
+
+    // Parse the tree if not cached
+    await getOrParseTree(template.id, template.schema_xml);
+    setPreviewLoading(false);
+  }, [getOrParseTree]);
+
+  const handleClosePreviewModal = useCallback(() => {
+    setPreviewModalTemplate(null);
+  }, []);
 
   // Load templates, tags, and recent projects
   const loadData = useCallback(async () => {
@@ -1328,6 +1430,8 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                 aria-selected={focusedTemplateIndex === index}
                 tabIndex={-1}
                 onClick={() => handleLoadTemplate(template)}
+                onMouseEnter={(e) => handleTemplateMouseEnter(e, template)}
+                onMouseLeave={handleTemplateMouseLeave}
                 className={`p-3 bg-card-bg border rounded-mac cursor-pointer group transition-colors ${
                   focusedTemplateIndex === index
                     ? "border-accent ring-2 ring-accent ring-offset-1 ring-offset-bg-primary"
@@ -1335,15 +1439,12 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                 }`}
               >
                 <div className="flex items-start gap-2.5">
-                  <div
-                    className="w-8 h-8 rounded-mac flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundColor: `${template.icon_color || "#0a84ff"}15`,
-                      color: template.icon_color || "#0a84ff",
-                    }}
-                  >
-                    <LayersIcon size={16} />
-                  </div>
+                  <TemplatePreviewThumbnail
+                    iconColor={template.icon_color}
+                    schemaTree={parsedTrees.get(template.id) || null}
+                    isLoading={previewLoading && hoveredTemplateId === template.id}
+                    onClick={() => handleOpenPreviewModal({ stopPropagation: () => {} } as React.MouseEvent, template)}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-mac-sm font-medium text-text-primary truncate">
@@ -1383,6 +1484,14 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                     )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handleOpenPreviewModal(e, template)}
+                      className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                      title="Preview template"
+                      aria-label="Preview template"
+                    >
+                      <EyeIcon size={14} />
+                    </button>
                     <button
                       onClick={(e) => handleToggleFavorite(e, template.id)}
                       className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
@@ -1431,6 +1540,28 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
         templates={templates}
         selectedTemplateId={exportTemplateId}
         onComplete={loadData}
+      />
+
+      {/* Hover preview popover */}
+      {hoveredTemplateId && hoveredAnchorEl && (
+        <TemplateHoverPreview
+          template={templates.find(t => t.id === hoveredTemplateId)!}
+          schemaTree={parsedTrees.get(hoveredTemplateId) || null}
+          isLoading={previewLoading}
+          anchorEl={hoveredAnchorEl}
+          onMouseEnter={handleHoverPreviewMouseEnter}
+          onMouseLeave={handleHoverPreviewMouseLeave}
+        />
+      )}
+
+      {/* Full preview modal */}
+      <TemplatePreviewModal
+        isOpen={previewModalTemplate !== null}
+        template={previewModalTemplate}
+        schemaTree={previewModalTemplate ? parsedTrees.get(previewModalTemplate.id) || null : null}
+        isLoading={previewLoading}
+        onClose={handleClosePreviewModal}
+        onUseTemplate={handleLoadTemplate}
       />
     </aside>
   );
