@@ -73,7 +73,7 @@ Structure Creator provides built-in variables that are automatically available w
 |----------|-------------|---------|
 | `%PROJECT_NAME%` | The project name from the UI | my-awesome-project |
 | `%DATE%` | Current date (ISO) | 2024-01-15 |
-| `%DATE:FORMAT%` | Formatted date | See below |
+| `%DATE:format(FORMAT)%` | Formatted date | See below |
 | `%YEAR%` | Current year | 2024 |
 | `%MONTH%` | Current month (01-12) | 01 |
 | `%DAY%` | Current day (01-31) | 15 |
@@ -109,11 +109,11 @@ You can also apply transforms to the project name:
 
 ### Date Formats
 
-Format dates with `%DATE:FORMAT%`:
+Format dates with `%DATE:format(FORMAT)%`:
 
 ```xml
-<file name="log-%DATE:YYYY-MM-DD%.txt" />
-<file name="report-%DATE:MMM D, YYYY%.md" />
+<file name="log-%DATE:format(YYYY-MM-DD)%.txt" />
+<file name="report-%DATE:format(MMM D, YYYY)%.md" />
 ```
 
 Available tokens:

@@ -36,6 +36,7 @@ These formats work in both the web app and desktop application:
 | OpenDocument Presentation | `.odp` | Slide text |
 | EPUB | `.epub` | Content, metadata |
 | ZIP | `.zip` | Text files inside the archive |
+| Jupyter Notebook | `.ipynb` | Code cells, markdown cells, metadata |
 
 ### Desktop Only
 
@@ -129,6 +130,21 @@ Variables are substituted in:
 - XHTML content files
 - Metadata (title, author, etc.)
 
+## Jupyter Notebooks
+
+Create notebook templates with variable placeholders:
+
+```xml
+<file name="analysis.ipynb" url="https://example.com/templates/analysis.ipynb" />
+```
+
+Variables are substituted in:
+- Code cells
+- Markdown cells
+- Notebook metadata
+
+This is useful for creating personalized data science templates where project-specific names, paths, or configurations can be injected into the notebook.
+
 ## Archives
 
 ### ZIP Files
@@ -213,6 +229,7 @@ Variables in Vorbis comment fields are substituted.
 | OpenDocument (.odt, .ods, .odp) | Yes | Yes |
 | EPUB files | Yes | Yes |
 | ZIP archives | Yes | Yes |
+| Jupyter Notebooks (.ipynb) | Yes | Yes |
 | PDF form fields | No | Yes |
 | Image XMP metadata | No | Yes |
 | Audio metadata (MP3/FLAC) | No | Yes |

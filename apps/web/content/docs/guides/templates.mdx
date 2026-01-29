@@ -97,7 +97,7 @@ Browse and share templates with the community:
 
 ## Template Inheritance
 
-Extend existing templates:
+Extend existing templates to build on common configurations:
 
 ```xml
 <template extends="base-react">
@@ -113,6 +113,65 @@ The child template inherits:
 - Base schema structure
 - Variables (can be overridden)
 - Validation rules (can be overridden)
+
+### Multiple Inheritance
+
+Templates can extend multiple base templates by using comma-separated values:
+
+```xml
+<template extends="base-react, typescript-config, testing-setup">
+  <folder name="src">
+    <!-- Your custom structure -->
+  </folder>
+</template>
+```
+
+When extending multiple templates:
+- Schema structures are merged in order (left to right)
+- Variables from later templates override earlier ones
+- Validation rules are merged (later rules override conflicts)
+
+### Variable Merging
+
+Variables from base templates are automatically available in child templates:
+
+```xml
+<!-- Base template defines PROJECT_NAME and AUTHOR -->
+<template extends="base-project">
+  <!-- PROJECT_NAME and AUTHOR are available here -->
+  <file name="README.md">
+# %PROJECT_NAME%
+By %AUTHOR%
+  </file>
+</template>
+```
+
+You can override inherited variable defaults by defining them in your template's variables.
+
+### Hooks Accumulation
+
+Post-create hooks from all inherited templates are combined and run in order:
+
+```xml
+<!-- If base-react has: npm install -->
+<!-- If testing-setup has: npm test -->
+<template extends="base-react, testing-setup">
+  <hooks>
+    <post-create>npm run build</post-create>
+  </hooks>
+</template>
+<!-- Result: npm install → npm test → npm run build -->
+```
+
+### Circular Dependency Detection
+
+Structure Creator automatically detects and prevents circular inheritance:
+
+```xml
+<!-- This would cause an error -->
+<template name="a" extends="b" />
+<template name="b" extends="a" />
+```
 
 ## Best Practices
 

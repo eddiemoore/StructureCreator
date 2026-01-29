@@ -114,6 +114,20 @@ Download content from a URL:
 <file name="tsconfig.json" url="https://example.com/tsconfig.json" />
 ```
 
+#### SVG Files
+
+SVG files are treated as text/XML and fully support variable substitution:
+
+```xml
+<file name="logo.svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <text x="50" y="50" text-anchor="middle">%PROJECT_NAME%</text>
+</svg>
+</file>
+```
+
+This makes SVGs ideal for creating dynamic logos, icons, or diagrams with project-specific text or values.
+
 #### File Generators
 
 Generate binary files directly without needing external sources:

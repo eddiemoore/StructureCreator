@@ -129,7 +129,15 @@ Returns the character count of the value.
 
 ## Date Formats
 
-The built-in `%DATE%` variable supports format strings as transforms.
+The built-in `%DATE%` variable supports custom formatting using the `format()` transform.
+
+### Syntax
+
+Use `%DATE:format(PATTERN)%` to format dates:
+
+```xml
+<file name="log-%DATE:format(YYYY-MM-DD)%.txt" />
+```
 
 ### Format Tokens
 
@@ -147,13 +155,13 @@ The built-in `%DATE%` variable supports format strings as transforms.
 
 ```xml
 <!-- ISO date: 2024-01-15 -->
-<file name="log-%DATE:YYYY-MM-DD%.txt" />
+<file name="log-%DATE:format(YYYY-MM-DD)%.txt" />
 
 <!-- Readable date: Jan 15, 2024 -->
-<file name="report-%DATE:MMM D, YYYY%.md" />
+<file name="report-%DATE:format(MMM D, YYYY)%.md" />
 
 <!-- Year-month: 2024-01 -->
-<folder name="archive-%DATE:YYYY-MM%" />
+<folder name="archive-%DATE:format(YYYY-MM)%" />
 ```
 
 ## Built-in Variables
@@ -177,6 +185,27 @@ Transforms cannot be chained. Use the single most appropriate transform for your
 
 <!-- ✗ Not supported -->
 <file name="%NAME:lowercase:kebab-case%.ts" />
+```
+
+## Transform Aliases
+
+For convenience, most transforms have shorter aliases you can use:
+
+| Full Name | Alias |
+|-----------|-------|
+| `uppercase` | `upper` |
+| `lowercase` | `lower` |
+| `camelCase` | `camel` |
+| `PascalCase` | `pascal` |
+| `kebab-case` | `kebab` |
+| `snake_case` | `snake` |
+| `plural` | `pluralize` |
+| `length` | `len` |
+
+```xml
+<!-- These are equivalent -->
+<file name="%NAME:uppercase%.txt" />
+<file name="%NAME:upper%.txt" />
 ```
 
 ## Usage Examples
