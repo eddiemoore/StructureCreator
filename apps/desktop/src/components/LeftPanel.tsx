@@ -180,6 +180,8 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
   const [previewLoading, setPreviewLoading] = useState(false);
   const hoverEnterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverLeaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parsedTreesRef = useRef<Map<string, SchemaTree>>(parsedTrees);
+  parsedTreesRef.current = parsedTrees;
 
   // Refs for click-away detection
   const validationPopoverRef = useRef<HTMLDivElement>(null);
@@ -212,8 +214,8 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
 
   // Helper to get or parse a schema tree for a template
   const getOrParseTree = useCallback(async (templateId: string, schemaXml: string): Promise<SchemaTree | null> => {
-    // Check cache first
-    const cached = parsedTrees.get(templateId);
+    // Check cache first (use ref to avoid stale closure)
+    const cached = parsedTreesRef.current.get(templateId);
     if (cached) return cached;
 
     try {
@@ -225,7 +227,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
       console.error("Failed to parse template schema:", e);
       return null;
     }
-  }, [parsedTrees]);
+  }, []);
 
   // Hover handlers for template preview
   const handleTemplateMouseEnter = useCallback((e: React.MouseEvent, template: Template) => {
@@ -297,6 +299,18 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
 
   const handleClosePreviewModal = useCallback(() => {
     setPreviewModalTemplate(null);
+  }, []);
+
+  // Cleanup hover timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverEnterTimeoutRef.current) {
+        clearTimeout(hoverEnterTimeoutRef.current);
+      }
+      if (hoverLeaveTimeoutRef.current) {
+        clearTimeout(hoverLeaveTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Load templates, tags, and recent projects
@@ -1543,16 +1557,19 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
       />
 
       {/* Hover preview popover */}
-      {hoveredTemplateId && hoveredAnchorEl && (
-        <TemplateHoverPreview
-          template={templates.find(t => t.id === hoveredTemplateId)!}
-          schemaTree={parsedTrees.get(hoveredTemplateId) || null}
-          isLoading={previewLoading}
-          anchorEl={hoveredAnchorEl}
-          onMouseEnter={handleHoverPreviewMouseEnter}
-          onMouseLeave={handleHoverPreviewMouseLeave}
-        />
-      )}
+      {(() => {
+        const hoveredTemplate = hoveredTemplateId ? templates.find(t => t.id === hoveredTemplateId) : null;
+        return hoveredTemplate && hoveredAnchorEl ? (
+          <TemplateHoverPreview
+            template={hoveredTemplate}
+            schemaTree={parsedTrees.get(hoveredTemplateId!) || null}
+            isLoading={previewLoading}
+            anchorEl={hoveredAnchorEl}
+            onMouseEnter={handleHoverPreviewMouseEnter}
+            onMouseLeave={handleHoverPreviewMouseLeave}
+          />
+        ) : null;
+      })()}
 
       {/* Full preview modal */}
       <TemplatePreviewModal
