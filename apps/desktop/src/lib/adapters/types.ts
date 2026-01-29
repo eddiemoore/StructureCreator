@@ -194,6 +194,12 @@ export interface SchemaAdapter {
    * Export SchemaTree back to XML string.
    */
   exportSchemaXml(tree: SchemaTree): Promise<string>;
+
+  /**
+   * Extract user-defined variable names from schema content.
+   * Returns variable names like "%NAME%", "%VERSION%", excluding built-in variables.
+   */
+  extractVariables(content: string): Promise<string[]>;
 }
 
 // ============================================================================

@@ -31,7 +31,7 @@ import { IndexedDBAdapter } from "./indexeddb";
 import { WebFileSystemAdapter, getHandleRegistry } from "./filesystem";
 import { parseSchema, exportSchemaXml, scanDirectoryToSchema } from "./schema-parser";
 import { createStructureFromTree, generateDiffPreview } from "./structure-creator";
-import { validateVariables as validateVars } from "./transforms";
+import { validateVariables as validateVars, extractVariablesFromContent } from "./transforms";
 import { WebTemplateImportExportAdapter } from "./template-io";
 import { scanZipToSchema } from "./zip-utils";
 
@@ -213,6 +213,10 @@ class WebSchemaAdapter implements SchemaAdapter {
 
   async exportSchemaXml(tree: SchemaTree): Promise<string> {
     return exportSchemaXml(tree);
+  }
+
+  async extractVariables(content: string): Promise<string[]> {
+    return extractVariablesFromContent(content);
   }
 }
 

@@ -17,6 +17,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
+/// Built-in variables that should not be extracted as user-defined variables
+const BUILTIN_VARIABLES: &[&str] = &["%DATE%", "%YEAR%", "%MONTH%", "%DAY%", "%PROJECT_NAME%"];
+
 /// Pre-compiled regex for variable references - compiled once at first use
 static VAR_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"%([A-Za-z_][A-Za-z0-9_]*)(?::([a-zA-Z_-]+)(?:\(([^)]*)\))?)?%")
@@ -121,6 +124,66 @@ pub fn apply_transform(value: &str, transform: &Transform) -> String {
         Transform::Length => value.chars().count().to_string(),
         Transform::DateFormat(fmt) => format_date(value, fmt),
     }
+}
+
+/// Check if a variable name (without % delimiters) is all uppercase.
+/// This distinguishes user-defined variables (%PROJECT_NAME%) from repeat loop variables (%i%, %item%).
+fn is_uppercase_variable(name: &str) -> bool {
+    name.chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
+}
+
+/// Regex for condition variables in if/else blocks: var="VARNAME" or var='VARNAME'
+static CONDITION_VAR_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"<(?:if|else)\s+var\s*=\s*["']([A-Za-z_][A-Za-z0-9_]*)["']"#)
+        .expect("Invalid condition variable regex - this is a bug")
+});
+
+/// Extract unique user-defined variable names from text content.
+/// Returns a list of base variable names (e.g., "%NAME%", "%VERSION%") found in the text,
+/// excluding built-in variables like %DATE%, %YEAR%, %MONTH%, %DAY%, %PROJECT_NAME%.
+///
+/// Detects variables from:
+/// - %VAR% patterns in names, content, URLs
+/// - <if var="VAR"> and <else var="VAR"> condition attributes
+///
+/// Only UPPERCASE variables are detected - lowercase variables (like %i% or %item% in repeat blocks)
+/// are ignored as they are typically loop variables, not user-defined.
+///
+/// Variables with transformations (e.g., %NAME:uppercase%) are extracted as their base name (%NAME%).
+pub fn extract_variables_from_content(content: &str) -> Vec<String> {
+    let refs = find_variable_refs(content);
+    let mut seen = HashSet::new();
+    let mut variables = Vec::new();
+
+    // Extract %VAR% pattern variables
+    for var_ref in refs {
+        let base_name = &var_ref.base_name;
+        // Extract name without % delimiters to check case
+        let name_only = base_name.trim_matches('%');
+
+        // Only include uppercase variables (not loop variables like %i% or %item%)
+        if is_uppercase_variable(name_only)
+            && !BUILTIN_VARIABLES.contains(&base_name.as_str())
+            && seen.insert(base_name.clone())
+        {
+            variables.push(base_name.clone());
+        }
+    }
+
+    // Extract condition variables from <if var="..."> and <else var="...">
+    for cap in CONDITION_VAR_REGEX.captures_iter(content) {
+        let var_name = cap.get(1).unwrap().as_str();
+
+        // Only include uppercase condition variables
+        if is_uppercase_variable(var_name) {
+            let base_name = format!("%{}%", var_name);
+            if !BUILTIN_VARIABLES.contains(&base_name.as_str()) && seen.insert(base_name.clone()) {
+                variables.push(base_name);
+            }
+        }
+    }
+
+    variables
 }
 
 /// Substitute all variables in text, applying transformations as needed.
@@ -737,5 +800,132 @@ mod tests {
         // January doesn't contain MM, but this tests the mechanism
         let result = substitute_variables("%DATE:format(MMMM-MM-DD)%", &vars);
         assert_eq!(result, "January-01-15");
+    }
+
+    #[test]
+    fn test_extract_variables_from_content() {
+        let content = r#"
+            <folder name="%PROJECT_NAME%">
+                <file name="%AUTHOR%-readme.md" />
+                <file name="%VERSION%.txt" />
+                <file name="%AUTHOR:uppercase%.txt" />
+                <file name="%DATE%.log" />
+            </folder>
+        "#;
+
+        let vars = extract_variables_from_content(content);
+
+        // Should include user-defined variables (without duplicates)
+        assert!(vars.contains(&"%AUTHOR%".to_string()));
+        assert!(vars.contains(&"%VERSION%".to_string()));
+
+        // Should NOT include built-in variables
+        assert!(!vars.contains(&"%PROJECT_NAME%".to_string()));
+        assert!(!vars.contains(&"%DATE%".to_string()));
+        assert!(!vars.contains(&"%YEAR%".to_string()));
+        assert!(!vars.contains(&"%MONTH%".to_string()));
+        assert!(!vars.contains(&"%DAY%".to_string()));
+
+        // %AUTHOR:uppercase% should extract as %AUTHOR% (no duplicates)
+        assert_eq!(vars.iter().filter(|v| *v == "%AUTHOR%").count(), 1);
+    }
+
+    #[test]
+    fn test_extract_variables_empty_content() {
+        let vars = extract_variables_from_content("no variables here");
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn test_extract_variables_only_builtins() {
+        let content = "%DATE% %YEAR% %MONTH% %DAY% %PROJECT_NAME%";
+        let vars = extract_variables_from_content(content);
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn test_extract_variables_ignores_lowercase_loop_variables() {
+        // Repeat blocks use lowercase variables like %i%, %item%, %idx%
+        // These should NOT be detected as user-defined variables
+        let content = r#"
+            <repeat count="3" var="i">
+                <file name="%NAME%_%i%.txt" />
+            </repeat>
+            <repeat items="foo,bar" var="item">
+                <folder name="%item%">
+                    <file name="%AUTHOR%.md" />
+                </folder>
+            </repeat>
+        "#;
+
+        let vars = extract_variables_from_content(content);
+
+        // Should include UPPERCASE user-defined variables
+        assert!(vars.contains(&"%NAME%".to_string()));
+        assert!(vars.contains(&"%AUTHOR%".to_string()));
+
+        // Should NOT include lowercase loop variables
+        assert!(!vars.contains(&"%i%".to_string()));
+        assert!(!vars.contains(&"%item%".to_string()));
+
+        // Should have exactly 2 variables
+        assert_eq!(vars.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_variables_mixed_case_ignored() {
+        // Mixed case variables should also be ignored (only UPPERCASE detected)
+        let content = "%UserName% %userName% %USERNAME%";
+        let vars = extract_variables_from_content(content);
+
+        // Only fully uppercase should be included
+        assert!(vars.contains(&"%USERNAME%".to_string()));
+        assert!(!vars.contains(&"%UserName%".to_string()));
+        assert!(!vars.contains(&"%userName%".to_string()));
+        assert_eq!(vars.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_variables_from_if_else_conditions() {
+        // Variables in <if var="..."> and <else var="..."> should be detected
+        let content = r#"
+            <folder name="%PROJECT_NAME%">
+                <repeat count="3" as="n">
+                    <folder name="chapter_%n%">
+                        <file name="content.md" />
+                        <if var="INCLUDE_TESTS">
+                            <file name="test.spec.ts" />
+                        </if>
+                        <else var="SKIP_TESTS">
+                            <file name="no-tests.txt" />
+                        </else>
+                    </folder>
+                </repeat>
+                <if var="ADD_README">
+                    <file name="README.md" />
+                </if>
+            </folder>
+        "#;
+
+        let vars = extract_variables_from_content(content);
+
+        // Should include condition variables
+        assert!(vars.contains(&"%INCLUDE_TESTS%".to_string()));
+        assert!(vars.contains(&"%SKIP_TESTS%".to_string()));
+        assert!(vars.contains(&"%ADD_README%".to_string()));
+
+        // Should NOT include built-in or loop variables
+        assert!(!vars.contains(&"%PROJECT_NAME%".to_string()));
+        assert!(!vars.contains(&"%n%".to_string()));
+
+        assert_eq!(vars.len(), 3);
+    }
+
+    #[test]
+    fn test_extract_variables_if_condition_lowercase_ignored() {
+        // Lowercase condition variables should be ignored (unusual but possible)
+        let content = r#"<if var="debugMode"><file name="debug.log" /></if>"#;
+        let vars = extract_variables_from_content(content);
+        assert!(vars.is_empty());
     }
 }

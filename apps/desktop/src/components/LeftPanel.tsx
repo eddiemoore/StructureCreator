@@ -134,6 +134,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
     updateVariable,
     addVariable,
     removeVariable,
+    mergeDetectedVariables,
     updateVariableValidation,
     setVariables,
     setTemplates,
@@ -325,6 +326,10 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
         setVariables(loadedVariables);
       }
 
+      // Detect and merge variables that may not be in template's saved variables
+      const detectedVars = await api.schema.extractVariables(template.schema_xml);
+      mergeDetectedVariables(detectedVars);
+
       loadData(); // Refresh to update use count
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
@@ -334,7 +339,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
         details: errorMessage,
       });
     }
-  }, [setSchemaPath, setSchemaContent, setSchemaTree, logInheritanceResolved, setVariables, loadData, addLog, openWizard]);
+  }, [setSchemaPath, setSchemaContent, setSchemaTree, logInheritanceResolved, setVariables, mergeDetectedVariables, loadData, addLog, openWizard]);
 
   const handleToggleFavorite = async (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
@@ -513,6 +518,10 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
               }));
               setVariables(loadedVariables);
             }
+
+            // Extract and merge detected variables from schema
+            const detectedVars = await api.schema.extractVariables(content);
+            mergeDetectedVariables(detectedVars);
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e);
             addLog({
@@ -554,6 +563,11 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
         try {
           const tree = await api.schema.scanFolder(path);
           setSchemaTree(tree);
+
+          // For folder scans, export XML first then extract variables
+          const xml = await api.schema.exportSchemaXml(tree);
+          const detectedVars = await api.schema.extractVariables(xml);
+          mergeDetectedVariables(detectedVars);
         } catch (e: unknown) {
           const errorMessage = e instanceof Error ? e.message : String(e);
           addLog({
