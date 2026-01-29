@@ -32,6 +32,12 @@ export function Header() {
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
+          <a
+            href="/app/"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+          >
+            Web App
+          </a>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
