@@ -348,18 +348,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
 
       // Also update existing variables with definitions if they don't have them yet
+      let hasUpdates = false;
       const updatedVariables = state.variables.map((v) => {
         const def = defMap.get(v.name);
         if (!def) return v;
 
-        // Only apply definition if the variable doesn't already have these fields
+        // Check if any fields need to be applied
+        const needsDescription = !v.description && def.description;
+        const needsPlaceholder = !v.placeholder && def.placeholder;
+        const needsExample = !v.example && def.example;
+        const needsValidation = def.required || def.pattern || def.minLength !== undefined || def.maxLength !== undefined;
+
+        // Only create a new object if we actually need to update something
+        if (!needsDescription && !needsPlaceholder && !needsExample && !needsValidation) {
+          return v;
+        }
+
+        hasUpdates = true;
         const updated: Variable = { ...v };
-        if (!v.description && def.description) updated.description = def.description;
-        if (!v.placeholder && def.placeholder) updated.placeholder = def.placeholder;
-        if (!v.example && def.example) updated.example = def.example;
+        if (needsDescription) updated.description = def.description;
+        if (needsPlaceholder) updated.placeholder = def.placeholder;
+        if (needsExample) updated.example = def.example;
 
         // Merge validation rules
-        if (def.required || def.pattern || def.minLength !== undefined || def.maxLength !== undefined) {
+        if (needsValidation) {
           updated.validation = {
             ...v.validation,
             required: v.validation?.required ?? def.required,
@@ -372,7 +384,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         return updated;
       });
 
-      if (newVariables.length === 0 && updatedVariables.every((v, i) => v === state.variables[i])) {
+      if (newVariables.length === 0 && !hasUpdates) {
         return state;
       }
 

@@ -176,5 +176,39 @@ describe("appStore variable handling", () => {
       expect(state.variables[0].name).toBe("%UNMATCHED_VAR%");
       expect(state.variables[0].description).toBeUndefined();
     });
+
+    it("returns same state when no changes needed", () => {
+      // Set up existing variable that already has all definition fields
+      const existing: Variable[] = [
+        {
+          name: "%CLIENT_NAME%",
+          value: "My Client",
+          description: "Already has description",
+          placeholder: "Already has placeholder",
+          example: "Already has example",
+        },
+      ];
+      useAppStore.getState().setVariables(existing);
+
+      const stateBefore = useAppStore.getState();
+      const variablesBefore = stateBefore.variables;
+
+      // Merge with definitions that don't add anything new
+      const definitions: VariableDefinition[] = [
+        {
+          name: "CLIENT_NAME",
+          description: "Definition description",
+          placeholder: "Definition placeholder",
+          example: "Definition example",
+        },
+      ];
+
+      // Call with the same variable name (already exists) and definitions that won't add new fields
+      useAppStore.getState().mergeDetectedVariables(["%CLIENT_NAME%"], definitions);
+
+      const stateAfter = useAppStore.getState();
+      // Variables array should be the same reference (optimization working)
+      expect(stateAfter.variables).toBe(variablesBefore);
+    });
   });
 });
