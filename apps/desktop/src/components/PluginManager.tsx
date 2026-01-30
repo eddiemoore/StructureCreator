@@ -223,7 +223,7 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
         title="Uninstall Plugin"
         message={`Are you sure you want to uninstall "${pluginToUninstall?.name}"? This cannot be undone.`}
         confirmLabel="Uninstall"
-        variant="danger"
+        isDangerous
       />
     </div>
   );
