@@ -271,7 +271,7 @@ pub fn uninstall_plugin(plugin_path: &PathBuf) -> Result<(), PluginError> {
     Ok(())
 }
 
-/// Recursively copy a directory
+/// Recursively copy a directory, handling symlinks properly
 fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
 
@@ -280,7 +280,34 @@ fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> std::io::Result<()> {
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
 
-        if src_path.is_dir() {
+        // Use symlink_metadata to not follow symlinks
+        let metadata = fs::symlink_metadata(&src_path)?;
+        let file_type = metadata.file_type();
+
+        if file_type.is_symlink() {
+            // Copy symlink as symlink (Unix) or copy target (Windows)
+            #[cfg(unix)]
+            {
+                let target = fs::read_link(&src_path)?;
+                std::os::unix::fs::symlink(&target, &dst_path)?;
+            }
+            #[cfg(windows)]
+            {
+                // On Windows, copy the target file/dir instead of creating symlink
+                // (symlinks require elevated privileges on Windows)
+                let target = fs::read_link(&src_path)?;
+                let resolved = if target.is_absolute() {
+                    target
+                } else {
+                    src_path.parent().unwrap_or(src).join(&target)
+                };
+                if resolved.is_dir() {
+                    copy_dir_recursive(&resolved, &dst_path)?;
+                } else if resolved.exists() {
+                    fs::copy(&resolved, &dst_path)?;
+                }
+            }
+        } else if file_type.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
             fs::copy(&src_path, &dst_path)?;

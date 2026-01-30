@@ -194,6 +194,11 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
           )}
         </div>
 
+        {/* Security notice */}
+        <div className="mx-5 mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-mac text-mac-xs text-yellow-200/80">
+          <strong>Security note:</strong> Plugins run with full app permissions. Only install plugins from sources you trust.
+        </div>
+
         {/* Footer */}
         <div className="px-5 py-4 border-t border-border-muted flex justify-between items-center">
           <button

@@ -60,12 +60,23 @@ function formatHeader(lines, style) {
  */
 function hasExistingHeader(content) {
   const trimmed = content.trimStart();
-  // Check for common header patterns
-  return (
-    trimmed.startsWith('/**') && trimmed.includes('Copyright') ||
-    trimmed.startsWith('/*') && trimmed.includes('License') ||
-    trimmed.startsWith('//') && trimmed.includes('Copyright')
-  );
+  const lowerTrimmed = trimmed.toLowerCase();
+
+  // Check for common header patterns (case-insensitive for keywords)
+  const hasCommentStart =
+    trimmed.startsWith('/**') ||
+    trimmed.startsWith('/*') ||
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('#') ||      // Python, Shell, YAML
+    trimmed.startsWith('--') ||     // SQL, Lua
+    trimmed.startsWith('<!--');     // HTML, XML
+
+  const hasLicenseKeyword =
+    lowerTrimmed.includes('copyright') ||
+    lowerTrimmed.includes('license') ||
+    lowerTrimmed.includes('spdx-license-identifier');
+
+  return hasCommentStart && hasLicenseKeyword;
 }
 
 export default {
