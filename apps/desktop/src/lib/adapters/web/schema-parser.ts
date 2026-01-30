@@ -124,10 +124,16 @@ const parseVariableDefinitions = (element: Element): VariableDefinition[] | unde
 
     // Support both camelCase and kebab-case
     const minLength = varEl.getAttribute("minLength") || varEl.getAttribute("min-length");
-    if (minLength) def.minLength = parseInt(minLength, 10);
+    if (minLength) {
+      const parsed = parseInt(minLength, 10);
+      if (!isNaN(parsed)) def.minLength = parsed;
+    }
 
     const maxLength = varEl.getAttribute("maxLength") || varEl.getAttribute("max-length");
-    if (maxLength) def.maxLength = parseInt(maxLength, 10);
+    if (maxLength) {
+      const parsed = parseInt(maxLength, 10);
+      if (!isNaN(parsed)) def.maxLength = parsed;
+    }
 
     definitions.push(def);
   }

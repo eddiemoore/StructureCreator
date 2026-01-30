@@ -237,9 +237,9 @@ describe("parseSchema", () => {
 
       const tree = parseSchema(xml);
 
-      // parseInt returns NaN for invalid strings, which becomes undefined
-      expect(tree.variableDefinitions![0].minLength).toBeNaN();
-      expect(tree.variableDefinitions![0].maxLength).toBeNaN();
+      // Invalid values are ignored (undefined rather than NaN)
+      expect(tree.variableDefinitions![0].minLength).toBeUndefined();
+      expect(tree.variableDefinitions![0].maxLength).toBeUndefined();
     });
   });
 
