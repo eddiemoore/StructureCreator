@@ -20,7 +20,7 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [importExportModalOpen, setImportExportModalOpen] = useState(false);
-  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, setWatchAutoCreate, wizardState } = useAppStore();
+  const { setSettings, setOutputPath, setProjectName, createNewSchema, showDiffModal, schemaContent, setWatchAutoCreate, wizardState, setPlugins } = useAppStore();
   const { checkForUpdates } = useUpdater();
 
   // Ref for search input (passed to LeftPanel)
@@ -149,6 +149,17 @@ function App() {
       }
       if (newSettings.defaultProjectName) {
         setProjectName(newSettings.defaultProjectName);
+      }
+
+      // Load plugins (Tauri only - sync from filesystem)
+      if (api.isTauri()) {
+        try {
+          const plugins = await api.plugin.syncPlugins();
+          setPlugins(plugins);
+        } catch (pluginError) {
+          console.warn("Failed to load plugins:", pluginError);
+          // Non-fatal - app continues without plugins
+        }
       }
     } catch (e) {
       console.error("Failed to load settings:", e);

@@ -296,16 +296,20 @@ export const RightPanel = () => {
 
       let result: CreateResult;
 
-      if (effectiveContent) {
-        result = await api.structureCreator.createStructure(effectiveContent, {
+      // Use tree-based creation when plugins have processed the tree
+      // This ensures plugin modifications (like headers) are included
+      const useTreeCreation = treeToCreate && (treeToCreate !== effectiveTree || !effectiveContent);
+
+      if (useTreeCreation) {
+        result = await api.structureCreator.createStructureFromTree(treeToCreate, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,
           overwrite,
           projectName,
         });
-      } else if (treeToCreate) {
-        result = await api.structureCreator.createStructureFromTree(treeToCreate, {
+      } else if (effectiveContent) {
+        result = await api.structureCreator.createStructure(effectiveContent, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,

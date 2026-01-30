@@ -18,6 +18,7 @@
  */
 
 import type { Plugin, SchemaTree, SchemaNode } from "../../types/schema";
+import { api } from "../api";
 
 /**
  * Context passed to plugin processors.
@@ -39,6 +40,7 @@ export interface ProcessorContext {
 interface LoadedPlugin {
   plugin: Plugin;
   module: PluginModule;
+  blobUrl?: string; // Track blob URL for cleanup
 }
 
 /**
@@ -59,7 +61,7 @@ export class PluginRuntime {
 
   /**
    * Load a plugin from the filesystem.
-   * In Tauri, we use dynamic import with file:// URLs.
+   * Reads the plugin code via Tauri fs API and loads it as a blob URL module.
    */
   async loadPlugin(plugin: Plugin): Promise<void> {
     if (this.loadedPlugins.has(plugin.id)) {
@@ -70,26 +72,41 @@ export class PluginRuntime {
       // Construct the path to the main file
       const mainPath = `${plugin.path}/index.js`;
 
-      // Use dynamic import with file:// URL
-      // Note: This requires appropriate CSP settings in Tauri
-      const fileUrl = `file://${mainPath}`;
+      console.log(`Loading plugin ${plugin.name} from ${mainPath}`);
 
-      // Dynamic import of ES module
-      const module = await import(/* @vite-ignore */ fileUrl);
-      const pluginModule = module.default as PluginModule;
+      // Read the plugin code using the file system adapter
+      const code = await api.fileSystem.readTextFile(mainPath);
 
-      // Validate the module has required exports
-      if (!pluginModule || typeof pluginModule.process !== "function") {
-        throw new Error("Plugin must export default object with process function");
+      // Create a blob URL from the code
+      // This allows us to dynamically import the module
+      const blob = new Blob([code], { type: "application/javascript" });
+      const blobUrl = URL.createObjectURL(blob);
+
+      try {
+        // Dynamic import of the blob URL
+        const module = await import(/* @vite-ignore */ blobUrl);
+        const pluginModule = module.default as PluginModule;
+
+        // Validate the module has required exports
+        if (!pluginModule || typeof pluginModule.process !== "function") {
+          throw new Error("Plugin must export default object with process function");
+        }
+
+        console.log(`Plugin ${plugin.name} loaded successfully`);
+
+        this.loadedPlugins.set(plugin.id, {
+          plugin,
+          module: pluginModule,
+          blobUrl,
+        });
+
+        // Clear any previous error
+        this.loadErrors.delete(plugin.id);
+      } catch (importError) {
+        // Clean up blob URL on import failure
+        URL.revokeObjectURL(blobUrl);
+        throw importError;
       }
-
-      this.loadedPlugins.set(plugin.id, {
-        plugin,
-        module: pluginModule,
-      });
-
-      // Clear any previous error
-      this.loadErrors.delete(plugin.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to load plugin ${plugin.name}:`, message);
@@ -106,13 +123,25 @@ export class PluginRuntime {
       (p) => p.isEnabled && p.capabilities.includes("file-processor")
     );
 
+    console.log(`Loading ${fileProcessors.length} file processor plugin(s)`);
+
     await Promise.all(fileProcessors.map((p) => this.loadPlugin(p)));
+
+    // Log any errors
+    const errors = this.getLoadErrors();
+    if (errors.size > 0) {
+      console.warn("Plugin load errors:", Object.fromEntries(errors));
+    }
   }
 
   /**
    * Unload a plugin.
    */
   unloadPlugin(pluginId: string): void {
+    const loaded = this.loadedPlugins.get(pluginId);
+    if (loaded?.blobUrl) {
+      URL.revokeObjectURL(loaded.blobUrl);
+    }
     this.loadedPlugins.delete(pluginId);
     this.loadErrors.delete(pluginId);
   }
@@ -121,6 +150,12 @@ export class PluginRuntime {
    * Unload all plugins.
    */
   unloadAll(): void {
+    // Revoke all blob URLs
+    for (const loaded of this.loadedPlugins.values()) {
+      if (loaded.blobUrl) {
+        URL.revokeObjectURL(loaded.blobUrl);
+      }
+    }
     this.loadedPlugins.clear();
     this.loadErrors.clear();
   }
@@ -162,6 +197,7 @@ export class PluginRuntime {
 
     for (const { plugin, module } of processors) {
       try {
+        console.log(`Processing ${context.filePath} with plugin ${plugin.name}`);
         const processed = await module.process(result, context);
         if (typeof processed === "string") {
           result = processed;
@@ -205,6 +241,32 @@ function getExtension(filePath: string): string {
 }
 
 /**
+ * Pre-fetch URL content for files so plugins can process them.
+ * This fetches the content and stores it in node.content, clearing node.url
+ * so that Rust uses our pre-fetched content instead of fetching again.
+ */
+async function prefetchUrlContent(node: SchemaNode): Promise<void> {
+  if (node.type === "file" && node.url && !node.content) {
+    try {
+      const response = await fetch(node.url);
+      if (response.ok) {
+        node.content = await response.text();
+        // Clear URL so Rust uses the content we provide
+        node.url = undefined;
+      }
+    } catch (error) {
+      console.warn(`Failed to prefetch ${node.url}:`, error);
+      // Leave url intact - Rust will handle it
+    }
+  }
+
+  // Recurse to children
+  if (node.children) {
+    await Promise.all(node.children.map(prefetchUrlContent));
+  }
+}
+
+/**
  * Process a schema tree's file contents through plugins.
  * This modifies file content in-place before structure creation.
  *
@@ -227,6 +289,9 @@ export async function processTreeContent(
   // Deep clone the tree to avoid mutating the original
   const processedTree: SchemaTree = JSON.parse(JSON.stringify(tree));
 
+  // Pre-fetch URL content so plugins can process it
+  await prefetchUrlContent(processedTree.root);
+
   // Process all file nodes recursively
   await processNode(processedTree.root, "", runtime, variables, projectName);
 
@@ -245,8 +310,8 @@ async function processNode(
 ): Promise<void> {
   const currentPath = parentPath ? `${parentPath}/${node.name}` : node.name;
 
-  // If this is a file with inline content, process it
-  if (node.type === "file" && node.content && !node.url && !node.generate) {
+  // Process all files (with content, empty, or URL-fetched) except generated files
+  if (node.type === "file" && !node.generate) {
     const extension = getExtension(node.name);
 
     if (extension) {
@@ -257,7 +322,7 @@ async function processNode(
         projectName,
       };
 
-      node.content = await runtime.processFile(node.content, context);
+      node.content = await runtime.processFile(node.content || "", context);
     }
   }
 
