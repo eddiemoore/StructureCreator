@@ -330,7 +330,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
       // Detect and merge variables that may not be in template's saved variables
       try {
         const detectedVars = await api.schema.extractVariables(template.schema_xml);
-        mergeDetectedVariables(detectedVars);
+        mergeDetectedVariables(detectedVars, result.tree.variableDefinitions);
       } catch {
         // Variable extraction is non-critical - don't block template loading
       }
@@ -497,7 +497,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
             try {
               const xml = await api.schema.exportSchemaXml(tree);
               const detectedVars = await api.schema.extractVariables(xml);
-              mergeDetectedVariables(detectedVars);
+              mergeDetectedVariables(detectedVars, tree.variableDefinitions);
             } catch {
               // Variable extraction is non-critical - don't block schema loading
             }
@@ -536,7 +536,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
             // Extract and merge detected variables from schema
             try {
               const detectedVars = await api.schema.extractVariables(content);
-              mergeDetectedVariables(detectedVars);
+              mergeDetectedVariables(detectedVars, result.tree.variableDefinitions);
             } catch {
               // Variable extraction is non-critical - don't block schema loading
             }
@@ -586,7 +586,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
           try {
             const xml = await api.schema.exportSchemaXml(tree);
             const detectedVars = await api.schema.extractVariables(xml);
-            mergeDetectedVariables(detectedVars);
+            mergeDetectedVariables(detectedVars, tree.variableDefinitions);
           } catch {
             // Variable extraction is non-critical - don't block folder scanning
           }
@@ -840,7 +840,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                     value={variable.value}
                     onChange={(e) => updateVariable(variable.name, e.target.value)}
                     className="flex-1 min-w-0 bg-transparent font-mono text-mac-xs text-text-primary outline-none border-b border-transparent focus:border-accent transition-colors"
-                    placeholder="Enter value..."
+                    placeholder={variable.placeholder || "Enter value..."}
                     aria-invalid={varError ? "true" : undefined}
                     aria-describedby={varError ? `error-${variable.name}` : undefined}
                   />
@@ -870,6 +870,17 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
                     <XIcon size={12} />
                   </button>
                 </div>
+                {/* Helper text (description and example) */}
+                {(variable.description || variable.example) && (
+                  <div className="mt-1 ml-2 text-mac-xs text-text-muted space-y-0.5">
+                    {variable.description && <p>{variable.description}</p>}
+                    {variable.example && (
+                      <p className="text-text-tertiary">
+                        Example: <span className="font-mono">{variable.example}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
                 {varError && (
                   <p
                     id={`error-${variable.name}`}

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Example: Variable Helper Text
+
+  This schema demonstrates how to define variables with descriptions,
+  placeholders, and examples to help users understand what values to enter.
+-->
+<structure>
+  <!-- Variable definitions provide context for each variable -->
+  <variables>
+    <variable name="CLIENT_NAME"
+              description="The client's company name used for project folder and documentation"
+              placeholder="Enter client name"
+              example="Acme Corp"
+              required="true" />
+
+    <variable name="PROJECT_TYPE"
+              description="Type of project (e.g., website, mobile-app, api)"
+              placeholder="Enter project type"
+              example="website"
+              pattern="^[a-z-]+$"
+              minLength="3"
+              maxLength="30" />
+
+    <variable name="AUTHOR_NAME"
+              description="Name of the project author for package.json and license"
+              placeholder="Your name"
+              example="Jane Developer" />
+
+    <variable name="YEAR"
+              description="Copyright year for license file"
+              example="2024"
+              pattern="^\d{4}$" />
+  </variables>
+
+  <!-- The schema structure uses the defined variables -->
+  <folder name="%CLIENT_NAME%-%PROJECT_TYPE%">
+    <file name="README.md"><![CDATA[# %CLIENT_NAME% - %PROJECT_TYPE%
+
+Created by %AUTHOR_NAME%
+
+## About
+
+This is a %PROJECT_TYPE% project for %CLIENT_NAME%.
+
+## License
+
+Copyright %YEAR% %AUTHOR_NAME%
+]]></file>
+
+    <file name="package.json"><![CDATA[{
+  "name": "%CLIENT_NAME|kebab-case%-%PROJECT_TYPE%",
+  "version": "1.0.0",
+  "description": "A %PROJECT_TYPE% project for %CLIENT_NAME%",
+  "author": "%AUTHOR_NAME%",
+  "license": "MIT"
+}
+]]></file>
+
+    <folder name="src">
+      <file name="index.ts"><![CDATA[/**
+ * %CLIENT_NAME% - %PROJECT_TYPE%
+ * Author: %AUTHOR_NAME%
+ */
+
+export const projectName = '%CLIENT_NAME%';
+export const projectType = '%PROJECT_TYPE%';
+]]></file>
+    </folder>
+
+    <file name="LICENSE"><![CDATA[MIT License
+
+Copyright (c) %YEAR% %AUTHOR_NAME%
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+]]></file>
+  </folder>
+</structure>
