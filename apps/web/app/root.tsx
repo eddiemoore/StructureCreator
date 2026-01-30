@@ -12,6 +12,7 @@ import type { Route } from "./+types/root";
 import "./styles/tailwind.css";
 
 export const links: LinksFunction = () => [
+  { rel: "icon", href: "/folder-plus.svg", type: "image/svg+xml" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
