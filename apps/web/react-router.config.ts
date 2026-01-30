@@ -20,6 +20,9 @@ export default {
       "/docs/guides/wizard",
       "/docs/guides/generators",
       "/docs/guides/binary-variables",
+      "/docs/plugins",
+      "/docs/plugins/creating-plugins",
+      "/docs/plugins/api",
       "/docs/api/schema",
       "/docs/api/transforms",
       // Note: /templates requires D1 database at runtime, cannot be prerendered

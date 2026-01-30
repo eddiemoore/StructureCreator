@@ -1,0 +1,79 @@
+---
+title: Plugins Overview
+description: Extend Structure Creator with plugins that process file content during structure creation.
+---
+
+# Plugins
+
+Plugins extend Structure Creator by processing file content during structure creation. They're JavaScript modules that can transform, augment, or validate file content before it's written to disk.
+
+## Use Cases
+
+- **License Headers**: Automatically add copyright notices to source files
+- **Content Transformation**: Convert content formats or apply formatting rules
+- **Template Injection**: Insert timestamps, author info, or project metadata
+- **Code Standards**: Enforce coding conventions or add boilerplate
+
+## How Plugins Work
+
+When you create a project structure, plugins run in the frontend before files are sent to the backend for writing:
+
+1. Structure Creator parses your schema
+2. For each file, matching plugins are found by file extension
+3. Plugins process file content sequentially (by load order)
+4. The processed content is written to disk
+
+Plugins only process **text files**. Binary files (images, databases) and files with `generate` attributes are not processed.
+
+## Plugin Manager
+
+Access the Plugin Manager from the sidebar to manage your installed plugins.
+
+### Installing Plugins
+
+1. Click **Install Plugin** in the Plugin Manager
+2. Select a folder containing a valid plugin (must have `plugin.json` and `index.js`)
+3. The plugin is copied to your plugins directory and registered
+
+### Enabling/Disabling Plugins
+
+Toggle the switch next to any plugin to enable or disable it. Disabled plugins won't process files during structure creation.
+
+### Uninstalling Plugins
+
+Click the trash icon next to a plugin to remove it from your system.
+
+## Plugin Directory
+
+Plugins are stored in:
+
+```
+~/.structure-creator/plugins/
+```
+
+Each plugin lives in its own subdirectory:
+
+```
+~/.structure-creator/plugins/
+├── license-header/
+│   ├── plugin.json
+│   └── index.js
+└── timestamp-plugin/
+    ├── plugin.json
+    └── index.js
+```
+
+## Security Warning
+
+Plugins run with **full application permissions** in the frontend context. Only install plugins from trusted sources. A malicious plugin could:
+
+- Read or modify file content
+- Access environment variables passed to the app
+- Make network requests
+
+Review plugin code before installation, especially the `index.js` file.
+
+## Next Steps
+
+- [Creating Plugins](/docs/plugins/creating-plugins) - Learn how to build your own plugins
+- [API Reference](/docs/plugins/api) - Complete plugin API documentation

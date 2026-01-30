@@ -1,0 +1,257 @@
+---
+title: Plugin API Reference
+description: Complete API reference for Structure Creator plugins.
+---
+
+# Plugin API Reference
+
+Complete reference for the Structure Creator plugin system.
+
+## Manifest Schema
+
+The `plugin.json` manifest file describes your plugin.
+
+### Fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | `string` | Yes | — | Unique plugin identifier. Must not contain `/`, `\`, or null characters. |
+| `version` | `string` | Yes | — | Semantic version (e.g., `"1.0.0"`) |
+| `description` | `string` | No | — | Human-readable description |
+| `capabilities` | `string[]` | No | `[]` | Plugin capabilities (see below) |
+| `fileTypes` | `string[]` | No | `[]` | File extensions to process (e.g., `[".ts", ".js"]`) |
+| `main` | `string` | No | `"index.js"` | Entry point file path |
+| `author` | `string` | No | — | Plugin author |
+| `license` | `string` | No | — | License identifier |
+
+### Example
+
+```json
+{
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "description": "Does something useful",
+  "capabilities": ["file-processor"],
+  "fileTypes": [".ts", ".js"],
+  "main": "index.js",
+  "author": "Your Name",
+  "license": "MIT"
+}
+```
+
+## Capabilities
+
+Capabilities define what hooks a plugin provides. Currently implemented:
+
+| Capability | Description |
+|------------|-------------|
+| `file-processor` | Processes file content during structure creation |
+
+### Reserved Capabilities
+
+The following capabilities are defined but not yet implemented:
+
+| Capability | Description |
+|------------|-------------|
+| `variable-transformer` | Transforms variable values |
+| `schema-validator` | Validates schemas before creation |
+| `post-create-hook` | Runs after structure creation |
+
+## PluginModule Interface
+
+The plugin's JavaScript module must export a default object implementing this interface:
+
+```typescript
+interface PluginModule {
+  /** Plugin name (for logging) */
+  name: string;
+
+  /** File extensions to process (overrides manifest if provided) */
+  fileTypes?: string[];
+
+  /** Process file content */
+  process: (content: string, context: ProcessorContext) => string | Promise<string>;
+}
+```
+
+### Example Implementation
+
+```javascript
+export default {
+  name: 'my-plugin',
+  fileTypes: ['.ts', '.js'],
+
+  process(content, context) {
+    // Transform and return content
+    return content;
+  }
+};
+```
+
+## ProcessorContext Interface
+
+Context passed to the `process` function:
+
+```typescript
+interface ProcessorContext {
+  /** Relative file path (e.g., "src/index.ts") */
+  filePath: string;
+
+  /** File extension with dot (e.g., ".ts") */
+  extension: string;
+
+  /** Variable values from the Variables panel */
+  variables: Record<string, string>;
+
+  /** Project name from the UI */
+  projectName?: string;
+}
+```
+
+### Accessing Variables
+
+Variables from the UI are available in `context.variables`:
+
+```javascript
+process(content, context) {
+  const author = context.variables.AUTHOR || 'Unknown';
+  const year = context.variables.YEAR || new Date().getFullYear();
+  // ...
+}
+```
+
+## Built-in Variables
+
+These variables are always available in `context.variables`:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `PROJECT_NAME` | Project name from the UI | `my-project` |
+| `DATE` | Current date (ISO format) | `2024-01-15` |
+| `YEAR` | Current year | `2024` |
+| `MONTH` | Current month (01-12) | `01` |
+| `DAY` | Current day (01-31) | `15` |
+
+User-defined variables from the Variables panel are also available.
+
+## File Type Matching
+
+### Extension Matching
+
+File types are matched by extension (case-insensitive):
+
+```javascript
+// Matches files ending in .ts, .tsx
+fileTypes: ['.ts', '.tsx']
+```
+
+### Wildcard
+
+Use `"*"` to match all text files:
+
+```javascript
+// Matches all text files
+fileTypes: ['*']
+```
+
+### Priority
+
+If both the manifest and module define `fileTypes`, the **module's value takes precedence** at runtime.
+
+## Error Handling
+
+### Plugin Load Errors
+
+If a plugin fails to load (invalid manifest, missing files, syntax errors):
+
+- An error is logged to the console
+- The plugin is skipped
+- Other plugins continue to work
+
+### Process Errors
+
+If `process()` throws an error:
+
+- The error is logged to the console
+- The file content is passed unchanged to the next plugin
+- Structure creation continues
+
+```javascript
+process(content, context) {
+  try {
+    // Your processing logic
+    return transformedContent;
+  } catch (error) {
+    console.error('Plugin error:', error);
+    return content; // Return original on error
+  }
+}
+```
+
+## Manifest Validation
+
+The following validation rules are enforced when loading plugins:
+
+| Rule | Error |
+|------|-------|
+| `name` is empty | "Plugin name cannot be empty" |
+| `name` contains `/`, `\`, or `\0` | "Plugin name contains invalid characters" |
+| `version` is empty | "Plugin version cannot be empty" |
+| Unknown capability | "Unknown capability: X" |
+| Main file doesn't exist | "Main entry point not found: X" |
+
+## Plugin Lifecycle
+
+### Loading
+
+1. On app start, Structure Creator scans `~/.structure-creator/plugins/`
+2. For each directory with a valid `plugin.json`:
+   - Manifest is parsed and validated
+   - Plugin is registered in the database
+3. When structure creation starts:
+   - Enabled file-processor plugins are loaded
+   - Plugin code (`index.js`) is dynamically imported
+
+### Processing
+
+1. For each file in the schema:
+   - Matching plugins are found by extension
+   - Plugins are sorted by `loadOrder`
+   - Content is passed through each plugin's `process()` function
+   - Final content is sent to the backend
+
+### Unloading
+
+- Plugins are unloaded when no longer needed
+- Blob URLs used for dynamic imports are revoked
+
+## Plugin Storage
+
+### Directory Structure
+
+```
+~/.structure-creator/plugins/
+└── plugin-name/
+    ├── plugin.json    # Required: manifest
+    ├── index.js       # Required: entry point (or custom main)
+    └── ...            # Optional: additional files
+```
+
+### Database
+
+Plugin metadata is stored in SQLite (`~/.structure-creator.db`):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT | Unique identifier |
+| `name` | TEXT | Plugin name |
+| `version` | TEXT | Version string |
+| `description` | TEXT | Description |
+| `path` | TEXT | Filesystem path |
+| `capabilities` | TEXT | JSON array of capabilities |
+| `file_types` | TEXT | JSON array of file types |
+| `user_settings` | TEXT | JSON object of user settings |
+| `is_enabled` | INTEGER | 1 if enabled, 0 if disabled |
+| `load_order` | INTEGER | Processing order (lower = first) |
+| `installed_at` | TEXT | ISO timestamp |
+| `updated_at` | TEXT | ISO timestamp |

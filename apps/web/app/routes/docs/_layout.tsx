@@ -22,6 +22,14 @@ const sidebarNav = [
     ],
   },
   {
+    title: "Plugins",
+    items: [
+      { to: "/docs/plugins", label: "Overview", end: true },
+      { to: "/docs/plugins/creating-plugins", label: "Creating Plugins" },
+      { to: "/docs/plugins/api", label: "API Reference" },
+    ],
+  },
+  {
     title: "Reference",
     items: [
       { to: "/docs/api/schema", label: "Schema Reference" },

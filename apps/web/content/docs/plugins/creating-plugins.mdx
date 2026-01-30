@@ -1,0 +1,254 @@
+---
+title: Creating Plugins
+description: Learn how to create plugins for Structure Creator.
+---
+
+# Creating Plugins
+
+This guide walks you through creating a plugin for Structure Creator.
+
+## Plugin Structure
+
+A plugin consists of two files in a directory:
+
+```
+my-plugin/
+├── plugin.json    # Manifest describing the plugin
+└── index.js       # Plugin code (ES module)
+```
+
+## Manifest (plugin.json)
+
+The manifest describes your plugin:
+
+```json
+{
+  "name": "license-header",
+  "version": "1.0.0",
+  "description": "Adds license headers to source files",
+  "capabilities": ["file-processor"],
+  "fileTypes": [".ts", ".js", ".tsx", ".jsx"],
+  "main": "index.js",
+  "author": "Your Name",
+  "license": "MIT"
+}
+```
+
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique plugin identifier. Used as the directory name. No slashes or special characters. |
+| `version` | Semantic version string (e.g., `"1.0.0"`) |
+
+### Optional Fields
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `description` | — | Human-readable description shown in the Plugin Manager |
+| `capabilities` | `[]` | Array of capabilities this plugin provides |
+| `fileTypes` | `[]` | File extensions to process (e.g., `[".ts", ".js"]`) |
+| `main` | `"index.js"` | Entry point file relative to plugin directory |
+| `author` | — | Plugin author name |
+| `license` | — | License identifier (e.g., `"MIT"`) |
+
+## Plugin Code (index.js)
+
+The plugin code is an ES module that exports a default object with a `process` function:
+
+```javascript
+export default {
+  name: 'license-header',
+  fileTypes: ['.ts', '.js', '.tsx', '.jsx'],
+
+  process(content, context) {
+    const header = `// Copyright ${context.variables.YEAR || new Date().getFullYear()} ${context.variables.AUTHOR || 'Unknown'}
+// Licensed under MIT
+
+`;
+    return header + content;
+  }
+};
+```
+
+### The `process` Function
+
+```javascript
+process(content, context) → string | Promise<string>
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `content` | `string` | Current file content (may be empty string for empty files) |
+| `context` | `ProcessorContext` | Information about the file being processed |
+
+The function must return the processed content as a string. You can also return a Promise that resolves to a string for async operations.
+
+### ProcessorContext
+
+```typescript
+interface ProcessorContext {
+  filePath: string;              // Relative path (e.g., "src/components/Button.tsx")
+  extension: string;             // File extension (e.g., ".tsx")
+  variables: Record<string, string>;  // Variable values from the UI
+  projectName?: string;          // Project name from the UI
+}
+```
+
+## File Type Matching
+
+Plugins match files by extension. Specify extensions in either:
+
+1. **Manifest** (`fileTypes` in `plugin.json`) — Used when plugin first loads
+2. **Module** (`fileTypes` in `index.js`) — Takes precedence at runtime
+
+Use the wildcard `"*"` to match all text files:
+
+```json
+{
+  "fileTypes": ["*"]
+}
+```
+
+Specific extensions only match those files:
+
+```json
+{
+  "fileTypes": [".ts", ".tsx", ".js", ".jsx"]
+}
+```
+
+## Processing Order
+
+When multiple plugins match a file:
+
+1. Plugins are sorted by `loadOrder` (lower numbers first)
+2. Each plugin's output becomes the next plugin's input
+3. The final output is written to disk
+
+Default `loadOrder` is 0. Set it in the Plugin Manager to control execution order.
+
+## Async Processing
+
+Plugins can perform async operations:
+
+```javascript
+export default {
+  name: 'api-comment',
+  fileTypes: ['.ts'],
+
+  async process(content, context) {
+    // Async operations are supported
+    const metadata = await fetchMetadata(context.filePath);
+    return `// Generated: ${metadata.timestamp}\n${content}`;
+  }
+};
+```
+
+## Complete Examples
+
+### License Header Plugin
+
+Adds a configurable license header to source files:
+
+```javascript
+// index.js
+export default {
+  name: 'license-header',
+  fileTypes: ['.ts', '.js', '.tsx', '.jsx', '.css', '.scss'],
+
+  process(content, context) {
+    // Skip if content already has a license header
+    if (content.startsWith('/*') || content.startsWith('//')) {
+      return content;
+    }
+
+    const year = context.variables.YEAR || new Date().getFullYear();
+    const author = context.variables.AUTHOR || 'Unknown';
+    const license = context.variables.LICENSE || 'MIT';
+
+    const header = `/**
+ * Copyright (c) ${year} ${author}
+ * Licensed under the ${license} License
+ */
+
+`;
+    return header + content;
+  }
+};
+```
+
+```json
+{
+  "name": "license-header",
+  "version": "1.0.0",
+  "description": "Adds license headers to source files",
+  "capabilities": ["file-processor"],
+  "fileTypes": [".ts", ".js", ".tsx", ".jsx", ".css", ".scss"]
+}
+```
+
+### Timestamp Plugin
+
+Adds creation timestamp to files:
+
+```javascript
+// index.js
+export default {
+  name: 'timestamp',
+  fileTypes: ['*'],
+
+  process(content, context) {
+    const timestamp = new Date().toISOString();
+    const ext = context.extension;
+
+    // Choose comment style based on file type
+    let comment;
+    if (['.ts', '.js', '.tsx', '.jsx', '.css', '.scss', '.java', '.c', '.cpp'].includes(ext)) {
+      comment = `// Generated: ${timestamp}\n`;
+    } else if (['.py', '.rb', '.sh', '.yaml', '.yml'].includes(ext)) {
+      comment = `# Generated: ${timestamp}\n`;
+    } else if (['.html', '.xml', '.svg'].includes(ext)) {
+      comment = `<!-- Generated: ${timestamp} -->\n`;
+    } else {
+      return content; // Unknown file type, don't modify
+    }
+
+    return comment + content;
+  }
+};
+```
+
+```json
+{
+  "name": "timestamp",
+  "version": "1.0.0",
+  "description": "Adds creation timestamp to files",
+  "capabilities": ["file-processor"],
+  "fileTypes": ["*"]
+}
+```
+
+## Testing Your Plugin
+
+1. Create your plugin directory with `plugin.json` and `index.js`
+2. Open Structure Creator and go to the Plugin Manager
+3. Click **Install Plugin** and select your plugin directory
+4. Enable the plugin
+5. Create a test structure with files matching your `fileTypes`
+6. Check the output files to verify your plugin worked
+
+### Debugging
+
+- Check the browser DevTools console for plugin errors
+- Plugins that throw errors log a warning but don't stop other plugins
+- Use `console.log` in your plugin to debug values
+
+## Best Practices
+
+1. **Be non-destructive**: Don't remove content unless that's the explicit purpose
+2. **Handle empty files**: `content` may be an empty string
+3. **Check for existing headers**: Don't add duplicate headers
+4. **Use variables**: Leverage context variables for configurability
+5. **Document your plugin**: Include a README with usage instructions
+6. **Test edge cases**: Empty files, binary content, unusual extensions
