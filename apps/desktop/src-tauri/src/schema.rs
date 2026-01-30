@@ -56,12 +56,37 @@ pub struct SchemaHooks {
     pub post_create: Vec<String>,
 }
 
+/// Variable definition parsed from <variable> elements in the schema.
+/// Provides metadata like description, placeholder, and validation rules.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VariableDefinition {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SchemaTree {
     pub root: SchemaNode,
     pub stats: SchemaStats,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hooks: Option<SchemaHooks>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variable_definitions: Option<Vec<VariableDefinition>>,
 }
 
 pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::error::Error>> {
@@ -73,6 +98,8 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
     let mut hooks: Option<SchemaHooks> = None;
     let mut in_hooks = false;
     let mut current_hook_text = String::new();
+    let mut variable_definitions: Vec<VariableDefinition> = Vec::new();
+    let mut in_variables = false;
 
     loop {
         match reader.read_event() {
@@ -85,6 +112,8 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
                     if hooks.is_none() {
                         hooks = Some(SchemaHooks::default());
                     }
+                } else if tag_name == "variables" {
+                    in_variables = true;
                 } else if in_hooks && tag_name == "post-create" {
                     current_hook_text.clear();
                 } else if let Some(node) = parse_element(e)? {
@@ -116,6 +145,19 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
                     continue;
                 }
 
+                // Skip empty variables tag
+                if tag_name == "variables" {
+                    continue;
+                }
+
+                // Parse variable definitions inside <variables> block
+                if in_variables && tag_name == "variable" {
+                    if let Some(var_def) = parse_variable_definition(e)? {
+                        variable_definitions.push(var_def);
+                    }
+                    continue;
+                }
+
                 if let Some(node) = parse_element(e)? {
                     // Self-closing tag - add to parent
                     if let Some((parent, _)) = stack.last_mut() {
@@ -131,6 +173,8 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
 
                 if tag_name == "hooks" {
                     in_hooks = false;
+                } else if tag_name == "variables" {
+                    in_variables = false;
                 } else if in_hooks && tag_name == "post-create" {
                     let cmd = current_hook_text.trim().to_string();
                     if !cmd.is_empty() {
@@ -159,8 +203,60 @@ pub fn parse_xml_schema(xml_content: &str) -> Result<SchemaTree, Box<dyn std::er
 
     let root = root.ok_or("No root element found")?;
     let stats = calculate_stats(&root);
+    let variable_definitions = if variable_definitions.is_empty() {
+        None
+    } else {
+        Some(variable_definitions)
+    };
 
-    Ok(SchemaTree { root, stats, hooks })
+    Ok(SchemaTree { root, stats, hooks, variable_definitions })
+}
+
+/// Parse a <variable> element into a VariableDefinition
+fn parse_variable_definition(e: &BytesStart) -> Result<Option<VariableDefinition>, Box<dyn std::error::Error>> {
+    let mut name: Option<String> = None;
+    let mut description: Option<String> = None;
+    let mut placeholder: Option<String> = None;
+    let mut example: Option<String> = None;
+    let mut required: Option<bool> = None;
+    let mut pattern: Option<String> = None;
+    let mut min_length: Option<usize> = None;
+    let mut max_length: Option<usize> = None;
+
+    for attr in e.attributes() {
+        let attr = attr?;
+        let key = std::str::from_utf8(attr.key.as_ref())?;
+        let value = std::str::from_utf8(&attr.value)?;
+
+        match key {
+            "name" => name = Some(value.to_string()),
+            "description" => description = Some(value.to_string()),
+            "placeholder" => placeholder = Some(value.to_string()),
+            "example" => example = Some(value.to_string()),
+            "required" => required = Some(value.to_lowercase() == "true"),
+            "pattern" => pattern = Some(value.to_string()),
+            "minLength" | "min-length" => min_length = value.parse().ok(),
+            "maxLength" | "max-length" => max_length = value.parse().ok(),
+            _ => {}
+        }
+    }
+
+    // Name is required for a variable definition
+    let name = match name {
+        Some(n) if !n.is_empty() => n,
+        _ => return Ok(None),
+    };
+
+    Ok(Some(VariableDefinition {
+        name,
+        description,
+        placeholder,
+        example,
+        required,
+        pattern,
+        min_length,
+        max_length,
+    }))
 }
 
 fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::error::Error>> {
@@ -293,7 +389,7 @@ pub fn scan_folder_to_schema(folder_path: &str) -> Result<SchemaTree, Box<dyn st
     let root = scan_directory(path, &folder_name)?;
     let stats = calculate_stats(&root);
 
-    Ok(SchemaTree { root, stats, hooks: None })
+    Ok(SchemaTree { root, stats, hooks: None, variable_definitions: None })
 }
 
 fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<dyn std::error::Error>> {
@@ -671,7 +767,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
     let root = build_tree_from_map(&tree_map, "", root_name);
     let stats = calculate_stats(&root);
 
-    Ok(SchemaTree { root, stats, hooks: None })
+    Ok(SchemaTree { root, stats, hooks: None, variable_definitions: None })
 }
 
 /// Check if a ZIP entry should be skipped
@@ -1226,6 +1322,7 @@ where
             root,
             stats,
             hooks: accumulated_hooks,
+            variable_definitions: None,
         },
         merged_variables: accumulated_variables,
         merged_variable_validation: accumulated_validation,
@@ -1327,6 +1424,7 @@ mod tests {
             hooks: Some(SchemaHooks {
                 post_create: vec!["npm install".to_string(), "git init".to_string()],
             }),
+            variable_definitions: None,
         };
 
         let xml = schema_to_xml(&tree);
@@ -1360,6 +1458,7 @@ mod tests {
                 generated: 0,
             },
             hooks: None,
+            variable_definitions: None,
         };
 
         let xml = schema_to_xml(&tree);
@@ -1467,6 +1566,7 @@ mod tests {
                 generated: 0,
             },
             hooks: None,
+            variable_definitions: None,
         };
 
         let xml = schema_to_xml(&tree);
@@ -2208,6 +2308,7 @@ export const Component = () => {
                 generated: 0,
             },
             hooks: None,
+            variable_definitions: None,
         };
 
         let xml = schema_to_xml(&tree);
@@ -2453,6 +2554,7 @@ export const EXTENSION = true;
                 generated: 0,
             },
             hooks: None,
+            variable_definitions: None,
         };
 
         let xml = schema_to_xml(&tree);
@@ -2472,5 +2574,87 @@ export const EXTENSION = true;
         let children = tree.root.children.as_ref().unwrap();
         assert_eq!(children[0].template, Some(true));
         assert_eq!(children[1].template, Some(true));
+    }
+
+    #[test]
+    fn test_parse_variable_definitions() {
+        let xml = r#"
+            <structure>
+                <variables>
+                    <variable name="CLIENT_NAME"
+                              description="The client's company name"
+                              placeholder="Enter client name"
+                              example="Acme Corp"
+                              required="true" />
+                    <variable name="PROJECT_TYPE"
+                              description="Type of project"
+                              example="Marketing Campaign"
+                              minLength="3"
+                              maxLength="50"
+                              pattern="^[a-zA-Z]+" />
+                </variables>
+                <folder name="%CLIENT_NAME%">
+                    <file name="README.md" />
+                </folder>
+            </structure>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+
+        // Check that variable definitions were parsed
+        assert!(tree.variable_definitions.is_some());
+        let defs = tree.variable_definitions.unwrap();
+        assert_eq!(defs.len(), 2);
+
+        // Check first variable definition
+        let client_def = &defs[0];
+        assert_eq!(client_def.name, "CLIENT_NAME");
+        assert_eq!(client_def.description, Some("The client's company name".to_string()));
+        assert_eq!(client_def.placeholder, Some("Enter client name".to_string()));
+        assert_eq!(client_def.example, Some("Acme Corp".to_string()));
+        assert_eq!(client_def.required, Some(true));
+        assert!(client_def.pattern.is_none());
+        assert!(client_def.min_length.is_none());
+        assert!(client_def.max_length.is_none());
+
+        // Check second variable definition
+        let project_def = &defs[1];
+        assert_eq!(project_def.name, "PROJECT_TYPE");
+        assert_eq!(project_def.description, Some("Type of project".to_string()));
+        assert_eq!(project_def.example, Some("Marketing Campaign".to_string()));
+        assert_eq!(project_def.min_length, Some(3));
+        assert_eq!(project_def.max_length, Some(50));
+        assert_eq!(project_def.pattern, Some("^[a-zA-Z]+".to_string()));
+        assert!(project_def.required.is_none());
+        assert!(project_def.placeholder.is_none());
+
+        // Check that the schema structure was also parsed
+        assert_eq!(tree.root.node_type, "folder");
+        assert_eq!(tree.root.name, "%CLIENT_NAME%");
+    }
+
+    #[test]
+    fn test_parse_schema_without_variable_definitions() {
+        let xml = r#"
+            <folder name="project">
+                <file name="README.md" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert!(tree.variable_definitions.is_none());
+    }
+
+    #[test]
+    fn test_parse_empty_variables_block() {
+        let xml = r#"
+            <structure>
+                <variables />
+                <folder name="project" />
+            </structure>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        assert!(tree.variable_definitions.is_none());
     }
 }

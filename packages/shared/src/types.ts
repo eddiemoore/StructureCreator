@@ -74,6 +74,29 @@ export interface SchemaHooks {
   post_create: string[];
 }
 
+/**
+ * Variable definition parsed from <variable> elements in the schema.
+ * Provides metadata like description, placeholder, and validation rules.
+ */
+export interface VariableDefinition {
+  /** Variable name (without % delimiters) */
+  name: string;
+  /** Description explaining what this variable is for */
+  description?: string;
+  /** Example text shown in empty input */
+  placeholder?: string;
+  /** Concrete example value */
+  example?: string;
+  /** Whether the variable is required */
+  required?: boolean;
+  /** Regex pattern for validation */
+  pattern?: string;
+  /** Minimum length for the value */
+  minLength?: number;
+  /** Maximum length for the value */
+  maxLength?: number;
+}
+
 export interface SchemaTree {
   root: SchemaNode;
   stats: {
@@ -84,6 +107,8 @@ export interface SchemaTree {
     generated?: number;
   };
   hooks?: SchemaHooks;
+  /** Variable definitions from <variables> block */
+  variableDefinitions?: VariableDefinition[];
 }
 
 // ============================================================================
@@ -101,6 +126,12 @@ export interface Variable {
   name: string;
   value: string;
   validation?: ValidationRule;
+  /** Description explaining what this variable is for */
+  description?: string;
+  /** Example text shown in empty input */
+  placeholder?: string;
+  /** Concrete example value */
+  example?: string;
 }
 
 export interface ValidationError {

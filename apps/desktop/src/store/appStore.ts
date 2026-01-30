@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem, EditorMode, TeamLibrary, TeamTemplate, Plugin } from "../types/schema";
+import type { AppState, CreationProgress, LogEntry, Variable, SchemaTree, SchemaNode, Template, Settings, ValidationRule, ValidationError, DiffResult, TemplateSortOption, RecentProject, UpdateState, UpdateStatus, UpdateInfo, UpdateProgress, CreatedItem, EditorMode, TeamLibrary, TeamTemplate, Plugin, VariableDefinition } from "../types/schema";
 import { DEFAULT_SETTINGS } from "../types/schema";
 import { findNode, canHaveChildren, isDescendant, removeNodesById, getIfElseGroup, moveIfElseGroupToParent } from "../utils/schemaTree";
 import { api } from "../lib/api";
@@ -307,15 +307,88 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
-  mergeDetectedVariables: (detectedVarNames: string[]) =>
+  mergeDetectedVariables: (detectedVarNames: string[], definitions?: VariableDefinition[]) =>
     set((state) => {
+      // Create a map of definitions by name (with % wrapper to match variable names)
+      const defMap = new Map<string, VariableDefinition>();
+      if (definitions) {
+        for (const def of definitions) {
+          // Variable names in state have % wrapper, definition names don't
+          defMap.set(`%${def.name}%`, def);
+        }
+      }
+
       const existingNames = new Set(state.variables.map((v) => v.name));
+
+      // Create new variables with definitions applied
       const newVariables = detectedVarNames
         .filter((name) => !existingNames.has(name))
-        .map((name) => ({ name, value: "" }));
+        .map((name) => {
+          const def = defMap.get(name);
+          const variable: Variable = { name, value: "" };
 
-      if (newVariables.length === 0) return state;
-      return { variables: [...state.variables, ...newVariables] };
+          if (def) {
+            // Apply helper text from definition
+            if (def.description) variable.description = def.description;
+            if (def.placeholder) variable.placeholder = def.placeholder;
+            if (def.example) variable.example = def.example;
+
+            // Apply validation rules from definition
+            if (def.required || def.pattern || def.minLength !== undefined || def.maxLength !== undefined) {
+              variable.validation = {
+                required: def.required,
+                pattern: def.pattern,
+                minLength: def.minLength,
+                maxLength: def.maxLength,
+              };
+            }
+          }
+
+          return variable;
+        });
+
+      // Also update existing variables with definitions if they don't have them yet
+      let hasUpdates = false;
+      const updatedVariables = state.variables.map((v) => {
+        const def = defMap.get(v.name);
+        if (!def) return v;
+
+        // Check if any fields need to be applied
+        const needsDescription = !v.description && def.description;
+        const needsPlaceholder = !v.placeholder && def.placeholder;
+        const needsExample = !v.example && def.example;
+        const needsValidation = def.required || def.pattern || def.minLength !== undefined || def.maxLength !== undefined;
+
+        // Only create a new object if we actually need to update something
+        if (!needsDescription && !needsPlaceholder && !needsExample && !needsValidation) {
+          return v;
+        }
+
+        hasUpdates = true;
+        const updated: Variable = { ...v };
+        if (needsDescription) updated.description = def.description;
+        if (needsPlaceholder) updated.placeholder = def.placeholder;
+        if (needsExample) updated.example = def.example;
+
+        // Merge validation rules
+        if (needsValidation) {
+          updated.validation = {
+            ...v.validation,
+            required: v.validation?.required ?? def.required,
+            pattern: v.validation?.pattern ?? def.pattern,
+            minLength: v.validation?.minLength ?? def.minLength,
+            maxLength: v.validation?.maxLength ?? def.maxLength,
+          };
+        }
+
+        return updated;
+      });
+
+      if (newVariables.length === 0 && !hasUpdates) {
+        return state;
+      }
+
+      return { variables: [...updatedVariables, ...newVariables] };
     }),
 
   updateVariableValidation: (

@@ -114,6 +114,49 @@ The index variable is 0-based. Use `%i_1%` for 1-based indexing.
 </repeat>
 ```
 
+### `<variables>`
+
+Container for variable definitions. Provides metadata like descriptions, placeholders, and validation rules for variables.
+
+```xml
+<variables>
+  <variable name="CLIENT_NAME"
+            description="The client's company name"
+            placeholder="Enter client name"
+            example="Acme Corp"
+            required="true" />
+</variables>
+```
+
+### `<variable>`
+
+Defines metadata for a variable. Must be inside `<variables>`.
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `name` | Yes | Variable name without `%` delimiters |
+| `description` | No | Help text shown below the input |
+| `placeholder` | No | Placeholder text for empty inputs |
+| `example` | No | Example value shown as "Example: value" |
+| `required` | No | Whether variable is required (`true`/`false`) |
+| `pattern` | No | Regex pattern for validation |
+| `minLength` | No | Minimum character length |
+| `maxLength` | No | Maximum character length |
+
+```xml
+<variables>
+  <variable name="PROJECT_TYPE"
+            description="Type of project"
+            placeholder="Enter project type"
+            example="website"
+            pattern="^[a-z-]+$"
+            minLength="3"
+            maxLength="30" />
+</variables>
+```
+
+See [Variables & Transforms](/docs/guides/variables#variable-definitions) for more details.
+
 ### `<hooks>`
 
 Container for lifecycle hooks.
@@ -162,30 +205,44 @@ See [Variables & Transforms](/docs/guides/variables) for details on transforms, 
 ## Complete Example
 
 ```xml
-<folder name="%PROJECT_NAME%">
-  <folder name="src">
-    <folder name="components">
-      <repeat count="%NUM_COMPONENTS%" as="i">
-        <folder name="Component%i_1%">
-          <file name="index.tsx" />
-          <if var="INCLUDE_STYLES">
-            <file name="styles.css" />
-          </if>
-        </folder>
-      </repeat>
-    </folder>
-    <file name="main.tsx" />
-  </folder>
+<structure>
+  <variables>
+    <variable name="NUM_COMPONENTS"
+              description="Number of components to generate"
+              placeholder="Enter a number"
+              example="3"
+              required="true"
+              pattern="^\d+$" />
+    <variable name="INCLUDE_STYLES"
+              description="Include CSS files for each component"
+              example="true" />
+  </variables>
 
-  <file name="package.json">
+  <folder name="%PROJECT_NAME%">
+    <folder name="src">
+      <folder name="components">
+        <repeat count="%NUM_COMPONENTS%" as="i">
+          <folder name="Component%i_1%">
+            <file name="index.tsx" />
+            <if var="INCLUDE_STYLES">
+              <file name="styles.css" />
+            </if>
+          </folder>
+        </repeat>
+      </folder>
+      <file name="main.tsx" />
+    </folder>
+
+    <file name="package.json">
 {
   "name": "%PROJECT_NAME:kebab-case%",
   "version": "1.0.0"
 }
-  </file>
+    </file>
 
-  <hooks>
-    <post-create>npm install</post-create>
-  </hooks>
-</folder>
+    <hooks>
+      <post-create>npm install</post-create>
+    </hooks>
+  </folder>
+</structure>
 ```

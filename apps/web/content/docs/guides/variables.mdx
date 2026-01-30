@@ -27,6 +27,57 @@ Variables use the `%VARIABLE_NAME%` format:
 
 Structure Creator automatically detects variables in your schema and displays them in the Variables panel. Enter values before creating your structure.
 
+## Variable Definitions
+
+Use the `<variables>` block to provide context for each variable. This helps users understand what values to enter by showing descriptions, placeholders, and examples.
+
+```xml
+<structure>
+  <variables>
+    <variable name="CLIENT_NAME"
+              description="The client's company name"
+              placeholder="Enter client name"
+              example="Acme Corp"
+              required="true" />
+    <variable name="PROJECT_TYPE"
+              description="Type of project (e.g., website, api)"
+              placeholder="Enter project type"
+              example="website"
+              pattern="^[a-z-]+$"
+              minLength="3"
+              maxLength="30" />
+  </variables>
+
+  <folder name="%CLIENT_NAME%-%PROJECT_TYPE%">
+    <file name="README.md" />
+  </folder>
+</structure>
+```
+
+### Available Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `name` | Variable name without `%` delimiters **(required)** |
+| `description` | Help text shown below the input field |
+| `placeholder` | Placeholder text shown in empty inputs |
+| `example` | Example value displayed as "Example: value" |
+| `required` | Whether the variable must have a value (`true`/`false`) |
+| `pattern` | Regex pattern for validation |
+| `minLength` | Minimum character length |
+| `maxLength` | Maximum character length |
+
+### How It Works
+
+When you define variables in the `<variables>` block:
+
+1. **Placeholder text** appears in the input field when empty
+2. **Description** displays below the input to explain what the variable is for
+3. **Example** shows a concrete value the user can reference
+4. **Validation rules** (`required`, `pattern`, `minLength`, `maxLength`) are automatically applied
+
+This is especially useful for templates shared with others, as it provides self-documenting schemas.
+
 ## Transforms
 
 Apply transformations to format variable values:

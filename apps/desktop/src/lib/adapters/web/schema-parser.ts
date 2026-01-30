@@ -10,6 +10,7 @@ import type {
   SchemaNode,
   SchemaHooks,
   NodeType,
+  VariableDefinition,
 } from "../../../types/schema";
 import { MAX_DIRECTORY_SCAN_DEPTH, MAX_SCHEMA_DEPTH, validatePathComponent, calculateSchemaStats } from "./constants";
 
@@ -51,6 +52,9 @@ export const parseSchema = (content: string): SchemaTree => {
   // Parse hooks if present
   const hooks = parseHooks(rootElement);
 
+  // Parse variable definitions if present
+  const variableDefinitions = parseVariableDefinitions(rootElement);
+
   // Parse the root node with depth tracking
   const root = parseNode(rootElement, 0);
 
@@ -61,6 +65,7 @@ export const parseSchema = (content: string): SchemaTree => {
     root,
     stats,
     hooks,
+    variableDefinitions,
   };
 };
 
@@ -84,6 +89,56 @@ const parseHooks = (element: Element): SchemaHooks | undefined => {
   if (postCreate.length === 0) return undefined;
 
   return { post_create: postCreate };
+};
+
+/**
+ * Parse variable definitions from the schema.
+ */
+const parseVariableDefinitions = (element: Element): VariableDefinition[] | undefined => {
+  const variablesElement = element.querySelector("variables");
+  if (!variablesElement) return undefined;
+
+  const definitions: VariableDefinition[] = [];
+  const variableElements = variablesElement.querySelectorAll("variable");
+
+  for (const varEl of variableElements) {
+    const name = varEl.getAttribute("name");
+    if (!name) continue; // Name is required
+
+    const def: VariableDefinition = { name };
+
+    const description = varEl.getAttribute("description");
+    if (description) def.description = description;
+
+    const placeholder = varEl.getAttribute("placeholder");
+    if (placeholder) def.placeholder = placeholder;
+
+    const example = varEl.getAttribute("example");
+    if (example) def.example = example;
+
+    const required = varEl.getAttribute("required");
+    if (required) def.required = required.toLowerCase() === "true";
+
+    const pattern = varEl.getAttribute("pattern");
+    if (pattern) def.pattern = pattern;
+
+    // Support both camelCase and kebab-case
+    const minLength = varEl.getAttribute("minLength") || varEl.getAttribute("min-length");
+    if (minLength) {
+      const parsed = parseInt(minLength, 10);
+      if (!isNaN(parsed)) def.minLength = parsed;
+    }
+
+    const maxLength = varEl.getAttribute("maxLength") || varEl.getAttribute("max-length");
+    if (maxLength) {
+      const parsed = parseInt(maxLength, 10);
+      if (!isNaN(parsed)) def.maxLength = parsed;
+    }
+
+    definitions.push(def);
+  }
+
+  return definitions.length > 0 ? definitions : undefined;
 };
 
 /**
@@ -227,11 +282,11 @@ const parseNode = (element: Element, depth: number): SchemaNode => {
     node.repeat_as = isValidRepeatAs(repeatAs) ? repeatAs : "i";
   }
 
-  // Parse children (skip hooks and extends elements)
+  // Parse children (skip hooks, extends, and variables elements)
   const children: SchemaNode[] = [];
   for (const child of element.children) {
     const childTag = child.tagName.toLowerCase();
-    if (childTag !== "hooks" && childTag !== "extends") {
+    if (childTag !== "hooks" && childTag !== "extends" && childTag !== "variables") {
       children.push(parseNode(child, depth + 1));
     }
   }

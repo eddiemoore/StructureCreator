@@ -17,6 +17,7 @@ export type {
   SchemaNode,
   SchemaHooks,
   SchemaTree,
+  VariableDefinition,
   ValidationRule,
   Variable,
   ValidationError,
@@ -55,7 +56,7 @@ export type {
 } from '@structure-creator/shared';
 
 // Import types needed for desktop-specific types
-import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode, TeamLibrary, TeamTemplate, Plugin } from '@structure-creator/shared';
+import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode, TeamLibrary, TeamTemplate, Plugin, VariableDefinition } from '@structure-creator/shared';
 
 // ============================================================================
 // Desktop-specific Types
@@ -345,7 +346,7 @@ export interface AppState {
   updateVariable: (name: string, value: string) => void;
   addVariable: (name: string, value: string) => void;
   removeVariable: (name: string) => void;
-  mergeDetectedVariables: (detectedVarNames: string[]) => void;
+  mergeDetectedVariables: (detectedVarNames: string[], definitions?: VariableDefinition[]) => void;
   updateVariableValidation: (
     name: string,
     validation: ValidationRule | undefined

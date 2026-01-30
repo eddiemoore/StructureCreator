@@ -4985,6 +4985,7 @@ mod tests {
                     ..Default::default()
                 },
                 hooks: None,
+                variable_definitions: None,
             };
 
             // Call without any user-provided variables
@@ -5045,6 +5046,7 @@ mod tests {
                     ..Default::default()
                 },
                 hooks: None,
+                variable_definitions: None,
             };
 
             // Override %YEAR% with a custom value
@@ -5096,6 +5098,7 @@ mod tests {
                     ..Default::default()
                 },
                 hooks: None,
+                variable_definitions: None,
             };
 
             let variables = HashMap::new();
@@ -5139,6 +5142,7 @@ mod tests {
                     ..Default::default()
                 },
                 hooks: None,
+                variable_definitions: None,
             };
 
             // Provide both project_name and a user override
