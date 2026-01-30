@@ -141,8 +141,49 @@ Create project structures using XML:
 
 - **Variables**: Use `%VARIABLE_NAME%` syntax for dynamic values
 - **Built-in Variables**: `%DATE%`, `%TIME%`, `%TIMESTAMP%`
+- **Variable Helper Text**: Define descriptions, placeholders, and examples for variables
 - **File Downloads**: Add `url` attribute to download files during creation
 - **Attributes**: Support for `exportpath`, `classpath`, and custom attributes
+
+### Variable Helper Text
+
+Add a `<variables>` block to your schema to provide context for each variable:
+
+```xml
+<structure>
+  <variables>
+    <variable name="CLIENT_NAME"
+              description="The client's company name"
+              placeholder="Enter client name"
+              example="Acme Corp"
+              required="true" />
+    <variable name="PROJECT_TYPE"
+              description="Type of project (e.g., website, api)"
+              placeholder="Enter project type"
+              example="website"
+              pattern="^[a-z-]+$"
+              minLength="3"
+              maxLength="30" />
+  </variables>
+
+  <folder name="%CLIENT_NAME%-%PROJECT_TYPE%">
+    <file name="README.md" />
+  </folder>
+</structure>
+```
+
+**Supported attributes:**
+
+| Attribute | Description |
+|-----------|-------------|
+| `name` | Variable name (without `%` delimiters) - **required** |
+| `description` | Help text shown below the input field |
+| `placeholder` | Placeholder text shown in the empty input |
+| `example` | Example value displayed as "Example: value" |
+| `required` | Whether the variable must have a value (`true`/`false`) |
+| `pattern` | Regex pattern for validation |
+| `minLength` | Minimum character length |
+| `maxLength` | Maximum character length |
 
 ## Usage
 
