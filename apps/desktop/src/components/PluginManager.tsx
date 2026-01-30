@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import {
@@ -9,6 +9,7 @@ import {
   CheckIcon,
   AlertCircleIcon,
 } from "./Icons";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type { Plugin } from "../types/schema";
 
 interface PluginManagerProps {
@@ -21,6 +22,7 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
   const [installing, setInstalling] = useState(false);
   const [uninstalling, setUninstalling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pluginToUninstall, setPluginToUninstall] = useState<Plugin | null>(null);
 
   const handleInstallPlugin = async () => {
     try {
@@ -47,19 +49,22 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
     }
   };
 
-  const handleUninstallPlugin = async (plugin: Plugin) => {
-    if (!confirm(`Are you sure you want to uninstall "${plugin.name}"? This cannot be undone.`)) {
-      return;
-    }
+  const handleUninstallPlugin = (plugin: Plugin) => {
+    setPluginToUninstall(plugin);
+  };
+
+  const confirmUninstall = async () => {
+    if (!pluginToUninstall) return;
 
     try {
-      setUninstalling(plugin.id);
+      setUninstalling(pluginToUninstall.id);
       setError(null);
+      setPluginToUninstall(null);
 
-      await api.plugin.uninstallPlugin(plugin.id);
+      await api.plugin.uninstallPlugin(pluginToUninstall.id);
 
       // Update the plugins list
-      setPlugins(plugins.filter((p) => p.id !== plugin.id));
+      setPlugins(plugins.filter((p) => p.id !== pluginToUninstall.id));
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(`Failed to uninstall plugin: ${message}`);
@@ -100,23 +105,19 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
     }
   };
 
-  // Handle escape key
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+  // Set up escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
       }
-    },
-    [onClose]
-  );
+    };
 
-  // Set up escape key listener
-  useState(() => {
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      return () => document.removeEventListener("keydown", handleKeyDown);
-    }
-  });
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -208,6 +209,17 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
           </button>
         </div>
       </div>
+
+      {/* Uninstall confirmation dialog */}
+      <ConfirmDialog
+        isOpen={!!pluginToUninstall}
+        onClose={() => setPluginToUninstall(null)}
+        onConfirm={confirmUninstall}
+        title="Uninstall Plugin"
+        message={`Are you sure you want to uninstall "${pluginToUninstall?.name}"? This cannot be undone.`}
+        confirmLabel="Uninstall"
+        variant="danger"
+      />
     </div>
   );
 };

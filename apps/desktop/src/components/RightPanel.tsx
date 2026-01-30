@@ -281,7 +281,8 @@ export const RightPanel = () => {
       if (enabledFileProcessors.length > 0 && effectiveTree) {
         try {
           const runtime = getPluginRuntime();
-          await runtime.loadPlugins(enabledFileProcessors);
+          // Reload plugins to ensure we have the latest code from disk
+          await runtime.loadPlugins(enabledFileProcessors, true);
 
           if (runtime.hasProcessors()) {
             addLog({ type: "info", message: `Processing files with ${enabledFileProcessors.length} plugin(s)...` });
@@ -301,7 +302,7 @@ export const RightPanel = () => {
       const useTreeCreation = treeToCreate && (treeToCreate !== effectiveTree || !effectiveContent);
 
       if (useTreeCreation) {
-        result = await api.structureCreator.createStructureFromTree(treeToCreate, {
+        result = await api.structureCreator.createStructureFromTree(treeToCreate!, {
           outputPath: outputPath!,
           variables: varsMap,
           dryRun: isDryRun,

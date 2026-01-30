@@ -116,14 +116,25 @@ export class PluginRuntime {
 
   /**
    * Load multiple plugins.
+   * @param plugins - Plugins to load
+   * @param reload - If true, reload already-loaded plugins to get latest code from disk
    */
-  async loadPlugins(plugins: Plugin[]): Promise<void> {
+  async loadPlugins(plugins: Plugin[], reload = false): Promise<void> {
     // Only load enabled file-processor plugins
     const fileProcessors = plugins.filter(
       (p) => p.isEnabled && p.capabilities.includes("file-processor")
     );
 
     console.log(`Loading ${fileProcessors.length} file processor plugin(s)`);
+
+    // If reload is requested, unload existing plugins first
+    if (reload) {
+      for (const p of fileProcessors) {
+        if (this.loadedPlugins.has(p.id)) {
+          this.unloadPlugin(p.id);
+        }
+      }
+    }
 
     await Promise.all(fileProcessors.map((p) => this.loadPlugin(p)));
 
@@ -144,6 +155,14 @@ export class PluginRuntime {
     }
     this.loadedPlugins.delete(pluginId);
     this.loadErrors.delete(pluginId);
+  }
+
+  /**
+   * Reload a plugin from disk (useful when plugin code has changed).
+   */
+  async reloadPlugin(plugin: Plugin): Promise<void> {
+    this.unloadPlugin(plugin.id);
+    await this.loadPlugin(plugin);
   }
 
   /**
