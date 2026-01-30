@@ -214,6 +214,69 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Problem Section */}
+      <section className="relative py-24 sm:py-32">
+        <div className="section-divider mb-24" />
+
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
+              Setting up projects shouldn't feel like deja vu
+            </h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              Every new project starts the same way—creating the same folders, copying the same files, renaming the same placeholders. It's tedious, error-prone, and steals time from actual work.
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="text-center p-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-destructive/10 text-destructive mb-4">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium mb-2">Time wasted on repetition</h3>
+              <p className="text-muted-foreground text-[15px]">
+                Creating the same folder structure for every client or project adds up. What takes 10 minutes each time becomes hours over a year.
+              </p>
+            </div>
+
+            <div className="text-center p-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-destructive/10 text-destructive mb-4">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium mb-2">Inconsistent organization</h3>
+              <p className="text-muted-foreground text-[15px]">
+                Without a template, every project ends up slightly different. Missing folders, wrong naming conventions, forgotten files—chaos compounds.
+              </p>
+            </div>
+
+            <div className="text-center p-6">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-destructive/10 text-destructive mb-4">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 16.318A4.486 4.486 0 0012.016 15a4.486 4.486 0 00-3.198 1.318M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium mb-2">Onboarding friction</h3>
+              <p className="text-muted-foreground text-[15px]">
+                New team members don't know your conventions. They create structures differently, leading to confusion and extra documentation.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-16 text-center">
+            <p className="text-lg font-medium text-foreground">
+              Structure Creator eliminates all of this.
+            </p>
+            <p className="mt-2 text-muted-foreground max-w-2xl mx-auto">
+              Define your folder structure once as a template. Fill in a few variables. Get a perfectly organized project every time—in seconds, not minutes.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section className="relative py-24 sm:py-32">
         <div className="section-divider mb-24" />
