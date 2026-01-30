@@ -10,13 +10,17 @@
     "dialog:allow-save",
     "fs:default",
     "fs:allow-read",
+    "fs:allow-read-text-file",
     "fs:allow-write",
     "fs:allow-write-text-file",
     "fs:allow-exists",
     "fs:allow-mkdir",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        { "path": "**" },
+        { "path": "$HOME/.structure-creator/**" }
+      ]
     },
     "updater:default",
     "updater:allow-check",

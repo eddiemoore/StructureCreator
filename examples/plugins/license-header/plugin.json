@@ -1,0 +1,10 @@
+{
+  "name": "license-header",
+  "version": "1.0.0",
+  "description": "Adds a license header to source files during structure creation",
+  "author": "Structure Creator",
+  "license": "MIT",
+  "capabilities": ["file-processor"],
+  "fileTypes": [".ts", ".tsx", ".js", ".jsx", ".css", ".scss"],
+  "main": "index.js"
+}

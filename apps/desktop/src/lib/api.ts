@@ -32,6 +32,7 @@ export type {
   ValidationAdapter,
   TemplateImportExportAdapter,
   WatchAdapter,
+  PluginAdapter,
 } from "./adapters/types";
 
 // Global adapter instance
@@ -175,6 +176,13 @@ export const api = {
    */
   get teamLibrary() {
     return getAdapter().teamLibrary;
+  },
+
+  /**
+   * Plugin operations.
+   */
+  get plugin() {
+    return getAdapter().plugin;
   },
 };
 

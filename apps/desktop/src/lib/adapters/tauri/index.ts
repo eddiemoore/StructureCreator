@@ -27,12 +27,15 @@ import type {
   TemplateImportExportAdapter,
   WatchAdapter,
   TeamLibraryAdapter,
+  PluginAdapter,
   FileFilter,
   CreateTemplateInput,
   UpdateTemplateInput,
   CreateStructureOptions,
   CreateRecentProjectInput,
 } from "../types";
+
+import { TauriPluginAdapter } from "./plugin";
 
 import type {
   SchemaTree,
@@ -715,6 +718,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
   templateImportExport: TemplateImportExportAdapter;
   watch: WatchAdapter;
   teamLibrary: TeamLibraryAdapter;
+  plugin: PluginAdapter;
 
   constructor() {
     this.fileSystem = new TauriFileSystemAdapter();
@@ -725,6 +729,7 @@ export class TauriPlatformAdapter implements PlatformAdapter {
     this.templateImportExport = new TauriTemplateImportExportAdapter();
     this.watch = new TauriWatchAdapter();
     this.teamLibrary = new TauriTeamLibraryAdapter();
+    this.plugin = new TauriPluginAdapter();
   }
 
   async initialize(): Promise<void> {

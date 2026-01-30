@@ -335,6 +335,7 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
     use std::io::Write;
+    use std::path::PathBuf;
 
     fn create_test_sct_file(dir: &Path, name: &str, template_name: &str) -> PathBuf {
         let file_path = dir.join(format!("{}.sct", name));

@@ -1,10 +1,11 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
-import { XIcon, FolderIcon } from "./Icons";
+import { XIcon, FolderIcon, BoltIcon } from "./Icons";
 import type { ThemeMode, AccentColor, Settings } from "../types/schema";
 import { ACCENT_COLORS, DEFAULT_SETTINGS } from "../types/schema";
 import { applyTheme, applyAccentColor } from "../utils/theme";
+import { PluginManager } from "./PluginManager";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -26,7 +27,10 @@ const ACCENT_OPTIONS: { value: AccentColor; label: string }[] = [
 ];
 
 export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
-  const { settings, updateSetting } = useAppStore();
+  const { settings, updateSetting, plugins } = useAppStore();
+  const [showPluginManager, setShowPluginManager] = useState(false);
+
+  const enabledPluginCount = plugins.filter((p) => p.isEnabled).length;
 
   const saveSetting = async (key: keyof Settings, value: string | null) => {
     try {
@@ -204,6 +208,29 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
               </div>
             </div>
           </section>
+
+          {/* Plugins Section */}
+          <section>
+            <h3 className="text-mac-sm font-medium text-text-primary mb-3">Plugins</h3>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-mac-xs text-text-secondary">
+                  Extend Structure Creator with custom plugins
+                </p>
+                <p className="text-mac-xs text-text-muted mt-0.5">
+                  {plugins.length} installed, {enabledPluginCount} enabled
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPluginManager(true)}
+                className="mac-button-secondary px-4 flex items-center gap-2"
+              >
+                <BoltIcon size={14} />
+                Manage Plugins
+              </button>
+            </div>
+          </section>
         </div>
 
         {/* Footer */}
@@ -216,6 +243,12 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
           </button>
         </div>
       </div>
+
+      {/* Plugin Manager Modal */}
+      <PluginManager
+        isOpen={showPluginManager}
+        onClose={() => setShowPluginManager(false)}
+      />
     </div>
   );
 };
