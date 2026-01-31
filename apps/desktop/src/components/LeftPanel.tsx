@@ -707,6 +707,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
               <button
                 onClick={handleRemoveSchema}
                 className="w-6 h-6 flex items-center justify-center rounded-mac text-text-muted hover:bg-system-red/10 hover:text-system-red transition-colors"
+                aria-label="Remove schema"
               >
                 <XIcon size={14} />
               </button>

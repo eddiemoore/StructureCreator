@@ -1,6 +1,9 @@
 import "@testing-library/jest-dom";
 import { vi } from "vitest";
 
+// Mock scrollIntoView for jsdom
+Element.prototype.scrollIntoView = vi.fn();
+
 // Mock Tauri APIs for testing
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
