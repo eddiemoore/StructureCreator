@@ -135,11 +135,33 @@ function CodeWindow() {
   );
 }
 
-function AppleIcon() {
+function DownloadIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
     </svg>
+  );
+}
+
+function PlatformIcons() {
+  return (
+    <div className="flex items-center justify-center gap-3 mt-3">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        {/* Apple */}
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+        </svg>
+        {/* Windows */}
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+        </svg>
+        {/* Linux */}
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587.26 1.22.437 1.93.437.164 0 .328-.02.489-.057.534.14.995.37 1.485.756.484.39 1.063.672 1.726.672.164 0 .328-.02.49-.06.468-.119.752-.338 1.077-.748.356-.404.541-.852.58-1.27.02-.149.02-.27-.02-.399.02-.116.033-.234.02-.354-.02-.279-.078-.523-.174-.716.04-.149.071-.347.06-.56-.02-.317-.135-.606-.302-.836-.068-.098-.14-.18-.221-.26.02-.06.028-.127.028-.187 0-.155-.048-.336-.108-.474-.089-.275-.314-.462-.56-.582-.156-.076-.317-.116-.48-.14-.17-.02-.327-.068-.48-.068-.19-.02-.384.02-.56.068-.12-.04-.256-.08-.392-.12-.136-.08-.248-.2-.38-.32-.22-.2-.492-.468-.736-.668-.233-.193-.447-.393-.642-.614a7.043 7.043 0 01-.656-.895c-.163-.27-.27-.543-.314-.836a1.86 1.86 0 01-.02-.24c.005-.063.017-.123.032-.178.1-.444.381-.822.7-1.16.315-.341.66-.652.92-.98.4-.5.6-1.043.6-1.622 0-.259-.04-.521-.105-.769-.065-.263-.155-.5-.24-.72-.24-.58-.455-1.106-.455-1.74 0-.254.04-.518.12-.78.08-.263.24-.5.37-.72.23-.39.19-.832-.05-1.202-.24-.37-.63-.6-1.04-.72a3.32 3.32 0 00-1.2-.15z"/>
+        </svg>
+      </div>
+      <span className="text-xs text-muted-foreground">macOS, Windows & Linux</span>
+    </div>
   );
 }
 
@@ -163,7 +185,7 @@ export default function Home() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                 </span>
-                Now available for macOS
+                Available on macOS, Windows & Linux
               </div>
 
               <h1 className="animate-fade-up opacity-0 text-3xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.1]">
@@ -179,26 +201,29 @@ export default function Home() {
                 Define once, reuse forever—with smart placeholders that fill in the details.
               </p>
 
-              <div className="animate-fade-up opacity-0 delay-200 mt-10 flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
-                <a
-                  href="https://github.com/eddiemoore/structurecreator/releases"
-                  className="btn btn-primary btn-glow px-8 py-3.5 text-base font-medium rounded-xl inline-flex items-center gap-2 group"
-                >
-                  <AppleIcon />
-                  <span>Download for macOS</span>
-                  <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </a>
-                <Link
-                  to="/docs/getting-started"
-                  className="btn btn-ghost px-6 py-3 text-base font-medium rounded-xl inline-flex items-center gap-2 group"
-                >
-                  <span>Read the docs</span>
-                  <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
+              <div className="animate-fade-up opacity-0 delay-200 mt-10">
+                <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
+                  <a
+                    href="https://github.com/eddiemoore/structurecreator/releases"
+                    className="btn btn-primary btn-glow px-8 py-3.5 text-base font-medium rounded-xl inline-flex items-center gap-2 group"
+                  >
+                    <DownloadIcon />
+                    <span>Download</span>
+                    <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </a>
+                  <Link
+                    to="/docs/getting-started"
+                    className="btn btn-ghost px-6 py-3 text-base font-medium rounded-xl inline-flex items-center gap-2 group"
+                  >
+                    <span>Read the docs</span>
+                    <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                </div>
+                <PlatformIcons />
               </div>
             </div>
 
@@ -372,20 +397,23 @@ export default function Home() {
                 Download Structure Creator and set up your next project, client folder, or document template in seconds.
               </p>
 
-              <div className="mt-10 flex flex-col sm:flex-row items-center gap-4 justify-center">
-                <a
-                  href="https://github.com/eddiemoore/structurecreator/releases"
-                  className="btn btn-primary btn-glow px-8 py-3.5 text-base font-medium rounded-xl inline-flex items-center gap-2 group"
-                >
-                  <AppleIcon />
-                  <span>Download for macOS</span>
-                </a>
-                <Link
-                  to="/templates"
-                  className="btn btn-secondary px-8 py-3.5 text-base font-medium rounded-xl"
-                >
-                  Browse Templates
-                </Link>
+              <div className="mt-10">
+                <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
+                  <a
+                    href="https://github.com/eddiemoore/structurecreator/releases"
+                    className="btn btn-primary btn-glow px-8 py-3.5 text-base font-medium rounded-xl inline-flex items-center gap-2 group"
+                  >
+                    <DownloadIcon />
+                    <span>Download</span>
+                  </a>
+                  <Link
+                    to="/templates"
+                    className="btn btn-secondary px-8 py-3.5 text-base font-medium rounded-xl"
+                  >
+                    Browse Templates
+                  </Link>
+                </div>
+                <PlatformIcons />
               </div>
 
               {/* Stats */}
@@ -396,7 +424,7 @@ export default function Home() {
                 </div>
                 <div>
                   <div className="text-2xl sm:text-3xl font-semibold text-gradient">Native</div>
-                  <div className="mt-1 text-sm text-muted-foreground">macOS App</div>
+                  <div className="mt-1 text-sm text-muted-foreground">Desktop App</div>
                 </div>
                 <div>
                   <div className="text-2xl sm:text-3xl font-semibold text-gradient">Fast</div>

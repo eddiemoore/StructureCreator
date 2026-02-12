@@ -62,7 +62,15 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Structure Creator v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
+          releaseBody: |
+            See the assets below to download and install.
+
+            ### macOS Users
+            After downloading the `.dmg` file, if you see a message that the app "is damaged and can't be opened", run the following command in Terminal:
+            ```
+            xattr -cr "/Applications/Structure Creator.app"
+            ```
+            Then open the app normally. This is required because the app is not notarized with Apple.
           releaseDraft: true
           prerelease: false
           projectPath: apps/desktop
