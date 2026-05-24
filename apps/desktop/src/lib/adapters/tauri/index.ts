@@ -5,6 +5,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { toTokenKeys } from "../../../utils/variableName";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   readTextFile,
@@ -351,7 +352,7 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
     return invoke<CreateResult>("cmd_create_structure", {
       content,
       outputPath: options.outputPath,
-      variables: options.variables,
+      variables: toTokenKeys(options.variables),
       dryRun: options.dryRun,
       overwrite: options.overwrite,
       projectName: options.projectName,
@@ -365,7 +366,7 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
     return invoke<CreateResult>("cmd_create_structure_from_tree", {
       tree,
       outputPath: options.outputPath,
-      variables: options.variables,
+      variables: toTokenKeys(options.variables),
       dryRun: options.dryRun,
       overwrite: options.overwrite,
       projectName: options.projectName,
@@ -381,7 +382,7 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
     return invoke<DiffResult>("cmd_generate_diff_preview", {
       tree,
       outputPath,
-      variables,
+      variables: toTokenKeys(variables),
       overwrite,
     });
   }
@@ -407,8 +408,8 @@ class TauriValidationAdapter implements ValidationAdapter {
     rules: Record<string, ValidationRule>
   ): Promise<ValidationError[]> {
     return invoke<ValidationError[]>("cmd_validate_variables", {
-      variables,
-      rules,
+      variables: toTokenKeys(variables),
+      rules: toTokenKeys(rules),
     });
   }
 
@@ -418,7 +419,7 @@ class TauriValidationAdapter implements ValidationAdapter {
   ): Promise<SchemaValidationResult> {
     return invoke<SchemaValidationResult>("cmd_validate_schema", {
       content,
-      variables,
+      variables: toTokenKeys(variables),
     });
   }
 }

@@ -41,6 +41,7 @@ import { WebFileSystemAdapter, getHandleRegistry } from "./filesystem";
 import { parseSchema, exportSchemaXml, scanDirectoryToSchema } from "./schema-parser";
 import { createStructureFromTree, generateDiffPreview } from "./structure-creator";
 import { validateVariables as validateVars, extractVariablesFromContent } from "./transforms";
+import { toTokenKeys } from "../../../utils/variableName";
 import { WebTemplateImportExportAdapter } from "./template-io";
 import { scanZipToSchema } from "./zip-utils";
 
@@ -116,8 +117,10 @@ const injectBuiltInVariables = (
     allVariables["%PROJECT_NAME%"] = projectName;
   }
 
-  // User-provided variables override built-ins
-  for (const [key, value] of Object.entries(variables)) {
+  // User-provided variables override built-ins. They arrive as clean
+  // canonical names (ADR-0001); the web engine looks variables up by their
+  // token form, so tokenize the keys at this adapter boundary.
+  for (const [key, value] of Object.entries(toTokenKeys(variables))) {
     allVariables[key] = value;
   }
 
@@ -319,7 +322,7 @@ class WebValidationAdapter implements ValidationAdapter {
     variables: Record<string, string>,
     rules: Record<string, ValidationRule>
   ): Promise<ValidationError[]> {
-    return validateVars(variables, rules);
+    return validateVars(toTokenKeys(variables), toTokenKeys(rules));
   }
 
   async validateSchema(

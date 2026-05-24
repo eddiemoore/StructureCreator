@@ -22,3 +22,16 @@ export const asVariableName = (raw: string): VariableName =>
  * outbound edge (IPC to the native backend, or template-substitution scan).
  */
 export const toToken = (name: VariableName): string => `%${name}%`;
+
+/**
+ * Rewrite a variable-name-keyed map to its **Variable token** keys (`%NAME%`),
+ * for outbound IPC to the native backend whose lookups use the token form.
+ * Idempotent on keys that are already tokens.
+ */
+export const toTokenKeys = <V>(map: Record<string, V>): Record<string, V> => {
+  const out: Record<string, V> = {};
+  for (const [key, value] of Object.entries(map)) {
+    out[toToken(asVariableName(key))] = value;
+  }
+  return out;
+};

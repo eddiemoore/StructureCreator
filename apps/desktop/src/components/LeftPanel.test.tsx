@@ -469,8 +469,8 @@ describe("LeftPanel", () => {
         renderLeftPanel();
         await waitForDataLoad();
 
-        expect(screen.getByText("%PROJECT_NAME%")).toBeInTheDocument();
-        expect(screen.getByText("%VERSION%")).toBeInTheDocument();
+        expect(screen.getByText("PROJECT_NAME")).toBeInTheDocument();
+        expect(screen.getByText("VERSION")).toBeInTheDocument();
       });
 
       it("displays variable values in inputs", async () => {
@@ -594,7 +594,7 @@ describe("LeftPanel", () => {
         await waitForDataLoad();
 
         // Find the remove button (appears on hover)
-        const variableContainer = screen.getByText("%PROJECT_NAME%").closest("div");
+        const variableContainer = screen.getByText("PROJECT_NAME").closest("div");
         const removeButton = within(variableContainer!.parentElement!).getByTitle("Remove variable");
         fireEvent.click(removeButton);
 
@@ -608,7 +608,7 @@ describe("LeftPanel", () => {
         renderLeftPanel();
         await waitForDataLoad();
 
-        const settingsButton = screen.getByLabelText(/configure validation for %PROJECT_NAME%/i);
+        const settingsButton = screen.getByLabelText(/configure validation for PROJECT_NAME/i);
         fireEvent.click(settingsButton);
 
         expect(screen.getByText("Validation Rules")).toBeInTheDocument();
@@ -620,7 +620,7 @@ describe("LeftPanel", () => {
         renderLeftPanel();
         await waitForDataLoad();
 
-        fireEvent.click(screen.getByLabelText(/configure validation for %PROJECT_NAME%/i));
+        fireEvent.click(screen.getByLabelText(/configure validation for PROJECT_NAME/i));
 
         const requiredCheckbox = screen.getByRole("checkbox");
         fireEvent.click(requiredCheckbox);
@@ -633,7 +633,7 @@ describe("LeftPanel", () => {
         renderLeftPanel();
         await waitForDataLoad();
 
-        fireEvent.click(screen.getByLabelText(/configure validation for %PROJECT_NAME%/i));
+        fireEvent.click(screen.getByLabelText(/configure validation for PROJECT_NAME/i));
         expect(screen.getByText("Validation Rules")).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: /done/i }));
