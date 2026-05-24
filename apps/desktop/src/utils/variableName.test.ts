@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { asVariableName, toToken, type VariableName } from "./variableName";
+import { asVariableName, toToken, toTokenKeys, type VariableName } from "./variableName";
 
 describe("variableName", () => {
   describe("asVariableName", () => {
@@ -21,6 +21,19 @@ describe("variableName", () => {
     it("round-trips with asVariableName", () => {
       const name = asVariableName("NAME");
       expect(asVariableName(toToken(name))).toBe(name);
+    });
+  });
+
+  describe("toTokenKeys", () => {
+    it("rewrites every map key to its token form, preserving values", () => {
+      expect(toTokenKeys({ NAME: "a", REGION: "b" })).toEqual({
+        "%NAME%": "a",
+        "%REGION%": "b",
+      });
+    });
+
+    it("is idempotent on already-tokenized keys", () => {
+      expect(toTokenKeys({ "%NAME%": "a" })).toEqual({ "%NAME%": "a" });
     });
   });
 

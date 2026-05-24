@@ -15,9 +15,9 @@ describe("appStore variable handling", () => {
 
       const state = useAppStore.getState();
       expect(state.variables).toHaveLength(2);
-      expect(state.variables[0].name).toBe("%CLIENT_NAME%");
+      expect(state.variables[0].name).toBe("CLIENT_NAME");
       expect(state.variables[0].value).toBe("");
-      expect(state.variables[1].name).toBe("%PROJECT_TYPE%");
+      expect(state.variables[1].name).toBe("PROJECT_TYPE");
       expect(state.variables[1].value).toBe("");
     });
 
@@ -30,7 +30,7 @@ describe("appStore variable handling", () => {
       const state = useAppStore.getState();
       expect(state.variables).toHaveLength(2);
       expect(state.variables[0].value).toBe("Existing Value"); // Preserved
-      expect(state.variables[1].name).toBe("%NEW_VAR%");
+      expect(state.variables[1].name).toBe("NEW_VAR");
     });
   });
 
@@ -49,7 +49,7 @@ describe("appStore variable handling", () => {
 
       const state = useAppStore.getState();
       expect(state.variables).toHaveLength(1);
-      expect(state.variables[0].name).toBe("%CLIENT_NAME%");
+      expect(state.variables[0].name).toBe("CLIENT_NAME");
       expect(state.variables[0].description).toBe("The client company name");
       expect(state.variables[0].placeholder).toBe("Enter client name...");
       expect(state.variables[0].example).toBe("Acme Corp");
@@ -173,7 +173,7 @@ describe("appStore variable handling", () => {
 
       const state = useAppStore.getState();
       expect(state.variables).toHaveLength(1);
-      expect(state.variables[0].name).toBe("%UNMATCHED_VAR%");
+      expect(state.variables[0].name).toBe("UNMATCHED_VAR");
       expect(state.variables[0].description).toBeUndefined();
     });
 
@@ -209,6 +209,46 @@ describe("appStore variable handling", () => {
       const stateAfter = useAppStore.getState();
       // Variables array should be the same reference (optimization working)
       expect(stateAfter.variables).toBe(variablesBefore);
+    });
+  });
+
+  describe("clean-canonical names (ADR-0001)", () => {
+    it("stores a clean name even when added with a token, and updates + clears errors by clean name", () => {
+      const store = useAppStore.getState();
+      store.addVariable("%CLIENT_NAME%", "");
+      store.setValidationErrors([
+        { variable_name: "CLIENT_NAME", message: "required" },
+      ]);
+
+      store.updateVariable("CLIENT_NAME", "Acme");
+
+      const state = useAppStore.getState();
+      expect(state.variables[0].name).toBe("CLIENT_NAME");
+      expect(state.variables[0].value).toBe("Acme");
+      expect(state.validationErrors).toHaveLength(0);
+    });
+
+    it("normalizes delimited names on setVariables (e.g. loaded from persisted data)", () => {
+      useAppStore.getState().setVariables([
+        { name: "%CLIENT_NAME%", value: "Acme" },
+        { name: "REGION", value: "us" },
+      ]);
+
+      const state = useAppStore.getState();
+      expect(state.variables.map((v) => v.name)).toEqual(["CLIENT_NAME", "REGION"]);
+      expect(state.variables[0].value).toBe("Acme");
+    });
+
+    it("removes a variable and clears its error when given a token form", () => {
+      const store = useAppStore.getState();
+      store.setVariables([{ name: "FOO", value: "x" }]);
+      store.setValidationErrors([{ variable_name: "FOO", message: "bad" }]);
+
+      store.removeVariable("%FOO%");
+
+      const state = useAppStore.getState();
+      expect(state.variables).toHaveLength(0);
+      expect(state.validationErrors).toHaveLength(0);
     });
   });
 });

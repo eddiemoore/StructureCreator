@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { Variable, ValidationRule, ValidationError, VariableDefinition } from "../../types/schema";
+import { asVariableName } from "../../utils/variableName";
 
 export interface VariablesSlice {
   variables: Variable[];
@@ -17,15 +18,21 @@ export const createVariablesSlice: StateCreator<VariablesSlice, [], [], Variable
   variables: [],
   validationErrors: [],
 
-  setVariables: (variables) => set({ variables }),
+  setVariables: (variables) =>
+    set({
+      // Normalize to clean canonical names on entry (ADR-0001); idempotent,
+      // so delimited names loaded from persisted data are accepted.
+      variables: variables.map((v) => ({ ...v, name: asVariableName(v.name) })),
+    }),
 
   updateVariable: (name, value) =>
     set((state) => {
-      // Clean name for comparison (validation errors use clean names without % delimiters)
-      const cleanName = name.replace(/^%|%$/g, "");
+      // Variable names are canonical in clean form (ADR-0001); normalize the
+      // incoming name so a token or clean name both match.
+      const cleanName = asVariableName(name);
       return {
         variables: state.variables.map((v) =>
-          v.name === name ? { ...v, value } : v
+          v.name === cleanName ? { ...v, value } : v
         ),
         // Clear validation errors when value changes
         validationErrors: state.validationErrors.filter(
@@ -36,8 +43,7 @@ export const createVariablesSlice: StateCreator<VariablesSlice, [], [], Variable
 
   addVariable: (name, value) =>
     set((state) => {
-      // Ensure name has % wrapping
-      const varName = name.startsWith("%") ? name : `%${name}%`;
+      const varName = asVariableName(name);
       // Check if variable already exists
       if (state.variables.some((v) => v.name === varName)) {
         return state;
@@ -49,10 +55,9 @@ export const createVariablesSlice: StateCreator<VariablesSlice, [], [], Variable
 
   removeVariable: (name) =>
     set((state) => {
-      // Clean name for comparison (validation errors use clean names without % delimiters)
-      const cleanName = name.replace(/^%|%$/g, "");
+      const cleanName = asVariableName(name);
       return {
-        variables: state.variables.filter((v) => v.name !== name),
+        variables: state.variables.filter((v) => v.name !== cleanName),
         validationErrors: state.validationErrors.filter(
           (e) => e.variable_name !== cleanName
         ),
@@ -61,12 +66,11 @@ export const createVariablesSlice: StateCreator<VariablesSlice, [], [], Variable
 
   mergeDetectedVariables: (detectedVarNames, definitions) =>
     set((state) => {
-      // Create a map of definitions by name (with % wrapper to match variable names)
+      // Definitions and detected names are keyed by clean canonical name.
       const defMap = new Map<string, VariableDefinition>();
       if (definitions) {
         for (const def of definitions) {
-          // Variable names in state have % wrapper, definition names don't
-          defMap.set(`%${def.name}%`, def);
+          defMap.set(asVariableName(def.name), def);
         }
       }
 
@@ -74,6 +78,7 @@ export const createVariablesSlice: StateCreator<VariablesSlice, [], [], Variable
 
       // Create new variables with definitions applied
       const newVariables = detectedVarNames
+        .map((name) => asVariableName(name))
         .filter((name) => !existingNames.has(name))
         .map((name) => {
           const def = defMap.get(name);
