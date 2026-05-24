@@ -1,7 +1,7 @@
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Read;
 
 /// Default condition variable name for if blocks without an explicit var attribute
@@ -39,6 +39,12 @@ pub struct SchemaNode {
     /// When false/None, {{...}} syntax is preserved as-is.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template: Option<bool>,
+    /// Unrecognized XML attributes captured verbatim so they survive a
+    /// parse -> edit -> export round-trip. Keys exclude attributes already
+    /// mapped to dedicated fields above (name, url, var, count, as, generate,
+    /// template, and generator config attrs). Sorted for deterministic export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -280,6 +286,7 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
     let mut generate: Option<String> = None;
     let mut template: Option<bool> = None;
     let mut extra_attrs: Vec<String> = Vec::new();
+    let mut attributes: BTreeMap<String, String> = BTreeMap::new();
 
     for attr in e.attributes() {
         let attr = attr?;
@@ -298,7 +305,11 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
             "width" | "height" | "background" | "format" => {
                 extra_attrs.push(format!("{}=\"{}\"", key, value));
             }
-            _ => {}
+            // Preserve any other attribute verbatim so it survives a
+            // parse -> edit -> export round-trip.
+            _ => {
+                attributes.insert(key.to_string(), value.to_string());
+            }
         }
     }
 
@@ -329,6 +340,11 @@ fn parse_element(e: &BytesStart) -> Result<Option<SchemaNode>, Box<dyn std::erro
         generate,
         generate_config,
         template,
+        attributes: if attributes.is_empty() {
+            None
+        } else {
+            Some(attributes)
+        },
     }))
 }
 
@@ -452,6 +468,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
                 generate: None,
                 generate_config: None,
                 template: None,
+                attributes: None,
             });
         }
     }
@@ -469,6 +486,7 @@ fn scan_directory(path: &std::path::Path, name: &str) -> Result<SchemaNode, Box<
         generate: None,
         generate_config: None,
         template: None,
+        attributes: None,
     })
 }
 
@@ -533,23 +551,37 @@ pub fn schema_to_xml(tree: &SchemaTree) -> String {
     xml
 }
 
+/// Format a node's preserved unknown attributes as XML attribute text
+/// (e.g. ` foo="bar" baz="qux"`), sorted for deterministic output. Empty
+/// string when there are none.
+fn format_extra_attrs(node: &SchemaNode) -> String {
+    match &node.attributes {
+        Some(attrs) if !attrs.is_empty() => attrs
+            .iter()
+            .map(|(k, v)| format!(" {}=\"{}\"", k, escape_xml(v)))
+            .collect(),
+        _ => String::new(),
+    }
+}
+
 fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
     let indent_str = "  ".repeat(indent);
+    let extra = format_extra_attrs(node);
 
     match node.node_type.as_str() {
         "folder" => {
             if let Some(children) = &node.children {
                 if children.is_empty() {
-                    xml.push_str(&format!("{}<folder name=\"{}\" />\n", indent_str, escape_xml(&node.name)));
+                    xml.push_str(&format!("{}<folder name=\"{}\"{} />\n", indent_str, escape_xml(&node.name), extra));
                 } else {
-                    xml.push_str(&format!("{}<folder name=\"{}\">\n", indent_str, escape_xml(&node.name)));
+                    xml.push_str(&format!("{}<folder name=\"{}\"{}>\n", indent_str, escape_xml(&node.name), extra));
                     for child in children {
                         node_to_xml(child, xml, indent + 1);
                     }
                     xml.push_str(&format!("{}</folder>\n", indent_str));
                 }
             } else {
-                xml.push_str(&format!("{}<folder name=\"{}\" />\n", indent_str, escape_xml(&node.name)));
+                xml.push_str(&format!("{}<folder name=\"{}\"{} />\n", indent_str, escape_xml(&node.name), extra));
             }
         }
         "file" => {
@@ -561,12 +593,12 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
             };
 
             if let Some(url) = &node.url {
-                xml.push_str(&format!("{}<file name=\"{}\" url=\"{}\" />\n",
-                    indent_str, escape_xml(&node.name), escape_xml(url)));
+                xml.push_str(&format!("{}<file name=\"{}\" url=\"{}\"{} />\n",
+                    indent_str, escape_xml(&node.name), escape_xml(url), extra));
             } else if let Some(generate) = &node.generate {
                 // File with generate attribute
-                xml.push_str(&format!("{}<file name=\"{}\" generate=\"{}\"",
-                    indent_str, escape_xml(&node.name), escape_xml(generate)));
+                xml.push_str(&format!("{}<file name=\"{}\" generate=\"{}\"{}",
+                    indent_str, escape_xml(&node.name), escape_xml(generate), extra));
                 // Add generator config attributes inline if present
                 if let Some(config) = &node.generate_config {
                     xml.push_str(&format!(" {}", config));
@@ -580,17 +612,17 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
                     xml.push_str(" />\n");
                 }
             } else if let Some(content) = &node.content {
-                xml.push_str(&format!("{}<file name=\"{}\"{}>\n", indent_str, escape_xml(&node.name), template_attr));
+                xml.push_str(&format!("{}<file name=\"{}\"{}{}>\n", indent_str, escape_xml(&node.name), template_attr, extra));
                 xml.push_str(&format!("{}<![CDATA[{}]]>\n", indent_str, content));
                 xml.push_str(&format!("{}</file>\n", indent_str));
             } else {
-                xml.push_str(&format!("{}<file name=\"{}\" />\n", indent_str, escape_xml(&node.name)));
+                xml.push_str(&format!("{}<file name=\"{}\"{} />\n", indent_str, escape_xml(&node.name), extra));
             }
         }
         "if" => {
             // Use condition_var or default to prevent data loss
             let var = node.condition_var.as_deref().unwrap_or(DEFAULT_CONDITION_VAR);
-            xml.push_str(&format!("{}<if var=\"{}\">\n", indent_str, escape_xml(var)));
+            xml.push_str(&format!("{}<if var=\"{}\"{}>\n", indent_str, escape_xml(var), extra));
             if let Some(children) = &node.children {
                 for child in children {
                     node_to_xml(child, xml, indent + 1);
@@ -600,7 +632,7 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
         }
         "else" => {
             // Always export else blocks, even if empty, to preserve structure
-            xml.push_str(&format!("{}<else>\n", indent_str));
+            xml.push_str(&format!("{}<else{}>\n", indent_str, extra));
             if let Some(children) = &node.children {
                 for child in children {
                     node_to_xml(child, xml, indent + 1);
@@ -614,8 +646,8 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
 
             if node.children.is_some() && !node.children.as_ref().unwrap().is_empty() {
                 xml.push_str(&format!(
-                    "{}<repeat count=\"{}\" as=\"{}\">\n",
-                    indent_str, escape_xml(count), escape_xml(as_var)
+                    "{}<repeat count=\"{}\" as=\"{}\"{}>\n",
+                    indent_str, escape_xml(count), escape_xml(as_var), extra
                 ));
                 if let Some(children) = &node.children {
                     for child in children {
@@ -625,8 +657,8 @@ fn node_to_xml(node: &SchemaNode, xml: &mut String, indent: usize) {
                 xml.push_str(&format!("{}</repeat>\n", indent_str));
             } else {
                 xml.push_str(&format!(
-                    "{}<repeat count=\"{}\" as=\"{}\" />\n",
-                    indent_str, escape_xml(count), escape_xml(as_var)
+                    "{}<repeat count=\"{}\" as=\"{}\"{} />\n",
+                    indent_str, escape_xml(count), escape_xml(as_var), extra
                 ));
             }
         }
@@ -722,6 +754,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                             generate: None,
                             generate_config: None,
                             template: None,
+                            attributes: None,
                         });
                 }
 
@@ -741,6 +774,7 @@ pub fn scan_zip_to_schema(data: &[u8], archive_name: &str) -> Result<SchemaTree,
                     generate: None,
                     generate_config: None,
                     template: None,
+                    attributes: None,
                 };
 
                 if is_dir {
@@ -893,6 +927,7 @@ fn build_tree_from_map(
         generate: None,
         generate_config: None,
         template: None,
+        attributes: None,
     }
 }
 
@@ -1350,6 +1385,66 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_preserves_unknown_attributes() {
+        let xml = r#"
+            <folder name="root" data-role="container">
+                <file name="config.json" env="prod" region="us" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+
+        let root_attrs = tree
+            .root
+            .attributes
+            .as_ref()
+            .expect("root should keep unknown attrs");
+        assert_eq!(root_attrs.get("data-role"), Some(&"container".to_string()));
+
+        let file = &tree.root.children.as_ref().unwrap()[0];
+        let file_attrs = file
+            .attributes
+            .as_ref()
+            .expect("file should keep unknown attrs");
+        assert_eq!(file_attrs.get("env"), Some(&"prod".to_string()));
+        assert_eq!(file_attrs.get("region"), Some(&"us".to_string()));
+    }
+
+    #[test]
+    fn test_schema_to_xml_round_trips_unknown_attributes() {
+        let xml = r#"
+            <folder name="root" data-role="container">
+                <file name="config.json" env="prod" region="us" />
+            </folder>
+        "#;
+
+        let tree = parse_xml_schema(xml).unwrap();
+        let exported = schema_to_xml(&tree);
+
+        // Unknown attributes survive a parse -> export round-trip.
+        assert!(
+            exported.contains("data-role=\"container\""),
+            "missing folder attr in:\n{exported}"
+        );
+        assert!(
+            exported.contains("env=\"prod\""),
+            "missing file attr in:\n{exported}"
+        );
+        assert!(
+            exported.contains("region=\"us\""),
+            "missing file attr in:\n{exported}"
+        );
+
+        // Re-parsing the export yields identical attributes (idempotent).
+        let reparsed = parse_xml_schema(&exported).unwrap();
+        assert_eq!(reparsed.root.attributes, tree.root.attributes);
+        assert_eq!(
+            reparsed.root.children.as_ref().unwrap()[0].attributes,
+            tree.root.children.as_ref().unwrap()[0].attributes
+        );
+    }
+
+    #[test]
     fn test_parse_schema_with_hooks() {
         let xml = r#"
             <folder name="my-project">
@@ -1414,6 +1509,7 @@ mod tests {
                 generate: None,
                 generate_config: None,
                 template: None,
+                attributes: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -1450,6 +1546,7 @@ mod tests {
                 generate: None,
                 generate_config: None,
                 template: None,
+                attributes: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -1542,6 +1639,7 @@ mod tests {
                                 generate: None,
                                 generate_config: None,
                                 template: None,
+                                attributes: None,
                             }
                         ]),
                         condition_var: None,
@@ -1550,6 +1648,7 @@ mod tests {
                         generate: None,
                         generate_config: None,
                         template: None,
+                        attributes: None,
                     }
                 ]),
                 condition_var: None,
@@ -1558,6 +1657,7 @@ mod tests {
                 generate: None,
                 generate_config: None,
                 template: None,
+                attributes: None,
             },
             stats: SchemaStats {
                 folders: 2,
@@ -2292,6 +2392,7 @@ export const Component = () => {
                         generate: None,
                         generate_config: None,
                         template: None,
+                        attributes: None,
                     }
                 ]),
                 condition_var: None,
@@ -2300,6 +2401,7 @@ export const Component = () => {
                 generate: None,
                 generate_config: None,
                 template: None,
+                attributes: None,
             },
             stats: SchemaStats {
                 folders: 1,
@@ -2538,6 +2640,7 @@ export const EXTENSION = true;
                         generate: None,
                         generate_config: None,
                         template: Some(true),
+                        attributes: None,
                     }
                 ]),
                 condition_var: None,
@@ -2546,6 +2649,7 @@ export const EXTENSION = true;
                 generate: None,
                 generate_config: None,
                 template: None,
+                attributes: None,
             },
             stats: SchemaStats {
                 folders: 1,
