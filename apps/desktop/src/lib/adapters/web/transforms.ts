@@ -178,7 +178,7 @@ const formatDate = (dateStr: string, format: string): string => {
  * Parse and apply a transformation to a value.
  * Transformations are in the format: value|transform or value|transform(arg)
  */
-const applyTransform = (value: string, transform: string): string => {
+export const applyTransform = (value: string, transform: string): string => {
   // Check for format transform with argument
   const formatMatch = transform.match(/^format\((.+)\)$/);
   if (formatMatch) {

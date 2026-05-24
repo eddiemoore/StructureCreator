@@ -938,4 +938,31 @@ mod tests {
         let vars = extract_variables_from_content(content);
         assert!(vars.is_empty());
     }
+
+    // Golden-vector contract (ADR-0002): the transform fixtures are the single
+    // cross-target spec, consumed by both this Rust suite and the web TS suite.
+    #[test]
+    fn test_transforms_match_golden_contract() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            transform: String,
+            input: String,
+            expected: String,
+        }
+
+        let fixture = include_str!("../../../../fixtures/transforms.json");
+        let cases: Vec<Case> = serde_json::from_str(fixture).expect("valid fixture JSON");
+        assert!(!cases.is_empty(), "transform fixture must contain cases");
+
+        for case in cases {
+            let transform = parse_transform(&case.transform, None)
+                .unwrap_or_else(|_| panic!("unknown transform in fixture: {}", case.transform));
+            let got = apply_transform(&case.input, &transform);
+            assert_eq!(
+                got, case.expected,
+                "transform `{}` on {:?}: expected {:?}, got {:?}",
+                case.transform, case.input, case.expected, got
+            );
+        }
+    }
 }
