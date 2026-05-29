@@ -1,0 +1,13 @@
+[
+  { "transform": "uppercase", "input": "hello", "expected": "HELLO" },
+  { "transform": "lowercase", "input": "HELLO", "expected": "hello" },
+  { "transform": "camelcase", "input": "hello world", "expected": "helloWorld" },
+  { "transform": "camelcase", "input": "hello_world", "expected": "helloWorld" },
+  { "transform": "pascalcase", "input": "hello world", "expected": "HelloWorld" },
+  { "transform": "kebab-case", "input": "helloWorld", "expected": "hello-world" },
+  { "transform": "snake_case", "input": "helloWorld", "expected": "hello_world" },
+  { "transform": "plural", "input": "cat", "expected": "cats" },
+  { "transform": "plural", "input": "bus", "expected": "buses" },
+  { "transform": "plural", "input": "city", "expected": "cities" },
+  { "transform": "length", "input": "hello", "expected": "5" }
+]
