@@ -1588,4 +1588,72 @@ mod tests {
             assert!(!folder_path.exists());
         }
     }
+
+    // Golden-vector contract (ADR-0002): pins schema-structure semantics
+    // (variable substitution in names, repeat expansion, condition eval)
+    // across targets. Runs the planning engine (`generate_diff_preview`) and
+    // collects the planned relative paths from the resulting DiffNode tree.
+    #[test]
+    fn test_schema_structure_matches_golden_contract() {
+        use std::collections::HashMap;
+
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            tree: crate::schema::SchemaTree,
+            variables: HashMap<String, String>,
+            #[serde(rename = "expectedPaths")]
+            expected_paths: Vec<String>,
+        }
+
+        fn collect_paths(node: &crate::types::DiffNode, prefix: &str, out: &mut Vec<String>) {
+            let p = node
+                .path
+                .strip_prefix(prefix)
+                .unwrap_or(node.path.as_str())
+                .trim_start_matches('/');
+            if !p.is_empty() {
+                out.push(p.to_string());
+            }
+            if let Some(children) = &node.children {
+                for child in children {
+                    collect_paths(child, prefix, out);
+                }
+            }
+        }
+
+        let fixture = include_str!("../../../../fixtures/schema-structure.json");
+        let cases: Vec<Case> = serde_json::from_str(fixture).expect("valid fixture JSON");
+        assert!(!cases.is_empty(), "schema-structure fixture must contain cases");
+
+        for case in &cases {
+            // Output path does not need to exist; with no existing files the
+            // planner treats every item as a Create. Use a stable fake path so
+            // diff_preview's relative-to-output logic produces clean paths.
+            let result = crate::diff_preview::generate_diff_preview(
+                &case.tree,
+                "/sc-contract-101",
+                &case.variables,
+                false, // overwrite
+            )
+            .unwrap_or_else(|e| panic!("case '{}' failed: {}", case.name, e));
+
+            let mut paths: Vec<String> = Vec::new();
+            collect_paths(&result.root, "/sc-contract-101", &mut paths);
+            // The DiffNode tree wraps repeat/if blocks in virtual nodes that
+            // re-emit the parent path. Dedup so the contract sees the same
+            // unique path set both targets actually plan to create.
+            paths.sort();
+            paths.dedup();
+
+            let mut expected = case.expected_paths.clone();
+            expected.sort();
+
+            assert_eq!(
+                paths, expected,
+                "case '{}': paths mismatch",
+                case.name
+            );
+        }
+    }
 }
