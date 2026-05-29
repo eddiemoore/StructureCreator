@@ -1,0 +1,32 @@
+[
+  {
+    "template": "{{if FLAG}}yes{{endif}}",
+    "variables": { "%FLAG%": "on" },
+    "expected": "yes"
+  },
+  {
+    "template": "{{if FLAG}}yes{{endif}}",
+    "variables": {},
+    "expected": ""
+  },
+  {
+    "template": "{{if FLAG}}yes{{else}}no{{endif}}",
+    "variables": { "%FLAG%": "on" },
+    "expected": "yes"
+  },
+  {
+    "template": "{{if FLAG}}yes{{else}}no{{endif}}",
+    "variables": {},
+    "expected": "no"
+  },
+  {
+    "template": "{{for x in LIST}}{{x}}-{{endfor}}",
+    "variables": { "%LIST%": "a,b,c" },
+    "expected": "a-b-c-"
+  },
+  {
+    "template": "{{for x in LIST}}{{if FLAG}}{{x}}{{endif}}{{endfor}}",
+    "variables": { "%LIST%": "a,b", "%FLAG%": "on" },
+    "expected": "ab"
+  }
+]
