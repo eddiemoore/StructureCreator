@@ -18,57 +18,36 @@
 export const NODE_TYPES = ["folder", "file", "if", "else", "repeat"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
+import type { SchemaNode as GeneratedSchemaNode } from "./generated/schemaNode";
+
 /**
  * Represents a single node in the schema tree structure.
  * Nodes can be files, folders, or control flow elements (if/else/repeat).
+ *
+ * Field shape is generated from the Rust `SchemaNode` struct via specta (see
+ * ADR-0003 and `./generated/schemaNode.ts`). The frontend re-narrows two
+ * fields that the Rust type system cannot express:
+ *   - `type` is required and limited to {@link NodeType}.
+ *   - `generate`, when present, is restricted to `"image" | "sqlite"`.
+ * Adding a field on the Rust side propagates here automatically; the
+ * codegen contract test (`schema_node_typescript_matches_committed`) fails
+ * on any drift.
  */
-export interface SchemaNode {
-  /** Unique identifier for tracking during editing and drag-drop operations */
-  id?: string;
-  /** The type of this schema element */
+/**
+ * Strip `| null` from each property. Rust's `Option<T>` serializes as
+ * `T | null` via specta, but the rest of the codebase treats absent values
+ * as `undefined`, so we collapse the two on the consumption side.
+ */
+type WithoutNullFields<T> = { [K in keyof T]: Exclude<T[K], null> };
+
+export type SchemaNode = WithoutNullFields<
+  Omit<GeneratedSchemaNode, "type" | "name" | "children" | "generate">
+> & {
   type: NodeType;
-  /** Display name (supports variable substitution with %VAR% syntax) */
   name: string;
-  /** URL to download file content from (file nodes only) */
-  url?: string;
-  /** Inline file content (file nodes only) */
-  content?: string;
-  /** Child nodes (for folder, if, else, repeat types) */
   children?: SchemaNode[];
-  /** Additional XML attributes to preserve during round-trips */
-  attributes?: Record<string, string>;
-  /** Variable name to check for conditional rendering (if nodes only, without % delimiters) */
-  condition_var?: string;
-  /**
-   * Number of iterations for repeat loops. Can be a literal number or variable reference.
-   * Examples: "3", "%NUM_MODULES%"
-   * @default "1"
-   */
-  repeat_count?: string;
-  /**
-   * Iteration variable name for repeat loops (without % delimiters).
-   * Available inside the loop as %name% (0-indexed) and %name_1% (1-indexed).
-   * @default "i"
-   */
-  repeat_as?: string;
-  /**
-   * Generator type for binary file creation.
-   * - "image": Creates a placeholder image (PNG/JPEG) with configurable dimensions and color
-   * - "sqlite": Creates a SQLite database with defined schema
-   */
   generate?: "image" | "sqlite";
-  /**
-   * Generator configuration (child XML content as string for parsing).
-   * For image: width, height, background, format attributes
-   * For sqlite: <table> or <sql> child elements
-   */
-  generateConfig?: string;
-  /**
-   * If true, process {{if}}/{{for}} template directives in file content.
-   * When false/undefined, {{...}} syntax is preserved as-is.
-   */
-  template?: boolean;
-}
+};
 
 export interface SchemaHooks {
   post_create: string[];
