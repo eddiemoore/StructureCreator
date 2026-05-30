@@ -1,0 +1,37 @@
+[
+  {
+    "template": "Hello %NAME%!",
+    "variables": { "%NAME%": "world" },
+    "expected": "Hello world!"
+  },
+  {
+    "template": "%FOO% and %BAR%",
+    "variables": { "%FOO%": "foo", "%BAR%": "bar" },
+    "expected": "foo and bar"
+  },
+  {
+    "template": "%X%-%X%",
+    "variables": { "%X%": "a" },
+    "expected": "a-a"
+  },
+  {
+    "template": "%NAME:uppercase%",
+    "variables": { "%NAME%": "hello" },
+    "expected": "HELLO"
+  },
+  {
+    "template": "%NAME:kebab-case%",
+    "variables": { "%NAME%": "helloWorld" },
+    "expected": "hello-world"
+  },
+  {
+    "template": "no variables here",
+    "variables": {},
+    "expected": "no variables here"
+  },
+  {
+    "template": "keep %MISSING% as-is",
+    "variables": {},
+    "expected": "keep %MISSING% as-is"
+  }
+]

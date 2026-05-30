@@ -939,6 +939,31 @@ mod tests {
         assert!(vars.is_empty());
     }
 
+    // Golden-vector contract (ADR-0002): pins both variable substitution and
+    // the `%NAME%` Variable-token convention across targets.
+    #[test]
+    fn test_substitution_matches_golden_contract() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            template: String,
+            variables: std::collections::HashMap<String, String>,
+            expected: String,
+        }
+
+        let fixture = include_str!("../../../../fixtures/substitution.json");
+        let cases: Vec<Case> = serde_json::from_str(fixture).expect("valid fixture JSON");
+        assert!(!cases.is_empty(), "substitution fixture must contain cases");
+
+        for case in cases {
+            let got = substitute_variables(&case.template, &case.variables);
+            assert_eq!(
+                got, case.expected,
+                "substitute_variables({:?}, {:?}): expected {:?}, got {:?}",
+                case.template, case.variables, case.expected, got
+            );
+        }
+    }
+
     // Golden-vector contract (ADR-0002): the transform fixtures are the single
     // cross-target spec, consumed by both this Rust suite and the web TS suite.
     #[test]
