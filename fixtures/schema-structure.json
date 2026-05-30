@@ -1,0 +1,129 @@
+[
+  {
+    "name": "plain folder with one file and variable substitution",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "%NAME%",
+        "children": [
+          { "type": "file", "name": "hello.txt" }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": { "%NAME%": "demo" },
+    "expectedPaths": ["demo", "demo/hello.txt"]
+  },
+  {
+    "name": "if truthy includes child",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "FLAG",
+            "children": [{ "type": "file", "name": "yes.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": { "%FLAG%": "on" },
+    "expectedPaths": ["root", "root/yes.txt"]
+  },
+  {
+    "name": "if falsy excludes child",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "FLAG",
+            "children": [{ "type": "file", "name": "yes.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root"]
+  },
+  {
+    "name": "else branch when if is falsy",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "FLAG",
+            "children": [{ "type": "file", "name": "yes.txt" }]
+          },
+          {
+            "type": "else",
+            "name": "",
+            "children": [{ "type": "file", "name": "no.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root", "root/no.txt"]
+  },
+  {
+    "name": "repeat with literal count emits N files",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_count": "3",
+            "repeat_as": "i",
+            "children": [{ "type": "file", "name": "item-%i%.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": [
+      "root",
+      "root/item-0.txt",
+      "root/item-1.txt",
+      "root/item-2.txt"
+    ]
+  },
+  {
+    "name": "repeat with count from variable",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_count": "%COUNT%",
+            "repeat_as": "n",
+            "children": [{ "type": "file", "name": "x-%n%.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": { "%COUNT%": "2" },
+    "expectedPaths": ["root", "root/x-0.txt", "root/x-1.txt"]
+  }
+]
