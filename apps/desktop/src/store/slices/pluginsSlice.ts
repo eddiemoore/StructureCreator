@@ -19,6 +19,6 @@ export const createPluginsSlice: StateCreator<PluginsSlice, [], [], PluginsSlice
 
   getEnabledPlugins: () => {
     const state = get();
-    return state.plugins.filter((p) => p.isEnabled);
+    return state.plugins.filter((p) => p.is_enabled);
   },
 });

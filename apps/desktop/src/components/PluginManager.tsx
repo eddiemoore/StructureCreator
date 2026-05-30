@@ -77,7 +77,7 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
     try {
       setError(null);
 
-      const updated = plugin.isEnabled
+      const updated = plugin.is_enabled
         ? await api.plugin.disablePlugin(plugin.id)
         : await api.plugin.enablePlugin(plugin.id);
 
@@ -121,7 +121,7 @@ export const PluginManager = ({ isOpen, onClose }: PluginManagerProps) => {
 
   if (!isOpen) return null;
 
-  const enabledCount = plugins.filter((p) => p.isEnabled).length;
+  const enabledCount = plugins.filter((p) => p.is_enabled).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -247,7 +247,7 @@ const PluginCard = ({ plugin, onToggle, onUninstall, isUninstalling }: PluginCar
   return (
     <div
       className={`p-4 rounded-mac border ${
-        plugin.isEnabled
+        plugin.is_enabled
           ? "bg-card-bg border-border-muted"
           : "bg-mac-bg-hover/50 border-border-muted/50"
       }`}
@@ -257,7 +257,7 @@ const PluginCard = ({ plugin, onToggle, onUninstall, isUninstalling }: PluginCar
           <div className="flex items-center gap-2">
             <h3
               className={`text-mac-sm font-medium truncate ${
-                plugin.isEnabled ? "text-text-primary" : "text-text-muted"
+                plugin.is_enabled ? "text-text-primary" : "text-text-muted"
               }`}
             >
               {plugin.name}
@@ -280,9 +280,9 @@ const PluginCard = ({ plugin, onToggle, onUninstall, isUninstalling }: PluginCar
                 {capabilityLabels[cap] || cap}
               </span>
             ))}
-            {plugin.fileTypes.length > 0 && (
+            {plugin.file_types.length > 0 && (
               <span className="px-2 py-0.5 text-mac-xs bg-text-muted/10 text-text-muted rounded-full">
-                {plugin.fileTypes.join(", ")}
+                {plugin.file_types.join(", ")}
               </span>
             )}
           </div>
@@ -293,16 +293,16 @@ const PluginCard = ({ plugin, onToggle, onUninstall, isUninstalling }: PluginCar
           <button
             onClick={() => onToggle(plugin)}
             className={`relative w-11 h-6 rounded-full transition-colors ${
-              plugin.isEnabled ? "bg-accent" : "bg-text-muted/30"
+              plugin.is_enabled ? "bg-accent" : "bg-text-muted/30"
             }`}
-            title={plugin.isEnabled ? "Disable plugin" : "Enable plugin"}
+            title={plugin.is_enabled ? "Disable plugin" : "Enable plugin"}
           >
             <span
               className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                plugin.isEnabled ? "left-6" : "left-1"
+                plugin.is_enabled ? "left-6" : "left-1"
               }`}
             >
-              {plugin.isEnabled && (
+              {plugin.is_enabled && (
                 <CheckIcon size={10} className="text-accent m-0.5" />
               )}
             </span>

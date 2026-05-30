@@ -58,37 +58,7 @@ import type {
   TeamImportResult,
 } from "../../../types/schema";
 
-// Rust returns snake_case fields, this interface matches the Rust struct
-interface RustRecentProject {
-  id: string;
-  project_name: string;
-  output_path: string;
-  schema_xml: string;
-  variables: Record<string, string>;
-  variable_validation: Record<string, ValidationRule>;
-  template_id: string | null;
-  template_name: string | null;
-  folders_created: number;
-  files_created: number;
-  created_at: string;
-}
-
-/** Convert Rust snake_case RecentProject to TypeScript camelCase */
-function toRecentProject(p: RustRecentProject): RecentProject {
-  return {
-    id: p.id,
-    projectName: p.project_name,
-    outputPath: p.output_path,
-    schemaXml: p.schema_xml,
-    variables: p.variables,
-    variableValidation: p.variable_validation,
-    templateId: p.template_id,
-    templateName: p.template_name,
-    foldersCreated: p.folders_created,
-    filesCreated: p.files_created,
-    createdAt: p.created_at,
-  };
-}
+// RecentProject crosses IPC in the wire shape directly (codegen, #116).
 
 // ============================================================================
 // File System Adapter (Tauri)
@@ -269,17 +239,15 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
   // Recent projects operations
 
   async listRecentProjects(): Promise<RecentProject[]> {
-    const projects = await invoke<RustRecentProject[]>("cmd_list_recent_projects");
-    return projects.map(toRecentProject);
+    return invoke<RecentProject[]>("cmd_list_recent_projects");
   }
 
   async getRecentProject(id: string): Promise<RecentProject | null> {
-    const p = await invoke<RustRecentProject | null>("cmd_get_recent_project", { id });
-    return p ? toRecentProject(p) : null;
+    return invoke<RecentProject | null>("cmd_get_recent_project", { id });
   }
 
   async addRecentProject(input: CreateRecentProjectInput): Promise<RecentProject> {
-    const p = await invoke<RustRecentProject>("cmd_add_recent_project", {
+    return invoke<RecentProject>("cmd_add_recent_project", {
       projectName: input.projectName,
       outputPath: input.outputPath,
       schemaXml: input.schemaXml,
@@ -290,7 +258,6 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
       foldersCreated: input.foldersCreated,
       filesCreated: input.filesCreated,
     });
-    return toRecentProject(p);
   }
 
   async deleteRecentProject(id: string): Promise<boolean> {
@@ -552,86 +519,17 @@ class TauriWatchAdapter implements WatchAdapter {
 // ============================================================================
 
 // Rust returns snake_case fields, these interfaces match the Rust structs
-interface RustTeamLibrary {
-  id: string;
-  name: string;
-  path: string;
-  sync_interval: number;
-  last_sync_at: string | null;
-  is_enabled: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-interface RustTeamTemplate {
-  name: string;
-  description: string | null;
-  file_path: string;
-  modified_at: string;
-  size_bytes: number;
-}
-
-interface RustSyncLogEntry {
-  id: string;
-  library_id: string;
-  action: string;
-  template_name: string | null;
-  details: string | null;
-  created_at: string;
-}
-
-interface RustTeamImportResult {
-  imported: string[];
-  skipped: string[];
-  errors: string[];
-}
-
-/** Convert Rust snake_case TeamLibrary to TypeScript camelCase */
-function toTeamLibrary(lib: RustTeamLibrary): TeamLibrary {
-  return {
-    id: lib.id,
-    name: lib.name,
-    path: lib.path,
-    syncInterval: lib.sync_interval,
-    lastSyncAt: lib.last_sync_at,
-    isEnabled: lib.is_enabled,
-    createdAt: lib.created_at,
-    updatedAt: lib.updated_at,
-  };
-}
-
-/** Convert Rust snake_case TeamTemplate to TypeScript camelCase */
-function toTeamTemplate(t: RustTeamTemplate): TeamTemplate {
-  return {
-    name: t.name,
-    description: t.description,
-    filePath: t.file_path,
-    modifiedAt: t.modified_at,
-    sizeBytes: t.size_bytes,
-  };
-}
-
-/** Convert Rust snake_case SyncLogEntry to TypeScript camelCase */
-function toSyncLogEntry(entry: RustSyncLogEntry): SyncLogEntry {
-  return {
-    id: entry.id,
-    libraryId: entry.library_id,
-    action: entry.action as "scan" | "import" | "error",
-    templateName: entry.template_name,
-    details: entry.details,
-    createdAt: entry.created_at,
-  };
-}
+// Team library types cross IPC in the wire shape directly (codegen, #116).
+// `cmd_get_sync_log` returns `action` as an unconstrained string in Rust; the
+// frontend SyncLogEntry narrows it to the documented union.
 
 class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
   async listTeamLibraries(): Promise<TeamLibrary[]> {
-    const libraries = await invoke<RustTeamLibrary[]>("cmd_list_team_libraries");
-    return libraries.map(toTeamLibrary);
+    return invoke<TeamLibrary[]>("cmd_list_team_libraries");
   }
 
   async addTeamLibrary(name: string, path: string): Promise<TeamLibrary> {
-    const lib = await invoke<RustTeamLibrary>("cmd_add_team_library", { name, path });
-    return toTeamLibrary(lib);
+    return invoke<TeamLibrary>("cmd_add_team_library", { name, path });
   }
 
   async updateTeamLibrary(
@@ -643,14 +541,13 @@ class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
       isEnabled?: boolean;
     }
   ): Promise<TeamLibrary | null> {
-    const lib = await invoke<RustTeamLibrary | null>("cmd_update_team_library", {
+    return invoke<TeamLibrary | null>("cmd_update_team_library", {
       id,
       name: updates.name,
       path: updates.path,
       syncInterval: updates.syncInterval,
       isEnabled: updates.isEnabled,
     });
-    return lib ? toTeamLibrary(lib) : null;
   }
 
   async removeTeamLibrary(id: string): Promise<boolean> {
@@ -658,8 +555,7 @@ class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
   }
 
   async scanTeamLibrary(libraryId: string): Promise<TeamTemplate[]> {
-    const templates = await invoke<RustTeamTemplate[]>("cmd_scan_team_library", { libraryId });
-    return templates.map(toTeamTemplate);
+    return invoke<TeamTemplate[]>("cmd_scan_team_library", { libraryId });
   }
 
   async getTeamTemplate(filePath: string): Promise<{
@@ -688,21 +584,15 @@ class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
     filePath: string,
     strategy: DuplicateStrategy
   ): Promise<TeamImportResult> {
-    const result = await invoke<RustTeamImportResult>("cmd_import_team_template", {
+    return invoke<TeamImportResult>("cmd_import_team_template", {
       libraryId,
       filePath,
       strategy,
     });
-    return {
-      imported: result.imported,
-      skipped: result.skipped,
-      errors: result.errors,
-    };
   }
 
   async getSyncLog(libraryId: string | null, limit: number): Promise<SyncLogEntry[]> {
-    const entries = await invoke<RustSyncLogEntry[]>("cmd_get_sync_log", { libraryId, limit });
-    return entries.map(toSyncLogEntry);
+    return invoke<SyncLogEntry[]>("cmd_get_sync_log", { libraryId, limit });
   }
 }
 

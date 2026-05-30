@@ -54,7 +54,7 @@ const TeamTemplateItem = ({
           {template.name}
         </div>
         <div className="text-[10px] text-text-muted truncate">
-          {formatSize(template.sizeBytes)} &middot; {formatDate(template.modifiedAt)}
+          {formatSize(template.size_bytes)} &middot; {formatDate(template.modified_at)}
         </div>
       </div>
       <button
@@ -105,18 +105,18 @@ export const TeamTemplateList = () => {
   const handleImport = useCallback(async (template: TeamTemplate) => {
     if (!activeTeamLibrary) return;
 
-    setImportingTemplates((prev) => new Set(prev).add(template.filePath));
-    setImportStatuses((prev) => ({ ...prev, [template.filePath]: "idle" }));
+    setImportingTemplates((prev) => new Set(prev).add(template.file_path));
+    setImportStatuses((prev) => ({ ...prev, [template.file_path]: "idle" }));
 
     try {
       const result = await api.teamLibrary.importTeamTemplate(
         activeTeamLibrary,
-        template.filePath,
+        template.file_path,
         duplicateStrategy
       );
 
       if (result.imported.length > 0) {
-        setImportStatuses((prev) => ({ ...prev, [template.filePath]: "success" }));
+        setImportStatuses((prev) => ({ ...prev, [template.file_path]: "success" }));
         addLog({
           type: "success",
           message: `Imported "${result.imported.join(", ")}"`,
@@ -125,13 +125,13 @@ export const TeamTemplateList = () => {
         const templates = await api.database.listTemplates();
         setTemplates(templates);
       } else if (result.skipped.length > 0) {
-        setImportStatuses((prev) => ({ ...prev, [template.filePath]: "idle" }));
+        setImportStatuses((prev) => ({ ...prev, [template.file_path]: "idle" }));
         addLog({
           type: "info",
           message: `Skipped "${result.skipped.join(", ")}" (already exists)`,
         });
       } else if (result.errors.length > 0) {
-        setImportStatuses((prev) => ({ ...prev, [template.filePath]: "error" }));
+        setImportStatuses((prev) => ({ ...prev, [template.file_path]: "error" }));
         addLog({
           type: "error",
           message: "Import failed",
@@ -141,11 +141,11 @@ export const TeamTemplateList = () => {
 
       // Clear status after a delay
       setTimeout(() => {
-        setImportStatuses((prev) => ({ ...prev, [template.filePath]: "idle" }));
+        setImportStatuses((prev) => ({ ...prev, [template.file_path]: "idle" }));
       }, 3000);
     } catch (e) {
       console.error("Failed to import template:", e);
-      setImportStatuses((prev) => ({ ...prev, [template.filePath]: "error" }));
+      setImportStatuses((prev) => ({ ...prev, [template.file_path]: "error" }));
       addLog({
         type: "error",
         message: `Failed to import "${template.name}"`,
@@ -154,12 +154,12 @@ export const TeamTemplateList = () => {
 
       // Clear error status after a delay
       setTimeout(() => {
-        setImportStatuses((prev) => ({ ...prev, [template.filePath]: "idle" }));
+        setImportStatuses((prev) => ({ ...prev, [template.file_path]: "idle" }));
       }, 3000);
     } finally {
       setImportingTemplates((prev) => {
         const next = new Set(prev);
-        next.delete(template.filePath);
+        next.delete(template.file_path);
         return next;
       });
     }
@@ -208,11 +208,11 @@ export const TeamTemplateList = () => {
 
       {teamTemplates.map((template) => (
         <TeamTemplateItem
-          key={template.filePath}
+          key={template.file_path}
           template={template}
           onImport={handleImport}
-          isImporting={importingTemplates.has(template.filePath)}
-          importStatus={importStatuses[template.filePath] || "idle"}
+          isImporting={importingTemplates.has(template.file_path)}
+          importStatus={importStatuses[template.file_path] || "idle"}
         />
       ))}
     </div>
