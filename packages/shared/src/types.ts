@@ -18,21 +18,35 @@
 export const NODE_TYPES = ["folder", "file", "if", "else", "repeat"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
-import type { SchemaNode as GeneratedSchemaNode } from "./generated/schemaNode";
+// IPC type shapes are generated from the Rust structs via specta (ADR-0003,
+// issues #97 + #102). See `./generated/types.ts` and the drift test
+// `ipc_types_match_committed_typescript` in apps/desktop/src-tauri.
+import type {
+  SchemaNode as GeneratedSchemaNode,
+  SchemaHooks as GeneratedSchemaHooks,
+  SchemaStats as GeneratedSchemaStats,
+  SchemaTree as GeneratedSchemaTree,
+  VariableDefinition as GeneratedVariableDefinition,
+  ValidationRule as GeneratedValidationRule,
+  ValidationError as GeneratedValidationError,
+  LogEntry as GeneratedLogEntry,
+  ResultSummary as GeneratedResultSummary,
+  HookResult as GeneratedHookResult,
+  ItemType as GeneratedItemType,
+  CreatedItem as GeneratedCreatedItem,
+  CreateResult as GeneratedCreateResult,
+  UndoSummary as GeneratedUndoSummary,
+  UndoResult as GeneratedUndoResult,
+  DiffAction as GeneratedDiffAction,
+  DiffLineType as GeneratedDiffLineType,
+  DiffLine as GeneratedDiffLine,
+  DiffHunk as GeneratedDiffHunk,
+  DiffNodeType as GeneratedDiffNodeType,
+  DiffNode as GeneratedDiffNode,
+  DiffSummary as GeneratedDiffSummary,
+  DiffResult as GeneratedDiffResult,
+} from "./generated/types";
 
-/**
- * Represents a single node in the schema tree structure.
- * Nodes can be files, folders, or control flow elements (if/else/repeat).
- *
- * Field shape is generated from the Rust `SchemaNode` struct via specta (see
- * ADR-0003 and `./generated/schemaNode.ts`). The frontend re-narrows two
- * fields that the Rust type system cannot express:
- *   - `type` is required and limited to {@link NodeType}.
- *   - `generate`, when present, is restricted to `"image" | "sqlite"`.
- * Adding a field on the Rust side propagates here automatically; the
- * codegen contract test (`schema_node_typescript_matches_committed`) fails
- * on any drift.
- */
 /**
  * Strip `| null` from each property. Rust's `Option<T>` serializes as
  * `T | null` via specta, but the rest of the codebase treats absent values
@@ -40,6 +54,18 @@ import type { SchemaNode as GeneratedSchemaNode } from "./generated/schemaNode";
  */
 type WithoutNullFields<T> = { [K in keyof T]: Exclude<T[K], null> };
 
+/**
+ * Represents a single node in the schema tree structure.
+ * Nodes can be files, folders, or control flow elements (if/else/repeat).
+ *
+ * Field shape is generated from the Rust `SchemaNode` struct via specta. The
+ * frontend re-narrows two fields the Rust type system cannot express:
+ *   - `type` is required and limited to {@link NodeType}.
+ *   - `generate`, when present, is restricted to `"image" | "sqlite"`.
+ * Adding a field on the Rust side propagates here automatically; the
+ * codegen drift test (`ipc_types_match_committed_typescript`) fails on any
+ * Rust↔TS divergence until the generated file is regenerated.
+ */
 export type SchemaNode = WithoutNullFields<
   Omit<GeneratedSchemaNode, "type" | "name" | "children" | "generate">
 > & {
@@ -49,57 +75,24 @@ export type SchemaNode = WithoutNullFields<
   generate?: "image" | "sqlite";
 };
 
-export interface SchemaHooks {
-  post_create: string[];
-}
+export type SchemaHooks = WithoutNullFields<GeneratedSchemaHooks>;
+export type SchemaStats = WithoutNullFields<GeneratedSchemaStats>;
+export type VariableDefinition = WithoutNullFields<GeneratedVariableDefinition>;
 
-/**
- * Variable definition parsed from <variable> elements in the schema.
- * Provides metadata like description, placeholder, and validation rules.
- */
-export interface VariableDefinition {
-  /** Variable name (without % delimiters) */
-  name: string;
-  /** Description explaining what this variable is for */
-  description?: string;
-  /** Example text shown in empty input */
-  placeholder?: string;
-  /** Concrete example value */
-  example?: string;
-  /** Whether the variable is required */
-  required?: boolean;
-  /** Regex pattern for validation */
-  pattern?: string;
-  /** Minimum length for the value */
-  minLength?: number;
-  /** Maximum length for the value */
-  maxLength?: number;
-}
-
-export interface SchemaTree {
+/** Tree of schema nodes plus parse-time metadata (stats, hooks, defs). */
+export type SchemaTree = WithoutNullFields<
+  Omit<GeneratedSchemaTree, "root" | "hooks" | "variableDefinitions">
+> & {
   root: SchemaNode;
-  stats: {
-    folders: number;
-    files: number;
-    downloads: number;
-    /** Number of files that will be generated (images, databases) */
-    generated?: number;
-  };
   hooks?: SchemaHooks;
-  /** Variable definitions from <variables> block */
   variableDefinitions?: VariableDefinition[];
-}
+};
 
 // ============================================================================
 // Variable Types
 // ============================================================================
 
-export interface ValidationRule {
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  required?: boolean;
-}
+export type ValidationRule = WithoutNullFields<GeneratedValidationRule>;
 
 export interface Variable {
   name: string;
@@ -113,10 +106,71 @@ export interface Variable {
   example?: string;
 }
 
-export interface ValidationError {
-  variable_name: string;
-  message: string;
-}
+export type ValidationError = GeneratedValidationError;
+
+// ============================================================================
+// IPC Result + Diff Types (generated, ADR-0003)
+// ============================================================================
+
+/**
+ * Log entry returned by the native backend over IPC. `details` is treated as
+ * optional on the consumer side (web/desktop construct entries without it);
+ * the Rust struct's `Option<String>` matches this intent.
+ */
+export type BackendLogEntry = Omit<WithoutNullFields<GeneratedLogEntry>, "details"> & {
+  details?: string;
+};
+
+/**
+ * Per-run counts of created/skipped items + hook execution. The generated
+ * type marks counts with `#[serde(default)]` as optional, but the Rust struct
+ * always populates them on serialize, so the frontend treats them as required.
+ */
+export type ResultSummary = Required<WithoutNullFields<GeneratedResultSummary>>;
+export type HookResult = WithoutNullFields<GeneratedHookResult>;
+export type ItemType = GeneratedItemType;
+export type CreatedItem = WithoutNullFields<GeneratedCreatedItem>;
+
+export type CreateResult = WithoutNullFields<
+  Omit<GeneratedCreateResult, "logs" | "summary" | "hook_results" | "created_items">
+> & {
+  logs: BackendLogEntry[];
+  summary: ResultSummary;
+  hook_results: HookResult[];
+  created_items: CreatedItem[];
+};
+
+export type UndoSummary = WithoutNullFields<GeneratedUndoSummary>;
+export type UndoResult = WithoutNullFields<
+  Omit<GeneratedUndoResult, "logs" | "summary">
+> & {
+  logs: BackendLogEntry[];
+  summary: UndoSummary;
+};
+
+export type DiffAction = GeneratedDiffAction;
+export type DiffLineType = GeneratedDiffLineType;
+export type DiffLine = WithoutNullFields<GeneratedDiffLine>;
+export type DiffHunk = WithoutNullFields<
+  Omit<GeneratedDiffHunk, "lines">
+> & {
+  lines: DiffLine[];
+};
+export type DiffNodeType = GeneratedDiffNodeType;
+export type DiffNode = WithoutNullFields<
+  Omit<GeneratedDiffNode, "children" | "diff_hunks" | "generate">
+> & {
+  children?: DiffNode[];
+  diff_hunks?: DiffHunk[];
+  generate?: "image" | "sqlite";
+};
+export type DiffSummary = WithoutNullFields<GeneratedDiffSummary>;
+export type DiffResult = WithoutNullFields<
+  Omit<GeneratedDiffResult, "root" | "summary">
+> & {
+  root: DiffNode;
+  summary: DiffSummary;
+};
 
 /**
  * Available variable transformations for the UI help section.

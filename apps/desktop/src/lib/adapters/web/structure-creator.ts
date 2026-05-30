@@ -1148,6 +1148,6 @@ const calculateDiffSummary = (root: DiffNode, warnings: string[]): DiffSummary =
     overwrites,
     skips,
     unchanged_folders: unchangedFolders,
-    warnings: warnings.length > 0 ? warnings : undefined,
+    warnings,
   };
 };

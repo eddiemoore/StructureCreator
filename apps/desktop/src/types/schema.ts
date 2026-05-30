@@ -16,11 +16,29 @@ export type {
   NodeType,
   SchemaNode,
   SchemaHooks,
+  SchemaStats,
   SchemaTree,
   VariableDefinition,
   ValidationRule,
   Variable,
   ValidationError,
+  // IPC result + diff types (generated from Rust via specta, ADR-0003)
+  BackendLogEntry,
+  ResultSummary,
+  HookResult,
+  ItemType,
+  CreatedItem,
+  CreateResult,
+  UndoSummary,
+  UndoResult,
+  DiffAction,
+  DiffLineType,
+  DiffLine,
+  DiffHunk,
+  DiffNodeType,
+  DiffNode,
+  DiffSummary,
+  DiffResult,
   WizardQuestionType,
   WizardChoice,
   WizardShowWhen,
@@ -56,7 +74,7 @@ export type {
 } from '@structure-creator/shared';
 
 // Import types needed for desktop-specific types
-import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode, TeamLibrary, TeamTemplate, Plugin, VariableDefinition } from '@structure-creator/shared';
+import type { Template, SchemaTree, WizardAnswers, Variable, ValidationError, ValidationRule, Settings, TemplateSortOption, RecentProject, SchemaNode, TeamLibrary, TeamTemplate, Plugin, VariableDefinition, DiffResult, CreatedItem } from '@structure-creator/shared';
 
 // ============================================================================
 // Desktop-specific Types
@@ -74,149 +92,17 @@ export interface WizardState {
   previewTree: SchemaTree | null;
 }
 
+/**
+ * Frontend UI log entry. Separate from the backend log entry (see
+ * `BackendLogEntry` re-exported from `@structure-creator/shared`); this is
+ * the one rendered in the panel with its own id, timestamp, and UI severity.
+ */
 export interface LogEntry {
   id: string;
   type: "success" | "pending" | "error" | "info" | "warning";
   message: string;
   details?: string;
   timestamp: number;
-}
-
-export interface BackendLogEntry {
-  log_type: string;
-  message: string;
-  details?: string;
-}
-
-export interface ResultSummary {
-  folders_created: number;
-  files_created: number;
-  files_downloaded: number;
-  /** Number of binary files generated (images, SQLite databases) */
-  files_generated: number;
-  errors: number;
-  skipped: number;
-  hooks_executed: number;
-  hooks_failed: number;
-}
-
-export interface HookResult {
-  command: string;
-  success: boolean;
-  exit_code: number | null;
-  stdout: string | null;
-  stderr: string | null;
-}
-
-export interface CreateResult {
-  logs: BackendLogEntry[];
-  summary: ResultSummary;
-  hook_results: HookResult[];
-  created_items: CreatedItem[];
-}
-
-/** Represents a created item for undo tracking */
-export interface CreatedItem {
-  /** Full path of the created item */
-  path: string;
-  /** Type: "folder" or "file" */
-  item_type: "folder" | "file";
-  /** True if this item existed before and was overwritten */
-  pre_existed: boolean;
-}
-
-/** Result of an undo operation */
-export interface UndoResult {
-  logs: BackendLogEntry[];
-  summary: UndoSummary;
-}
-
-/** Summary of undo operation results */
-export interface UndoSummary {
-  files_deleted: number;
-  folders_deleted: number;
-  items_skipped: number;
-  errors: number;
-}
-
-// ============================================================================
-// Diff Preview Types
-// ============================================================================
-
-/** Action that would be taken for a filesystem entry */
-export type DiffAction = "create" | "overwrite" | "skip" | "unchanged";
-
-/** Type of node in the diff tree */
-export type DiffNodeType = "folder" | "file";
-
-/** Type of diff line */
-export type DiffLineType = "add" | "remove" | "context" | "truncated";
-
-/** A single line in a diff hunk */
-export interface DiffLine {
-  /** Type of this diff line */
-  line_type: DiffLineType;
-  /** The line content */
-  content: string;
-}
-
-/** A diff hunk representing a contiguous block of changes */
-export interface DiffHunk {
-  /** Line number in old file (1-indexed) */
-  old_start: number;
-  /** Number of lines from old file in this hunk */
-  old_count: number;
-  /** Line number in new file (1-indexed) */
-  new_start: number;
-  /** Number of lines from new file in this hunk */
-  new_count: number;
-  /** The diff lines */
-  lines: DiffLine[];
-}
-
-/** Represents a file or folder in the diff preview tree */
-export interface DiffNode {
-  /** Unique identifier for frontend tree navigation */
-  id: string;
-  /** Type of this node (folder or file) */
-  node_type: DiffNodeType;
-  /** Display name (with variables substituted) */
-  name: string;
-  /** Full path relative to output directory */
-  path: string;
-  /** Action to be taken */
-  action: DiffAction;
-  /** For files: existing content (if overwriting) */
-  existing_content?: string;
-  /** For files: new content to be written */
-  new_content?: string;
-  /** For files: computed diff hunks (for text files only) */
-  diff_hunks?: DiffHunk[];
-  /** For files with URLs: the source URL */
-  url?: string;
-  /** Whether this is a binary file (no text diff available) */
-  is_binary: boolean;
-  /** Generator type if this file will be generated */
-  generate?: "image" | "sqlite";
-  /** Child nodes (for folders) */
-  children?: DiffNode[];
-}
-
-/** Summary statistics for the diff preview */
-export interface DiffSummary {
-  total_items: number;
-  creates: number;
-  overwrites: number;
-  skips: number;
-  unchanged_folders: number;
-  /** Warnings generated during diff preview (e.g., invalid repeat counts) */
-  warnings?: string[];
-}
-
-/** Complete diff preview result */
-export interface DiffResult {
-  root: DiffNode;
-  summary: DiffSummary;
 }
 
 export interface CreationProgress {

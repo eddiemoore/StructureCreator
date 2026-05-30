@@ -9,14 +9,14 @@ use crate::database::ValidationRule;
 // Structure Creation Types
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct LogEntry {
     pub log_type: String, // "success", "error", "warning", "info"
     pub message: String,
     pub details: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct CreateResult {
     pub logs: Vec<LogEntry>,
     pub summary: ResultSummary,
@@ -27,7 +27,7 @@ pub struct CreateResult {
     pub created_items: Vec<CreatedItem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct HookResult {
     pub command: String,
     pub success: bool,
@@ -36,7 +36,7 @@ pub struct HookResult {
     pub stderr: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ResultSummary {
     pub folders_created: usize,
     pub files_created: usize,
@@ -52,7 +52,7 @@ pub struct ResultSummary {
 }
 
 /// Type of created item for undo tracking
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum ItemType {
     Folder,
@@ -60,7 +60,7 @@ pub enum ItemType {
 }
 
 /// Represents a created item for undo tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct CreatedItem {
     /// Full path of the created item
     pub path: String,
@@ -71,14 +71,14 @@ pub struct CreatedItem {
 }
 
 /// Result of an undo operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct UndoResult {
     pub logs: Vec<LogEntry>,
     pub summary: UndoSummary,
 }
 
 /// Summary of undo operation results
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct UndoSummary {
     pub files_deleted: usize,
     pub folders_deleted: usize,
@@ -87,7 +87,7 @@ pub struct UndoSummary {
 }
 
 /// Validation error for a variable
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ValidationError {
     pub variable_name: String,
     pub message: String,
@@ -98,7 +98,7 @@ pub struct ValidationError {
 // ============================================================================
 
 /// Represents the action that would be taken for a filesystem entry
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffAction {
     /// Item will be created (does not exist)
@@ -112,7 +112,7 @@ pub enum DiffAction {
 }
 
 /// Type of diff line
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffLineType {
     Add,
@@ -123,7 +123,7 @@ pub enum DiffLineType {
 }
 
 /// Type of node in the diff tree
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffNodeType {
     Folder,
@@ -131,7 +131,7 @@ pub enum DiffNodeType {
 }
 
 /// A single line in a diff hunk
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DiffLine {
     /// Type of this diff line
     pub line_type: DiffLineType,
@@ -140,7 +140,7 @@ pub struct DiffLine {
 }
 
 /// A diff hunk representing a contiguous block of changes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DiffHunk {
     /// Line number in old file (1-indexed)
     pub old_start: usize,
@@ -155,7 +155,7 @@ pub struct DiffHunk {
 }
 
 /// Represents a file or folder in the diff preview tree
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DiffNode {
     /// Unique identifier for frontend tree navigation
     pub id: String,
@@ -188,7 +188,7 @@ pub struct DiffNode {
 }
 
 /// Summary statistics for the diff preview
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DiffSummary {
     pub total_items: usize,
     pub creates: usize,
@@ -201,7 +201,7 @@ pub struct DiffSummary {
 }
 
 /// Complete diff preview result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DiffResult {
     pub root: DiffNode,
     pub summary: DiffSummary,
