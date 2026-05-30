@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use crate::database::{CreatePluginInput, PluginCapability};
 
 /// Plugin manifest structure (plugin.json)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct PluginManifest {
     /// Unique plugin name (used as directory name)
     pub name: String,

@@ -45,12 +45,31 @@ import type {
   DiffNode as GeneratedDiffNode,
   DiffSummary as GeneratedDiffSummary,
   DiffResult as GeneratedDiffResult,
+  // Phase 2 (#114): types whose hand-written naming already matches the wire.
+  // RecentProject, TeamLibrary, TeamTemplate, SyncLogEntry, Plugin,
+  // PluginManifest are NOT swapped in because the Tauri adapter manually
+  // translates snake_case wire fields to camelCase frontend fields; migrating
+  // those means also removing the translation layer (separate work).
+  Template as GeneratedTemplate,
+  TemplateExport as GeneratedTemplateExport,
+  TemplateExportFile as GeneratedTemplateExportFile,
+  ExportFileType as GeneratedExportFileType,
+  ImportResult as GeneratedImportResult,
+  PluginCapability as GeneratedPluginCapability,
+  ValidationSeverity as GeneratedValidationSeverity,
+  ValidationIssueType as GeneratedValidationIssueType,
+  ValidationIssue as GeneratedValidationIssue,
+  SchemaValidationResult as GeneratedSchemaValidationResult,
+  ParseWithInheritanceResult as GeneratedParseWithInheritanceResult,
 } from "./generated/types";
 
 /**
  * Strip `| null` from each property. Rust's `Option<T>` serializes as
  * `T | null` via specta, but the rest of the codebase treats absent values
- * as `undefined`, so we collapse the two on the consumption side.
+ * as `undefined`, so we collapse the two on the consumption side. For
+ * required-nullable fields where call sites legitimately pass `null` (e.g.
+ * `Template.description`), the per-type narrowing keeps the field nullable
+ * via an explicit `Omit` + re-add.
  */
 type WithoutNullFields<T> = { [K in keyof T]: Exclude<T[K], null> };
 
@@ -273,46 +292,40 @@ export type WizardAnswers = Record<string, string | boolean | string[]>;
 // Template Types
 // ============================================================================
 
-export interface Template {
-  id: string;
-  name: string;
-  description: string | null;
-  schema_xml: string;
-  variables: Record<string, string>;
-  variable_validation?: Record<string, ValidationRule>;
-  icon_color: string | null;
-  is_favorite: boolean;
-  use_count: number;
-  created_at: string;
-  updated_at: string;
-  tags: string[];
+/**
+ * Template record. The Rust struct stores `wizard_config` as
+ * `serde_json::Value`, so it appears as `JsonValue` in the generated TS; the
+ * frontend re-narrows it to the typed {@link WizardConfig}.
+ */
+export type Template = Omit<
+  GeneratedTemplate,
+  "wizard_config" | "variable_validation" | "tags"
+> & {
   wizard_config: WizardConfig | null;
-}
-
-export interface TemplateExport {
-  name: string;
-  description: string | null;
-  schema_xml: string;
-  variables?: Record<string, string>;
   variable_validation?: Record<string, ValidationRule>;
-  icon_color: string | null;
-  tags?: string[];
-  wizard_config?: WizardConfig | null;
-}
+  tags: string[];
+};
 
-export interface TemplateExportFile {
-  version: string;
-  type: "template" | "template_bundle";
-  exported_at: string;
+export type TemplateExport = Omit<
+  GeneratedTemplateExport,
+  "wizard_config" | "variable_validation" | "tags"
+> & {
+  wizard_config?: WizardConfig | null;
+  variable_validation?: Record<string, ValidationRule>;
+  tags?: string[];
+};
+
+export type ExportFileType = GeneratedExportFileType;
+
+export type TemplateExportFile = Omit<
+  WithoutNullFields<GeneratedTemplateExportFile>,
+  "template" | "templates"
+> & {
   template?: TemplateExport;
   templates?: TemplateExport[];
-}
+};
 
-export interface ImportResult {
-  imported: string[];
-  skipped: string[];
-  errors: string[];
-}
+export type ImportResult = WithoutNullFields<GeneratedImportResult>;
 
 export type DuplicateStrategy = "skip" | "replace" | "rename";
 
@@ -381,67 +394,34 @@ export const ACCENT_COLORS: Record<AccentColor, string> = {
  * Result of parsing a schema with template inheritance resolved.
  * Returned by cmd_parse_schema_with_inheritance.
  */
-export interface ParseWithInheritanceResult {
+export type ParseWithInheritanceResult = Omit<
+  WithoutNullFields<GeneratedParseWithInheritanceResult>,
+  "tree" | "mergedVariableValidation"
+> & {
   /** The fully resolved schema tree with inherited content merged */
   tree: SchemaTree;
-  /** Variables merged from all base templates (child values override base) */
-  mergedVariables: Record<string, string>;
-  /** Validation rules merged from all base templates (child rules override base) */
   mergedVariableValidation: Record<string, ValidationRule>;
-  /** List of base template names that were extended (in resolution order) */
-  baseTemplates: string[];
-}
+};
 
 // ============================================================================
 // Schema Validation Types
 // ============================================================================
 
-/**
- * Severity level for validation issues.
- * - error: Blocks structure creation
- * - warning: Advisory only, doesn't block creation
- */
-export type ValidationSeverity = "error" | "warning";
-
-/**
- * Type of validation issue found in the schema.
- */
-export type ValidationIssueType =
-  | "xml_syntax"
-  | "undefined_variable"
-  | "duplicate_name"
-  | "circular_inheritance"
-  | "inheritance_error"
-  | "invalid_url";
-
-/**
- * A single validation issue found during schema validation.
- */
-export interface ValidationIssue {
-  /** Severity level of the issue */
-  severity: ValidationSeverity;
-  /** Type of validation issue */
-  issueType: ValidationIssueType;
-  /** Human-readable description of the issue */
-  message: string;
-  /** Path to the node where the issue was found (e.g., "root/src/components") */
-  nodePath?: string;
-  /** The problematic value (e.g., the undefined variable name or invalid URL) */
-  value?: string;
-}
+export type ValidationSeverity = GeneratedValidationSeverity;
+export type ValidationIssueType = GeneratedValidationIssueType;
+export type ValidationIssue = WithoutNullFields<GeneratedValidationIssue>;
 
 /**
  * Result of schema validation.
  * Returned by cmd_validate_schema.
  */
-export interface SchemaValidationResult {
-  /** True if no errors were found (warnings don't affect this) */
-  isValid: boolean;
-  /** Error-level issues that block creation */
+export type SchemaValidationResult = Omit<
+  WithoutNullFields<GeneratedSchemaValidationResult>,
+  "errors" | "warnings"
+> & {
   errors: ValidationIssue[];
-  /** Warning-level issues that are advisory */
   warnings: ValidationIssue[];
-}
+};
 
 // ============================================================================
 // Team Library Types
@@ -525,11 +505,7 @@ export interface TeamImportResult {
 /**
  * Plugin capabilities define what hooks a plugin provides.
  */
-export type PluginCapability =
-  | "file-processor"
-  | "variable-transformer"
-  | "schema-validator"
-  | "post-create-hook";
+export type PluginCapability = GeneratedPluginCapability;
 
 /**
  * A registered plugin in the system.

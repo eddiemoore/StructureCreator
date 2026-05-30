@@ -211,7 +211,7 @@ pub struct DiffResult {
 // Template Export/Import Types
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TemplateExport {
     pub name: String,
     pub description: Option<String>,
@@ -231,7 +231,7 @@ pub struct TemplateExport {
 }
 
 /// Type of export file - single template or bundle
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ExportFileType {
     /// Single template export
@@ -240,7 +240,7 @@ pub enum ExportFileType {
     TemplateBundle,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TemplateExportFile {
     pub version: String,
     #[serde(rename = "type")]
@@ -252,7 +252,7 @@ pub struct TemplateExportFile {
     pub templates: Option<Vec<TemplateExport>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ImportResult {
     pub imported: Vec<String>,
     pub skipped: Vec<String>,
