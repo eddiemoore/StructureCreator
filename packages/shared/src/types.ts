@@ -18,6 +18,8 @@
 export const NODE_TYPES = ["folder", "file", "if", "else", "repeat"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
+import type { VariableName } from "./variableName";
+
 // IPC type shapes are generated from the Rust structs via specta (ADR-0003,
 // issues #97 + #102). See `./generated/types.ts` and the drift test
 // `ipc_types_match_committed_typescript` in apps/desktop/src-tauri.
@@ -105,7 +107,15 @@ export type SchemaNode = WithoutNullFields<
 
 export type SchemaHooks = WithoutNullFields<GeneratedSchemaHooks>;
 export type SchemaStats = WithoutNullFields<GeneratedSchemaStats>;
-export type VariableDefinition = WithoutNullFields<GeneratedVariableDefinition>;
+
+/** Variable definition parsed from a `<variable>` element in the schema.
+ *  `name` is branded as {@link VariableName} (ADR-0001 / #103). */
+export type VariableDefinition = Omit<
+  WithoutNullFields<GeneratedVariableDefinition>,
+  "name"
+> & {
+  name: VariableName;
+};
 
 /** Tree of schema nodes plus parse-time metadata (stats, hooks, defs). */
 export type SchemaTree = WithoutNullFields<
@@ -122,8 +132,13 @@ export type SchemaTree = WithoutNullFields<
 
 export type ValidationRule = WithoutNullFields<GeneratedValidationRule>;
 
+/**
+ * A user-supplied variable held in the store. `name` is branded as
+ * {@link VariableName} (ADR-0001 / #103) so a delimited or raw string cannot
+ * enter the store without going through `asVariableName`.
+ */
 export interface Variable {
-  name: string;
+  name: VariableName;
   value: string;
   validation?: ValidationRule;
   /** Description explaining what this variable is for */
@@ -134,7 +149,11 @@ export interface Variable {
   example?: string;
 }
 
-export type ValidationError = GeneratedValidationError;
+/** A validation error from the backend. `variable_name` is branded
+ *  ({@link VariableName}) to match the store's canonical form. */
+export type ValidationError = Omit<GeneratedValidationError, "variable_name"> & {
+  variable_name: VariableName;
+};
 
 // ============================================================================
 // IPC Result + Diff Types (generated, ADR-0003)

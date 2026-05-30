@@ -13,6 +13,7 @@ import type {
   VariableDefinition,
 } from "../../../types/schema";
 import { MAX_DIRECTORY_SCAN_DEPTH, MAX_SCHEMA_DEPTH, validatePathComponent, calculateSchemaStats } from "./constants";
+import { asVariableName } from "@structure-creator/shared";
 
 /**
  * Validate a repeat_as variable name.
@@ -105,7 +106,7 @@ const parseVariableDefinitions = (element: Element): VariableDefinition[] | unde
     const name = varEl.getAttribute("name");
     if (!name) continue; // Name is required
 
-    const def: VariableDefinition = { name };
+    const def: VariableDefinition = { name: asVariableName(name) };
 
     const description = varEl.getAttribute("description");
     if (description) def.description = description;

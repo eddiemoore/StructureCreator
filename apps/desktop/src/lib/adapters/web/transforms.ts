@@ -1,3 +1,4 @@
+import { asVariableName } from "@structure-creator/shared";
 /**
  * Variable transformation and substitution for web mode.
  * Port of the Rust transforms.rs functionality.
@@ -398,7 +399,7 @@ export const validateVariables = (
     // Check required
     if (rule.required && (!value || value.trim() === "")) {
       errors.push({
-        variable_name: cleanName,
+        variable_name: asVariableName(cleanName),
         message: `${cleanName} is required`,
       });
       continue; // Skip other validations if required check fails
@@ -412,7 +413,7 @@ export const validateVariables = (
     // Check minLength
     if (rule.minLength !== undefined && value.length < rule.minLength) {
       errors.push({
-        variable_name: cleanName,
+        variable_name: asVariableName(cleanName),
         message: `${cleanName} must be at least ${rule.minLength} characters`,
       });
     }
@@ -420,7 +421,7 @@ export const validateVariables = (
     // Check maxLength
     if (rule.maxLength !== undefined && value.length > rule.maxLength) {
       errors.push({
-        variable_name: cleanName,
+        variable_name: asVariableName(cleanName),
         message: `${cleanName} must be at most ${rule.maxLength} characters`,
       });
     }
@@ -430,7 +431,7 @@ export const validateVariables = (
       // Check for potentially dangerous regex patterns (ReDoS prevention)
       if (isPotentiallyDangerousRegex(rule.pattern)) {
         errors.push({
-          variable_name: cleanName,
+          variable_name: asVariableName(cleanName),
           message: `Validation pattern for ${cleanName} was rejected for security reasons`,
         });
         continue;
@@ -444,13 +445,13 @@ export const validateVariables = (
           : value;
         if (!regex.test(testValue)) {
           errors.push({
-            variable_name: cleanName,
+            variable_name: asVariableName(cleanName),
             message: `${cleanName} does not match pattern: ${rule.pattern}`,
           });
         }
       } catch (e) {
         errors.push({
-          variable_name: cleanName,
+          variable_name: asVariableName(cleanName),
           message: `Invalid regex pattern for ${cleanName}: ${rule.pattern}`,
         });
       }

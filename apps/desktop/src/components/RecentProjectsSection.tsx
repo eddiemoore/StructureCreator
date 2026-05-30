@@ -9,6 +9,7 @@ import {
   UploadIcon,
 } from "./Icons";
 import type { RecentProject } from "../types/schema";
+import { asVariableName } from "@structure-creator/shared";
 
 /** Format relative time (e.g., "2 days ago", "just now") */
 function formatRelativeTime(isoDate: string): string {
@@ -64,7 +65,7 @@ export const RecentProjectsSection = () => {
 
       // Always set variables (clears previous if project has none)
       const loadedVariables = Object.entries(project.variables).map(([name, value]) => ({
-        name,
+        name: asVariableName(name),
         value,
         validation: project.variable_validation?.[name],
       }));
