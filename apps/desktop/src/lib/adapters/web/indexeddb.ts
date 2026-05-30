@@ -630,7 +630,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
         const projects = request.result as RecentProject[];
         // Sort by createdAt descending (newest first)
         projects.sort((a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         resolve(projects);
       };
@@ -665,16 +665,16 @@ export class IndexedDBAdapter implements DatabaseAdapter {
 
     const project: RecentProject = {
       id: generateUUID(),
-      projectName: input.projectName,
-      outputPath: input.outputPath,
-      schemaXml: input.schemaXml,
+      project_name: input.projectName,
+      output_path: input.outputPath,
+      schema_xml: input.schemaXml,
       variables: input.variables,
-      variableValidation: input.variableValidation,
-      templateId: input.templateId,
-      templateName: input.templateName,
-      foldersCreated: input.foldersCreated,
-      filesCreated: input.filesCreated,
-      createdAt: timestamp,
+      variable_validation: input.variableValidation,
+      template_id: input.templateId,
+      template_name: input.templateName,
+      folders_created: input.foldersCreated,
+      files_created: input.filesCreated,
+      created_at: timestamp,
     };
 
     return new Promise((resolve, reject) => {
@@ -690,7 +690,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
           if (all.length > MAX_RECENT_PROJECTS) {
             // Sort by createdAt ascending to find oldest
             all.sort((a, b) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             );
             // Delete oldest entries
             const toDelete = all.slice(0, all.length - MAX_RECENT_PROJECTS);

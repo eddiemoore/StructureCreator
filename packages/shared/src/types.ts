@@ -61,6 +61,15 @@ import type {
   ValidationIssue as GeneratedValidationIssue,
   SchemaValidationResult as GeneratedSchemaValidationResult,
   ParseWithInheritanceResult as GeneratedParseWithInheritanceResult,
+  // Phase 3 (#116): translation-layer types now consumed directly. The Tauri
+  // adapter no longer rewrites snake_case wire fields to camelCase frontend
+  // fields, so the generated snake_case shape IS the frontend type.
+  RecentProject as GeneratedRecentProject,
+  TeamLibrary as GeneratedTeamLibrary,
+  TeamTemplate as GeneratedTeamTemplate,
+  SyncLogEntry as GeneratedSyncLogEntry,
+  Plugin as GeneratedPlugin,
+  PluginManifest as GeneratedPluginManifest,
 } from "./generated/types";
 
 /**
@@ -340,19 +349,12 @@ export type TemplateSortOption =
   | "usage_asc"
   | "usage_desc";
 
-export interface RecentProject {
-  id: string;
-  projectName: string;
-  outputPath: string;
-  schemaXml: string;
-  variables: Record<string, string>;
-  variableValidation: Record<string, ValidationRule>;
-  templateId: string | null;
-  templateName: string | null;
-  foldersCreated: number;
-  filesCreated: number;
-  createdAt: string;
-}
+export type RecentProject = Omit<
+  GeneratedRecentProject,
+  "variable_validation"
+> & {
+  variable_validation?: Record<string, ValidationRule>;
+};
 
 // ============================================================================
 // Settings Types
@@ -432,59 +434,20 @@ export type SchemaValidationResult = Omit<
  * Team libraries allow sharing templates across team members via network folders,
  * Dropbox, OneDrive, or other shared storage.
  */
-export interface TeamLibrary {
-  /** Unique identifier */
-  id: string;
-  /** Display name for the library */
-  name: string;
-  /** Full path to the shared folder */
-  path: string;
-  /** Sync interval in seconds (default: 300 = 5 minutes) */
-  syncInterval: number;
-  /** ISO timestamp of last successful scan, or null if never scanned */
-  lastSyncAt: string | null;
-  /** Whether this library is enabled for scanning */
-  isEnabled: boolean;
-  /** ISO timestamp when the library was added */
-  createdAt: string;
-  /** ISO timestamp when the library was last modified */
-  updatedAt: string;
-}
+export type TeamLibrary = GeneratedTeamLibrary;
 
 /**
  * A template found in a team library folder.
  * Represents metadata about a .sct file without loading its full content.
  */
-export interface TeamTemplate {
-  /** Template name (from the .sct file metadata) */
-  name: string;
-  /** Description from the template, if available */
-  description: string | null;
-  /** Full path to the .sct file */
-  filePath: string;
-  /** ISO timestamp when the file was last modified */
-  modifiedAt: string;
-  /** File size in bytes */
-  sizeBytes: number;
-}
+export type TeamTemplate = GeneratedTeamTemplate;
 
 /**
  * A sync log entry for auditing team library operations.
  */
-export interface SyncLogEntry {
-  /** Unique identifier */
-  id: string;
-  /** ID of the library this entry relates to */
-  libraryId: string;
-  /** Type of action: "scan", "import", or "error" */
+export type SyncLogEntry = Omit<GeneratedSyncLogEntry, "action"> & {
   action: "scan" | "import" | "error";
-  /** Name of the template involved (for import actions) */
-  templateName: string | null;
-  /** Additional details about the action */
-  details: string | null;
-  /** ISO timestamp when the action occurred */
-  createdAt: string;
-}
+};
 
 /**
  * Result of importing templates from a team library.
@@ -510,52 +473,12 @@ export type PluginCapability = GeneratedPluginCapability;
 /**
  * A registered plugin in the system.
  */
-export interface Plugin {
-  /** Unique identifier */
-  id: string;
-  /** Plugin name (from plugin.json) */
-  name: string;
-  /** Semantic version */
-  version: string;
-  /** Human-readable description */
-  description: string | null;
-  /** Full path to the plugin directory */
-  path: string;
-  /** Plugin capabilities (what hooks it provides) */
-  capabilities: PluginCapability[];
-  /** File extensions this plugin processes (for file-processor capability) */
-  fileTypes: string[];
-  /** User-configurable settings */
-  userSettings: Record<string, unknown>;
-  /** Whether the plugin is enabled */
-  isEnabled: boolean;
-  /** Load order (lower numbers load first) */
-  loadOrder: number;
-  /** ISO timestamp when the plugin was installed */
-  installedAt: string;
-  /** ISO timestamp when the plugin was last updated */
-  updatedAt: string;
-}
+export type Plugin = Omit<GeneratedPlugin, "user_settings"> & {
+  user_settings: Record<string, unknown>;
+};
 
 /**
  * Plugin manifest structure (plugin.json).
  * This is the format plugins use to describe themselves.
  */
-export interface PluginManifest {
-  /** Unique plugin name */
-  name: string;
-  /** Semantic version */
-  version: string;
-  /** Human-readable description */
-  description?: string;
-  /** Plugin capabilities */
-  capabilities: PluginCapability[];
-  /** File extensions for file processors */
-  fileTypes?: string[];
-  /** Main entry point (default: "index.js") */
-  main?: string;
-  /** Plugin author */
-  author?: string;
-  /** License */
-  license?: string;
-}
+export type PluginManifest = WithoutNullFields<GeneratedPluginManifest>;

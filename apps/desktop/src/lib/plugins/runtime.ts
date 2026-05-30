@@ -122,7 +122,7 @@ export class PluginRuntime {
   async loadPlugins(plugins: Plugin[], reload = false): Promise<void> {
     // Only load enabled file-processor plugins
     const fileProcessors = plugins.filter(
-      (p) => p.isEnabled && p.capabilities.includes("file-processor")
+      (p) => p.is_enabled && p.capabilities.includes("file-processor")
     );
 
     console.log(`Loading ${fileProcessors.length} file processor plugin(s)`);
@@ -187,14 +187,14 @@ export class PluginRuntime {
 
     for (const loaded of this.loadedPlugins.values()) {
       // Check if plugin handles this extension
-      const fileTypes = loaded.module.fileTypes || loaded.plugin.fileTypes;
+      const fileTypes = loaded.module.fileTypes || loaded.plugin.file_types;
       if (fileTypes.some((ft) => ft === extension || ft === `*`)) {
         processors.push(loaded);
       }
     }
 
     // Sort by load order
-    processors.sort((a, b) => a.plugin.loadOrder - b.plugin.loadOrder);
+    processors.sort((a, b) => a.plugin.load_order - b.plugin.load_order);
 
     return processors;
   }

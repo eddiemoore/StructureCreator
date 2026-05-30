@@ -30,7 +30,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const { settings, updateSetting, plugins } = useAppStore();
   const [showPluginManager, setShowPluginManager] = useState(false);
 
-  const enabledPluginCount = plugins.filter((p) => p.isEnabled).length;
+  const enabledPluginCount = plugins.filter((p) => p.is_enabled).length;
 
   const saveSetting = async (key: keyof Settings, value: string | null) => {
     try {

@@ -273,7 +273,7 @@ export const RightPanel = () => {
 
       // Load and process plugins for file-processor capability
       const enabledFileProcessors = plugins.filter(
-        (p) => p.isEnabled && p.capabilities.includes("file-processor")
+        (p) => p.is_enabled && p.capabilities.includes("file-processor")
       );
 
       let treeToCreate = effectiveTree;

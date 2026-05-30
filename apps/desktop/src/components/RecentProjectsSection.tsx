@@ -53,32 +53,32 @@ export const RecentProjectsSection = () => {
   const handleLoad = useCallback(async (project: RecentProject) => {
     try {
       // Parse the schema first (this can fail)
-      const tree = await api.schema.parseSchema(project.schemaXml);
+      const tree = await api.schema.parseSchema(project.schema_xml);
 
       // Only set state after successful parse
-      setSchemaPath(`recent:${project.projectName}`);
-      setSchemaContent(project.schemaXml);
+      setSchemaPath(`recent:${project.project_name}`);
+      setSchemaContent(project.schema_xml);
       setSchemaTree(tree);
-      setOutputPath(project.outputPath);
-      setProjectName(project.projectName);
+      setOutputPath(project.output_path);
+      setProjectName(project.project_name);
 
       // Always set variables (clears previous if project has none)
       const loadedVariables = Object.entries(project.variables).map(([name, value]) => ({
         name,
         value,
-        validation: project.variableValidation?.[name],
+        validation: project.variable_validation?.[name],
       }));
       setVariables(loadedVariables);
 
       addLog({
         type: "info",
-        message: `Loaded recent project: ${project.projectName}`,
+        message: `Loaded recent project: ${project.project_name}`,
       });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       addLog({
         type: "error",
-        message: `Failed to load project "${project.projectName}"`,
+        message: `Failed to load project "${project.project_name}"`,
         details: errorMessage,
       });
     }
@@ -211,7 +211,7 @@ export const RecentProjectsSection = () => {
                     <UploadIcon size={12} />
                   </button>
                   <button
-                    onClick={(e) => handleDelete(e, project.id, project.projectName)}
+                    onClick={(e) => handleDelete(e, project.id, project.project_name)}
                     disabled={deletingId === project.id}
                     className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-system-red hover:bg-system-red/10 transition-colors disabled:opacity-50"
                     title="Delete from history"
@@ -228,25 +228,25 @@ export const RecentProjectsSection = () => {
                   <div className="flex-1 min-w-0">
                     {/* pr-16 to avoid overlap with 2 action buttons */}
                     <div className="text-mac-sm font-medium text-text-primary truncate pr-16">
-                      {project.projectName}
+                      {project.project_name}
                     </div>
-                    <div className="text-mac-xs text-text-muted truncate" title={project.outputPath}>
-                      {project.outputPath}
+                    <div className="text-mac-xs text-text-muted truncate" title={project.output_path}>
+                      {project.output_path}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-1.5 text-mac-xs text-text-muted">
                   <div className="flex items-center gap-2">
-                    {project.templateName && (
+                    {project.template_name && (
                       <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px]">
-                        {project.templateName}
+                        {project.template_name}
                       </span>
                     )}
-                    <span>{project.foldersCreated} dirs, {project.filesCreated} files</span>
+                    <span>{project.folders_created} dirs, {project.files_created} files</span>
                   </div>
                   <span className="flex items-center gap-0.5">
                     <ClockIcon size={10} />
-                    {formatRelativeTime(project.createdAt)}
+                    {formatRelativeTime(project.created_at)}
                   </span>
                 </div>
               </div>
