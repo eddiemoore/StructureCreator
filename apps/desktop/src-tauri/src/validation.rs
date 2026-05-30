@@ -21,7 +21,7 @@ use crate::schema::{parse_xml_schema, resolve_template_inheritance, SchemaNode, 
 use crate::transforms::find_variable_refs;
 
 /// Severity level for validation issues
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ValidationSeverity {
     Error,
@@ -29,7 +29,7 @@ pub enum ValidationSeverity {
 }
 
 /// Type of validation issue
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ValidationIssueType {
     XmlSyntax,
@@ -41,7 +41,7 @@ pub enum ValidationIssueType {
 }
 
 /// A single validation issue found in the schema
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationIssue {
     pub severity: ValidationSeverity,
@@ -56,7 +56,7 @@ pub struct ValidationIssue {
 }
 
 /// Result of schema validation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SchemaValidationResult {
     /// True if no errors were found (warnings don't affect this)

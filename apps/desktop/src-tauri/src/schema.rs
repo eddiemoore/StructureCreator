@@ -981,7 +981,7 @@ pub struct TemplateData {
 }
 
 /// Result of parsing a schema with inheritance resolved
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ParseWithInheritanceResult {
     pub tree: SchemaTree,
@@ -2781,7 +2781,16 @@ export const EXTENSION = true;
         // Each entry is a single IPC-crossing type whose generated TS form
         // is bundled into packages/shared/src/generated/types.ts. Adding a
         // type here is the migration step for ADR-0003 / issue #102.
-        let mut bundled = String::new();
+        //
+        // Prepend a JsonValue alias because specta's serde_json feature emits
+        // unrestricted `JsonValue` references for `serde_json::Value` fields
+        // (e.g. Template.wizard_config). The frontend re-narrows those fields
+        // to typed values in `packages/shared/src/types.ts`.
+        let mut bundled = String::from(
+            "// Auto-generated from Rust via specta. Do not edit by hand.\n\
+             // Regenerate with: REGEN_TS=1 cargo test ipc_types_match_committed_typescript\n\
+             export type JsonValue = unknown;\n",
+        );
 
         macro_rules! emit {
             ($t:ty) => {
@@ -2820,6 +2829,33 @@ export const EXTENSION = true;
         emit!(crate::types::DiffNode);
         emit!(crate::types::DiffSummary);
         emit!(crate::types::DiffResult);
+
+        // Template + import/export (#114 phase 2)
+        emit!(crate::types::ExportFileType);
+        emit!(crate::types::TemplateExportFile);
+        emit!(crate::types::TemplateExport);
+        emit!(crate::types::ImportResult);
+        emit!(crate::database::Template);
+
+        // Recent projects
+        emit!(crate::database::RecentProject);
+
+        // Team library
+        emit!(crate::database::SyncLogEntry);
+        emit!(crate::database::TeamLibrary);
+        emit!(crate::team_library::TeamTemplate);
+
+        // Plugins
+        emit!(crate::database::PluginCapability);
+        emit!(crate::database::Plugin);
+        emit!(crate::plugins::PluginManifest);
+
+        // Validation + inheritance
+        emit!(crate::validation::ValidationSeverity);
+        emit!(crate::validation::ValidationIssueType);
+        emit!(crate::validation::ValidationIssue);
+        emit!(crate::validation::SchemaValidationResult);
+        emit!(ParseWithInheritanceResult);
 
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../../packages/shared/src/generated/types.ts");

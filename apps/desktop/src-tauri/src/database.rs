@@ -59,7 +59,7 @@ fn validate_tags(tags: &[String]) -> Vec<String> {
 }
 
 /// Validation rule for a variable
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 pub struct ValidationRule {
     pub pattern: Option<String>,
     pub min_length: Option<usize>,
@@ -72,7 +72,7 @@ pub struct ValidationRule {
 const MAX_RECENT_PROJECTS: usize = 20;
 
 /// A recent project entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RecentProject {
     pub id: String,
     pub project_name: String,
@@ -142,7 +142,7 @@ fn row_to_recent_project(row: &rusqlite::Row) -> rusqlite::Result<RecentProject>
     })
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Template {
     pub id: String,
     pub name: String,
@@ -254,7 +254,7 @@ pub struct UpdateTemplateInput {
 // ============================================================================
 
 /// A configured team library (shared folder containing .sct template files)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TeamLibrary {
     pub id: String,
     pub name: String,
@@ -289,7 +289,7 @@ pub struct UpdateTeamLibraryInput {
 }
 
 /// A sync log entry for audit trail
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SyncLogEntry {
     pub id: String,
     pub library_id: String,
@@ -330,7 +330,7 @@ fn row_to_sync_log_entry(row: &rusqlite::Row) -> rusqlite::Result<SyncLogEntry> 
 // ============================================================================
 
 /// Plugin capability types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "kebab-case")]
 pub enum PluginCapability {
     FileProcessor,
@@ -340,7 +340,7 @@ pub enum PluginCapability {
 }
 
 /// A registered plugin
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Plugin {
     pub id: String,
     pub name: String,

@@ -14,7 +14,7 @@ use crate::database::{CreateTemplateInput, Database, ValidationRule};
 const TEMPLATE_EXTENSION: &str = "sct";
 
 /// Represents a template found in a team library folder
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TeamTemplate {
     /// Template name (derived from filename or export metadata)
     pub name: String,

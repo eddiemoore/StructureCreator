@@ -1,3 +1,6 @@
+// Auto-generated from Rust via specta. Do not edit by hand.
+// Regenerate with: REGEN_TS=1 cargo test ipc_types_match_committed_typescript
+export type JsonValue = unknown;
 export type SchemaNode = { id?: string | null; type?: string; name?: string; url?: string | null; content?: string | null; children?: SchemaNode[] | null; condition_var?: string | null; 
 /**
  * For repeat nodes: the count expression (variable like "%NUM%" or literal "3")
@@ -214,3 +217,155 @@ warnings: string[] }
  * Complete diff preview result
  */
 export type DiffResult = { root: DiffNode; summary: DiffSummary }
+/**
+ * Type of export file - single template or bundle
+ */
+export type ExportFileType = 
+/**
+ * Single template export
+ */
+"template" | 
+/**
+ * Multiple templates bundled together
+ */
+"template_bundle"
+export type TemplateExportFile = { version: string; type: ExportFileType; exported_at: string; template?: TemplateExport | null; templates?: TemplateExport[] | null }
+export type TemplateExport = { name: string; description: string | null; schema_xml: string; variables?: { [key in string]: string } | null; 
+/**
+ * Validation rules for variables (optional, for backwards compatibility)
+ */
+variable_validation: { [key in string]: ValidationRule }; icon_color: string | null; 
+/**
+ * Tags for categorizing templates (optional, for backwards compatibility)
+ */
+tags: string[]; 
+/**
+ * Wizard configuration for guided template setup (optional)
+ */
+wizard_config?: JsonValue | null }
+export type ImportResult = { imported: string[]; skipped: string[]; errors: string[] }
+export type Template = { id: string; name: string; description: string | null; schema_xml: string; variables: { [key in string]: string }; variable_validation?: { [key in string]: ValidationRule }; icon_color: string | null; is_favorite: boolean; use_count: number; created_at: string; updated_at: string; tags?: string[]; 
+/**
+ * Wizard configuration for guided template setup (JSON)
+ */
+wizard_config: JsonValue | null }
+/**
+ * A recent project entry
+ */
+export type RecentProject = { id: string; project_name: string; output_path: string; schema_xml: string; variables: { [key in string]: string }; variable_validation?: { [key in string]: ValidationRule }; template_id: string | null; template_name: string | null; folders_created: number; files_created: number; created_at: string }
+/**
+ * A sync log entry for audit trail
+ */
+export type SyncLogEntry = { id: string; library_id: string; action: string; template_name: string | null; details: string | null; created_at: string }
+/**
+ * A configured team library (shared folder containing .sct template files)
+ */
+export type TeamLibrary = { id: string; name: string; path: string; sync_interval: number; last_sync_at: string | null; is_enabled: boolean; created_at: string; updated_at: string }
+/**
+ * Represents a template found in a team library folder
+ */
+export type TeamTemplate = { 
+/**
+ * Template name (derived from filename or export metadata)
+ */
+name: string; 
+/**
+ * Description from the template export file
+ */
+description: string | null; 
+/**
+ * Full path to the .sct file
+ */
+file_path: string; 
+/**
+ * File modification time (ISO 8601)
+ */
+modified_at: string; 
+/**
+ * File size in bytes
+ */
+size_bytes: number }
+/**
+ * Plugin capability types
+ */
+export type PluginCapability = "file-processor" | "variable-transformer" | "schema-validator" | "post-create-hook"
+/**
+ * A registered plugin
+ */
+export type Plugin = { id: string; name: string; version: string; description: string | null; path: string; capabilities: PluginCapability[]; file_types: string[]; user_settings: JsonValue; is_enabled: boolean; load_order: number; installed_at: string; updated_at: string }
+/**
+ * Plugin manifest structure (plugin.json)
+ */
+export type PluginManifest = { 
+/**
+ * Unique plugin name (used as directory name)
+ */
+name: string; 
+/**
+ * Semantic version (e.g., "1.0.0")
+ */
+version: string; 
+/**
+ * Human-readable description
+ */
+description?: string | null; 
+/**
+ * Plugin capabilities (what hooks it provides)
+ */
+capabilities?: string[]; 
+/**
+ * File extensions this plugin processes (for file-processor capability)
+ */
+fileTypes?: string[]; 
+/**
+ * Main entry point (default: "index.js")
+ */
+main?: string; 
+/**
+ * Plugin author
+ */
+author?: string | null; 
+/**
+ * Plugin license
+ */
+license?: string | null }
+/**
+ * Severity level for validation issues
+ */
+export type ValidationSeverity = "error" | "warning"
+/**
+ * Type of validation issue
+ */
+export type ValidationIssueType = "xml_syntax" | "undefined_variable" | "duplicate_name" | "circular_inheritance" | "inheritance_error" | "invalid_url"
+/**
+ * A single validation issue found in the schema
+ */
+export type ValidationIssue = { severity: ValidationSeverity; issueType: ValidationIssueType; message: string; 
+/**
+ * Path to the node where the issue was found (e.g., "root/src/components")
+ */
+nodePath?: string | null; 
+/**
+ * The problematic value (e.g., the undefined variable name or invalid URL)
+ */
+value?: string | null }
+/**
+ * Result of schema validation
+ */
+export type SchemaValidationResult = { 
+/**
+ * True if no errors were found (warnings don't affect this)
+ */
+isValid: boolean; 
+/**
+ * Error-level issues that block creation
+ */
+errors: ValidationIssue[]; 
+/**
+ * Warning-level issues that are advisory
+ */
+warnings: ValidationIssue[] }
+/**
+ * Result of parsing a schema with inheritance resolved
+ */
+export type ParseWithInheritanceResult = { tree: SchemaTree; mergedVariables: { [key in string]: string }; mergedVariableValidation: { [key in string]: ValidationRule }; baseTemplates: string[] }
