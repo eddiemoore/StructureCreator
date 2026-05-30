@@ -7,7 +7,7 @@ use std::io::Read;
 /// Default condition variable name for if blocks without an explicit var attribute
 const DEFAULT_CONDITION_VAR: &str = "CONDITION";
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 pub struct SchemaNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -2760,5 +2760,44 @@ export const EXTENSION = true;
 
         let tree = parse_xml_schema(xml).unwrap();
         assert!(tree.variable_definitions.is_none());
+    }
+
+    // Type-drift codegen (ADR-0003 / issue #97): the TypeScript wire type for
+    // SchemaNode is generated from this Rust struct via specta. The generated
+    // file is checked in at packages/shared/src/generated/schemaNode.ts; any
+    // drift between this Rust struct and that file fails CI.
+    //
+    // To regenerate after a legitimate Rust change:
+    //   REGEN_TS=1 cargo test schema_node_typescript_matches_committed
+    #[test]
+    fn schema_node_typescript_matches_committed() {
+        use specta_typescript::Typescript;
+
+        let generated =
+            specta_typescript::export::<SchemaNode>(&Typescript::default())
+                .expect("specta should export SchemaNode");
+
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../packages/shared/src/generated/schemaNode.ts");
+
+        if std::env::var("REGEN_TS").is_ok() {
+            std::fs::create_dir_all(path.parent().unwrap())
+                .expect("create generated dir");
+            std::fs::write(&path, &generated).expect("write generated TS");
+        }
+
+        let committed = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+            panic!(
+                "generated TS missing at {}; run with REGEN_TS=1 to create it",
+                path.display()
+            )
+        });
+
+        assert_eq!(
+            committed.trim(),
+            generated.trim(),
+            "SchemaNode Rust struct and committed TS have drifted. \
+             Regenerate with: REGEN_TS=1 cargo test schema_node_typescript_matches_committed"
+        );
     }
 }
