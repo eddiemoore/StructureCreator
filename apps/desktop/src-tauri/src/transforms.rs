@@ -964,6 +964,32 @@ mod tests {
         }
     }
 
+    // Golden-vector contract (ADR-0002): pins the `{{if}}` / `{{for}}`
+    // templating directives across targets.
+    #[test]
+    fn test_templating_matches_golden_contract() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            template: String,
+            variables: std::collections::HashMap<String, String>,
+            expected: String,
+        }
+
+        let fixture = include_str!("../../../../fixtures/templating.json");
+        let cases: Vec<Case> = serde_json::from_str(fixture).expect("valid fixture JSON");
+        assert!(!cases.is_empty(), "templating fixture must contain cases");
+
+        for case in cases {
+            let got = crate::templating::process_template(&case.template, &case.variables)
+                .unwrap_or_else(|e| panic!("templating error on {:?}: {:?}", case.template, e));
+            assert_eq!(
+                got, case.expected,
+                "process_template({:?}, {:?}): expected {:?}, got {:?}",
+                case.template, case.variables, case.expected, got
+            );
+        }
+    }
+
     // Golden-vector contract (ADR-0002): the transform fixtures are the single
     // cross-target spec, consumed by both this Rust suite and the web TS suite.
     #[test]
