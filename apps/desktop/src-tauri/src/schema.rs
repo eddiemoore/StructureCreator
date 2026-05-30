@@ -47,7 +47,7 @@ pub struct SchemaNode {
     pub attributes: Option<BTreeMap<String, String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 pub struct SchemaStats {
     pub folders: usize,
     pub files: usize,
@@ -56,7 +56,7 @@ pub struct SchemaStats {
     pub generated: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 pub struct SchemaHooks {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub post_create: Vec<String>,
@@ -64,7 +64,7 @@ pub struct SchemaHooks {
 
 /// Variable definition parsed from <variable> elements in the schema.
 /// Provides metadata like description, placeholder, and validation rules.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VariableDefinition {
     pub name: String,
@@ -84,7 +84,7 @@ pub struct VariableDefinition {
     pub max_length: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SchemaTree {
     pub root: SchemaNode,
@@ -948,7 +948,7 @@ const MAX_INHERITANCE_DEPTH: usize = 10;
 /// - `schema::ValidationRule`: camelCase for frontend API responses
 ///
 /// Use `From<database::ValidationRule>` for easy conversion.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationRule {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2770,20 +2770,64 @@ export const EXTENSION = true;
     // To regenerate after a legitimate Rust change:
     //   REGEN_TS=1 cargo test schema_node_typescript_matches_committed
     #[test]
-    fn schema_node_typescript_matches_committed() {
-        use specta_typescript::Typescript;
+    fn ipc_types_match_committed_typescript() {
+        use specta_typescript::{BigIntExportBehavior, Typescript};
 
-        let generated =
-            specta_typescript::export::<SchemaNode>(&Typescript::default())
-                .expect("specta should export SchemaNode");
+        // Rust uses `usize`/`u64` for counts (folder/file totals, etc.) that
+        // comfortably fit in a JS Number. Allow the lossy mapping so the
+        // generated TS uses `number` instead of `bigint`.
+        let conf = Typescript::default().bigint(BigIntExportBehavior::Number);
+
+        // Each entry is a single IPC-crossing type whose generated TS form
+        // is bundled into packages/shared/src/generated/types.ts. Adding a
+        // type here is the migration step for ADR-0003 / issue #102.
+        let mut bundled = String::new();
+
+        macro_rules! emit {
+            ($t:ty) => {
+                let ts = specta_typescript::export::<$t>(&conf)
+                    .unwrap_or_else(|e| panic!("export {}: {:?}", stringify!($t), e));
+                bundled.push_str(&ts);
+                bundled.push('\n');
+            };
+        }
+
+        // Schema cluster
+        emit!(SchemaNode);
+        emit!(SchemaStats);
+        emit!(SchemaHooks);
+        emit!(VariableDefinition);
+        emit!(SchemaTree);
+        emit!(ValidationRule);
+
+        // Result / undo cluster
+        emit!(crate::types::LogEntry);
+        emit!(crate::types::ResultSummary);
+        emit!(crate::types::HookResult);
+        emit!(crate::types::ItemType);
+        emit!(crate::types::CreatedItem);
+        emit!(crate::types::CreateResult);
+        emit!(crate::types::UndoSummary);
+        emit!(crate::types::UndoResult);
+        emit!(crate::types::ValidationError);
+
+        // Diff cluster
+        emit!(crate::types::DiffAction);
+        emit!(crate::types::DiffLineType);
+        emit!(crate::types::DiffLine);
+        emit!(crate::types::DiffHunk);
+        emit!(crate::types::DiffNodeType);
+        emit!(crate::types::DiffNode);
+        emit!(crate::types::DiffSummary);
+        emit!(crate::types::DiffResult);
 
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../packages/shared/src/generated/schemaNode.ts");
+            .join("../../../packages/shared/src/generated/types.ts");
 
         if std::env::var("REGEN_TS").is_ok() {
             std::fs::create_dir_all(path.parent().unwrap())
                 .expect("create generated dir");
-            std::fs::write(&path, &generated).expect("write generated TS");
+            std::fs::write(&path, &bundled).expect("write generated TS");
         }
 
         let committed = std::fs::read_to_string(&path).unwrap_or_else(|_| {
@@ -2795,9 +2839,9 @@ export const EXTENSION = true;
 
         assert_eq!(
             committed.trim(),
-            generated.trim(),
-            "SchemaNode Rust struct and committed TS have drifted. \
-             Regenerate with: REGEN_TS=1 cargo test schema_node_typescript_matches_committed"
+            bundled.trim(),
+            "Rust IPC types and committed TS have drifted. \
+             Regenerate with: REGEN_TS=1 cargo test ipc_types_match_committed_typescript"
         );
     }
 }
