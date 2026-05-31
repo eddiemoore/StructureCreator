@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within, act } from "@testing-librar
 import { LeftPanel } from "./LeftPanel";
 import { useAppStore } from "../store/appStore";
 import type { Template, SchemaTree, Variable, ParseWithInheritanceResult } from "../types/schema";
+import { asVariableName } from "@structure-creator/shared";
 
 // ============================================================================
 // Mock Setup
@@ -463,8 +464,8 @@ describe("LeftPanel", () => {
     describe("variable display", () => {
       it("renders variables list", async () => {
         setupWithVariables([
-          { name: "%PROJECT_NAME%", value: "my-project" },
-          { name: "%VERSION%", value: "1.0.0" },
+          { name: asVariableName("%PROJECT_NAME%"), value: "my-project" },
+          { name: asVariableName("%VERSION%"), value: "1.0.0" },
         ]);
         renderLeftPanel();
         await waitForDataLoad();
@@ -474,7 +475,7 @@ describe("LeftPanel", () => {
       });
 
       it("displays variable values in inputs", async () => {
-        setupWithVariables([{ name: "%PROJECT_NAME%", value: "my-project" }]);
+        setupWithVariables([{ name: asVariableName("%PROJECT_NAME%"), value: "my-project" }]);
         renderLeftPanel();
         await waitForDataLoad();
 
@@ -484,7 +485,7 @@ describe("LeftPanel", () => {
 
       it("displays variable descriptions", async () => {
         setupWithVariables([
-          { name: "%PROJECT_NAME%", value: "", description: "The name of your project" },
+          { name: asVariableName("%PROJECT_NAME%"), value: "", description: "The name of your project" },
         ]);
         renderLeftPanel();
         await waitForDataLoad();
@@ -493,9 +494,9 @@ describe("LeftPanel", () => {
       });
 
       it("displays validation errors", async () => {
-        setupWithVariables([{ name: "%PROJECT_NAME%", value: "" }]);
+        setupWithVariables([{ name: asVariableName("%PROJECT_NAME%"), value: "" }]);
         useAppStore.getState().setValidationErrors([
-          { variable_name: "PROJECT_NAME", message: "Required field" },
+          { variable_name: asVariableName("PROJECT_NAME"), message: "Required field" },
         ]);
         renderLeftPanel();
         await waitForDataLoad();
@@ -506,7 +507,7 @@ describe("LeftPanel", () => {
 
     describe("variable editing", () => {
       it("updates variable value on input", async () => {
-        setupWithVariables([{ name: "%PROJECT_NAME%", value: "old-value" }]);
+        setupWithVariables([{ name: asVariableName("%PROJECT_NAME%"), value: "old-value" }]);
         renderLeftPanel();
         await waitForDataLoad();
 
@@ -589,7 +590,7 @@ describe("LeftPanel", () => {
 
     describe("removing variables", () => {
       it("removes variable when remove button is clicked", async () => {
-        setupWithVariables([{ name: "%PROJECT_NAME%", value: "test" }]);
+        setupWithVariables([{ name: asVariableName("%PROJECT_NAME%"), value: "test" }]);
         renderLeftPanel();
         await waitForDataLoad();
 
@@ -604,7 +605,7 @@ describe("LeftPanel", () => {
 
     describe("validation configuration popover", () => {
       it("opens validation popover when settings button is clicked", async () => {
-        setupWithVariables([{ name: "%PROJECT_NAME%", value: "test" }]);
+        setupWithVariables([{ name: asVariableName("%PROJECT_NAME%"), value: "test" }]);
         renderLeftPanel();
         await waitForDataLoad();
 
@@ -616,7 +617,7 @@ describe("LeftPanel", () => {
       });
 
       it("toggles required checkbox", async () => {
-        setupWithVariables([{ name: "%PROJECT_NAME%", value: "test" }]);
+        setupWithVariables([{ name: asVariableName("%PROJECT_NAME%"), value: "test" }]);
         renderLeftPanel();
         await waitForDataLoad();
 
@@ -629,7 +630,7 @@ describe("LeftPanel", () => {
       });
 
       it("closes popover when Done is clicked", async () => {
-        setupWithVariables([{ name: "%PROJECT_NAME%", value: "test" }]);
+        setupWithVariables([{ name: asVariableName("%PROJECT_NAME%"), value: "test" }]);
         renderLeftPanel();
         await waitForDataLoad();
 

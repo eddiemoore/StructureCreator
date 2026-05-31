@@ -24,6 +24,7 @@ import type { Template, ValidationRule, TemplateSortOption } from "../types/sche
 import { TRANSFORMATIONS, DATE_FORMATS } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
 import type { ReactNode } from "react";
+import { asVariableName } from "@structure-creator/shared";
 
 interface LeftPanelProps {
   /** Ref for the search input, used by keyboard shortcuts */
@@ -320,7 +321,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
 
       if (Object.keys(mergedVariables).length > 0) {
         const loadedVariables = Object.entries(mergedVariables).map(([name, value]) => ({
-          name,
+          name: asVariableName(name),
           value,
           validation: mergedValidation[name],
         }));
@@ -526,7 +527,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
             // (matches template loading behavior - new schema replaces previous variables)
             if (Object.keys(result.mergedVariables).length > 0) {
               const loadedVariables = Object.entries(result.mergedVariables).map(([name, value]) => ({
-                name,
+                name: asVariableName(name),
                 value,
                 validation: result.mergedVariableValidation[name],
               }));

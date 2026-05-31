@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "./appStore";
 import type { Variable, VariableDefinition } from "../types/schema";
+import { asVariableName } from "@structure-creator/shared";
 
 describe("appStore variable handling", () => {
   beforeEach(() => {
@@ -22,7 +23,7 @@ describe("appStore variable handling", () => {
     });
 
     it("does not duplicate existing variables", () => {
-      const existing: Variable[] = [{ name: "%CLIENT_NAME%", value: "Existing Value" }];
+      const existing: Variable[] = [{ name: asVariableName("%CLIENT_NAME%"), value: "Existing Value" }];
       useAppStore.getState().setVariables(existing);
 
       useAppStore.getState().mergeDetectedVariables(["%CLIENT_NAME%", "%NEW_VAR%"]);
@@ -38,7 +39,7 @@ describe("appStore variable handling", () => {
     it("applies helper text from definitions to new variables", () => {
       const definitions: VariableDefinition[] = [
         {
-          name: "CLIENT_NAME",
+          name: asVariableName("CLIENT_NAME"),
           description: "The client company name",
           placeholder: "Enter client name...",
           example: "Acme Corp",
@@ -58,7 +59,7 @@ describe("appStore variable handling", () => {
     it("applies validation rules from definitions to new variables", () => {
       const definitions: VariableDefinition[] = [
         {
-          name: "PROJECT_NAME",
+          name: asVariableName("PROJECT_NAME"),
           required: true,
           pattern: "^[a-z-]+$",
           minLength: 3,
@@ -79,12 +80,12 @@ describe("appStore variable handling", () => {
 
     it("applies helper text to existing variables without overwriting", () => {
       // Set up existing variable without helper text
-      const existing: Variable[] = [{ name: "%CLIENT_NAME%", value: "My Client" }];
+      const existing: Variable[] = [{ name: asVariableName("%CLIENT_NAME%"), value: "My Client" }];
       useAppStore.getState().setVariables(existing);
 
       const definitions: VariableDefinition[] = [
         {
-          name: "CLIENT_NAME",
+          name: asVariableName("CLIENT_NAME"),
           description: "The client company name",
           placeholder: "Enter client name...",
           example: "Acme Corp",
@@ -105,7 +106,7 @@ describe("appStore variable handling", () => {
       // Set up existing variable with helper text
       const existing: Variable[] = [
         {
-          name: "%CLIENT_NAME%",
+          name: asVariableName("%CLIENT_NAME%"),
           value: "My Client",
           description: "Custom description",
           placeholder: "Custom placeholder",
@@ -115,7 +116,7 @@ describe("appStore variable handling", () => {
 
       const definitions: VariableDefinition[] = [
         {
-          name: "CLIENT_NAME",
+          name: asVariableName("CLIENT_NAME"),
           description: "Definition description",
           placeholder: "Definition placeholder",
           example: "Acme Corp",
@@ -135,7 +136,7 @@ describe("appStore variable handling", () => {
       // Set up existing variable with some validation
       const existing: Variable[] = [
         {
-          name: "%PROJECT_NAME%",
+          name: asVariableName("%PROJECT_NAME%"),
           value: "test",
           validation: {
             required: true,
@@ -146,7 +147,7 @@ describe("appStore variable handling", () => {
 
       const definitions: VariableDefinition[] = [
         {
-          name: "PROJECT_NAME",
+          name: asVariableName("PROJECT_NAME"),
           required: false, // Should not overwrite
           pattern: "^[a-z]+$",
           minLength: 3,
@@ -164,7 +165,7 @@ describe("appStore variable handling", () => {
     it("handles variables without matching definitions", () => {
       const definitions: VariableDefinition[] = [
         {
-          name: "OTHER_VAR",
+          name: asVariableName("OTHER_VAR"),
           description: "Some other variable",
         },
       ];
@@ -181,7 +182,7 @@ describe("appStore variable handling", () => {
       // Set up existing variable that already has all definition fields
       const existing: Variable[] = [
         {
-          name: "%CLIENT_NAME%",
+          name: asVariableName("%CLIENT_NAME%"),
           value: "My Client",
           description: "Already has description",
           placeholder: "Already has placeholder",
@@ -196,7 +197,7 @@ describe("appStore variable handling", () => {
       // Merge with definitions that don't add anything new
       const definitions: VariableDefinition[] = [
         {
-          name: "CLIENT_NAME",
+          name: asVariableName("CLIENT_NAME"),
           description: "Definition description",
           placeholder: "Definition placeholder",
           example: "Definition example",
@@ -217,7 +218,7 @@ describe("appStore variable handling", () => {
       const store = useAppStore.getState();
       store.addVariable("%CLIENT_NAME%", "");
       store.setValidationErrors([
-        { variable_name: "CLIENT_NAME", message: "required" },
+        { variable_name: asVariableName("CLIENT_NAME"), message: "required" },
       ]);
 
       store.updateVariable("CLIENT_NAME", "Acme");
@@ -230,8 +231,8 @@ describe("appStore variable handling", () => {
 
     it("normalizes delimited names on setVariables (e.g. loaded from persisted data)", () => {
       useAppStore.getState().setVariables([
-        { name: "%CLIENT_NAME%", value: "Acme" },
-        { name: "REGION", value: "us" },
+        { name: asVariableName("%CLIENT_NAME%"), value: "Acme" },
+        { name: asVariableName("REGION"), value: "us" },
       ]);
 
       const state = useAppStore.getState();
@@ -241,8 +242,8 @@ describe("appStore variable handling", () => {
 
     it("removes a variable and clears its error when given a token form", () => {
       const store = useAppStore.getState();
-      store.setVariables([{ name: "FOO", value: "x" }]);
-      store.setValidationErrors([{ variable_name: "FOO", message: "bad" }]);
+      store.setVariables([{ name: asVariableName("FOO"), value: "x" }]);
+      store.setValidationErrors([{ variable_name: asVariableName("FOO"), message: "bad" }]);
 
       store.removeVariable("%FOO%");
 

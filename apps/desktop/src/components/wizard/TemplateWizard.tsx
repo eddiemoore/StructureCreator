@@ -7,6 +7,7 @@ import { WizardStep } from "./WizardStep";
 import { WizardPreview } from "./WizardPreview";
 import { WizardErrorBoundary } from "./WizardErrorBoundary";
 import { XIcon, LoaderIcon } from "../Icons";
+import { asVariableName } from "@structure-creator/shared";
 import {
   parseWizardConfig,
   applyWizardModifiers,
@@ -281,7 +282,7 @@ export const TemplateWizard = () => {
 
       // Convert to Variable array format for the store
       const loadedVariables: Variable[] = Object.entries(finalVariables).map(([name, value]) => ({
-        name,
+        name: asVariableName(name),
         value,
         validation: mergedValidation[name],
       }));
