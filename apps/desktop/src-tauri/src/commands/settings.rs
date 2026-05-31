@@ -7,12 +7,14 @@ use tauri::State;
 use crate::state::AppState;
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_settings(state: State<Mutex<AppState>>) -> Result<HashMap<String, String>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.get_all_settings().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_set_setting(
     state: State<Mutex<AppState>>,
     key: String,

@@ -133,6 +133,7 @@ pub fn validate_variables(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_validate_variables(
     variables: HashMap<String, String>,
     rules: HashMap<String, ValidationRule>,
@@ -141,6 +142,7 @@ pub fn cmd_validate_variables(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_validate_schema(
     state: State<Mutex<AppState>>,
     content: String,
@@ -170,6 +172,7 @@ pub fn cmd_validate_schema(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_generate_diff_preview(
     tree: SchemaTree,
     output_path: String,

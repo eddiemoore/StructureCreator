@@ -234,7 +234,7 @@ export type TemplateExport = { name: string; description: string | null; schema_
 /**
  * Validation rules for variables (optional, for backwards compatibility)
  */
-variable_validation: { [key in string]: ValidationRule }; icon_color: string | null; 
+variable_validation: { [key in string]: DbValidationRule }; icon_color: string | null; 
 /**
  * Tags for categorizing templates (optional, for backwards compatibility)
  */
@@ -244,7 +244,7 @@ tags: string[];
  */
 wizard_config?: JsonValue | null }
 export type ImportResult = { imported: string[]; skipped: string[]; errors: string[] }
-export type Template = { id: string; name: string; description: string | null; schema_xml: string; variables: { [key in string]: string }; variable_validation?: { [key in string]: ValidationRule }; icon_color: string | null; is_favorite: boolean; use_count: number; created_at: string; updated_at: string; tags?: string[]; 
+export type Template = { id: string; name: string; description: string | null; schema_xml: string; variables: { [key in string]: string }; variable_validation?: { [key in string]: DbValidationRule }; icon_color: string | null; is_favorite: boolean; use_count: number; created_at: string; updated_at: string; tags?: string[]; 
 /**
  * Wizard configuration for guided template setup (JSON)
  */
@@ -252,7 +252,7 @@ wizard_config: JsonValue | null }
 /**
  * A recent project entry
  */
-export type RecentProject = { id: string; project_name: string; output_path: string; schema_xml: string; variables: { [key in string]: string }; variable_validation?: { [key in string]: ValidationRule }; template_id: string | null; template_name: string | null; folders_created: number; files_created: number; created_at: string }
+export type RecentProject = { id: string; project_name: string; output_path: string; schema_xml: string; variables: { [key in string]: string }; variable_validation?: { [key in string]: DbValidationRule }; template_id: string | null; template_name: string | null; folders_created: number; files_created: number; created_at: string }
 /**
  * A sync log entry for audit trail
  */

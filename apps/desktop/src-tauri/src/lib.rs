@@ -178,71 +178,137 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            // Schema commands
-            cmd_parse_schema,
-            cmd_parse_schema_with_inheritance,
-            cmd_scan_folder,
-            cmd_scan_zip,
-            cmd_export_schema_xml,
-            cmd_extract_variables,
-            // Structure commands
-            cmd_create_structure,
-            cmd_create_structure_from_tree,
-            cmd_undo_structure,
-            // Template commands
-            cmd_list_templates,
-            cmd_get_template,
-            cmd_create_template,
-            cmd_update_template,
-            cmd_delete_template,
-            cmd_toggle_favorite,
-            cmd_use_template,
-            cmd_get_all_tags,
-            cmd_update_template_tags,
-            // Import/Export commands
-            cmd_export_template,
-            cmd_export_templates_bulk,
-            cmd_import_templates_from_json,
-            cmd_import_templates_from_url,
-            // Settings commands
-            cmd_get_settings,
-            cmd_set_setting,
-            // Validation commands
-            cmd_validate_variables,
-            cmd_validate_schema,
-            cmd_generate_diff_preview,
-            // Recent projects commands
-            cmd_list_recent_projects,
-            cmd_get_recent_project,
-            cmd_add_recent_project,
-            cmd_delete_recent_project,
-            cmd_clear_recent_projects,
-            // Watch commands
-            cmd_start_watch,
-            cmd_stop_watch,
-            cmd_get_watch_status,
-            // Team Library commands
-            cmd_list_team_libraries,
-            cmd_add_team_library,
-            cmd_update_team_library,
-            cmd_remove_team_library,
-            cmd_scan_team_library,
-            cmd_get_team_template,
-            cmd_import_team_template,
-            cmd_get_sync_log,
-            // Plugin commands
-            cmd_list_plugins,
-            cmd_get_plugin,
-            cmd_install_plugin,
-            cmd_uninstall_plugin,
-            cmd_enable_plugin,
-            cmd_disable_plugin,
-            cmd_get_plugin_settings,
-            cmd_save_plugin_settings,
-            cmd_scan_plugins,
-            cmd_sync_plugins
-        ])
+        .invoke_handler(specta_builder().invoke_handler())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Construct the tauri-specta Builder with every IPC command collected. Used
+/// both by the live invoke_handler above and by the codegen drift test that
+/// emits the typed TypeScript bindings (#104 / ADR-0003).
+#[cfg(feature = "tauri-app")]
+fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    use commands::{
+        import_export::*, plugins::*, recent_projects::*, schema::*, settings::*, structure::*,
+        team_library::*, templates::*, validation::*, watch::*,
+    };
+
+    tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
+        // Schema commands
+        cmd_parse_schema,
+        cmd_parse_schema_with_inheritance,
+        cmd_scan_folder,
+        cmd_scan_zip,
+        cmd_export_schema_xml,
+        cmd_extract_variables,
+        // Structure commands
+        cmd_create_structure,
+        cmd_create_structure_from_tree,
+        cmd_undo_structure,
+        // Template commands
+        cmd_list_templates,
+        cmd_get_template,
+        cmd_create_template,
+        cmd_update_template,
+        cmd_delete_template,
+        cmd_toggle_favorite,
+        cmd_use_template,
+        cmd_get_all_tags,
+        cmd_update_template_tags,
+        // Import/Export commands
+        cmd_export_template,
+        cmd_export_templates_bulk,
+        cmd_import_templates_from_json,
+        cmd_import_templates_from_url,
+        // Settings commands
+        cmd_get_settings,
+        cmd_set_setting,
+        // Validation commands
+        cmd_validate_variables,
+        cmd_validate_schema,
+        cmd_generate_diff_preview,
+        // Recent projects commands
+        cmd_list_recent_projects,
+        cmd_get_recent_project,
+        cmd_add_recent_project,
+        cmd_delete_recent_project,
+        cmd_clear_recent_projects,
+        // Watch commands
+        cmd_start_watch,
+        cmd_stop_watch,
+        cmd_get_watch_status,
+        // Team Library commands
+        cmd_list_team_libraries,
+        cmd_add_team_library,
+        cmd_update_team_library,
+        cmd_remove_team_library,
+        cmd_scan_team_library,
+        cmd_get_team_template,
+        cmd_import_team_template,
+        cmd_get_sync_log,
+        // Plugin commands
+        cmd_list_plugins,
+        cmd_get_plugin,
+        cmd_install_plugin,
+        cmd_uninstall_plugin,
+        cmd_enable_plugin,
+        cmd_disable_plugin,
+        cmd_get_plugin_settings,
+        cmd_save_plugin_settings,
+        cmd_scan_plugins,
+        cmd_sync_plugins,
+    ])
+}
+
+#[cfg(all(test, feature = "tauri-app"))]
+mod codegen {
+    use super::*;
+
+    // Drift test for the typed Tauri command bindings (ADR-0003 / #104).
+    // Emits the bindings via tauri-specta and asserts the committed file
+    // matches what the current Rust commands produce. Regenerate via:
+    //   REGEN_TS=1 cargo test command_bindings_match_committed
+    #[test]
+    fn command_bindings_match_committed() {
+        use specta_typescript::{BigIntExportBehavior, Typescript};
+
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../src/lib/generated/commands.ts");
+        let conf = Typescript::default().bigint(BigIntExportBehavior::Number);
+
+        // tauri-specta only emits to a file; do that into a tmp path, read,
+        // then either overwrite the committed file (REGEN_TS) or diff.
+        let tmp = std::env::temp_dir().join(format!("sc-commands-{}.ts", std::process::id()));
+        let _ = std::fs::remove_file(&tmp);
+        specta_builder()
+            .export(conf, &tmp)
+            .expect("export tauri-specta bindings");
+        let raw = std::fs::read_to_string(&tmp).expect("read generated bindings");
+        let _ = std::fs::remove_file(&tmp);
+
+        // Generated file declares helpers (TAURI_CHANNEL, __makeEvents__) it
+        // does not always use; prepend @ts-nocheck so strict noUnusedLocals
+        // does not fail tsc on the auto-generated output.
+        let generated = format!("// @ts-nocheck\n{}", raw);
+
+        if std::env::var("REGEN_TS").is_ok() {
+            std::fs::create_dir_all(path.parent().unwrap())
+                .expect("create generated dir");
+            std::fs::write(&path, &generated).expect("write commands.ts");
+        }
+
+        let committed = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+            panic!(
+                "generated commands.ts missing at {}; run with REGEN_TS=1 to create it",
+                path.display()
+            )
+        });
+
+        assert_eq!(
+            committed.trim(),
+            generated.trim(),
+            "Tauri command surface and committed bindings have drifted. \
+             Regenerate with: REGEN_TS=1 cargo test command_bindings_match_committed"
+        );
+    }
 }

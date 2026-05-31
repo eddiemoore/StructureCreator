@@ -3,7 +3,6 @@
  * Wraps all Tauri invoke calls into the adapter interfaces.
  */
 
-import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { toTokenKeys } from "../../../utils/variableName";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -37,6 +36,14 @@ import type {
 } from "../types";
 
 import { TauriPluginAdapter } from "./plugin";
+
+import { commands } from "../../generated/commands";
+
+/** Throw on a Result-shaped error; return the data on ok. */
+function _unwrap<T>(r: { status: "ok"; data: T } | { status: "error"; error: string }): T {
+  if (r.status === "error") throw new Error(r.error);
+  return r.data;
+}
 
 import type {
   SchemaTree,
@@ -159,11 +166,11 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
   }
 
   async listTemplates(): Promise<Template[]> {
-    return invoke<Template[]>("cmd_list_templates");
+    return _unwrap(await commands.cmdListTemplates()) as Template[];
   }
 
   async getTemplate(id: string): Promise<Template | null> {
-    return invoke<Template | null>("cmd_get_template", { id });
+    return _unwrap(await commands.cmdGetTemplate(id)) as Template | null;
   }
 
   async getTemplateByName(name: string): Promise<Template | null> {
@@ -175,16 +182,18 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
   }
 
   async createTemplate(input: CreateTemplateInput): Promise<Template> {
-    await invoke("cmd_create_template", {
-      name: input.name,
-      description: input.description,
-      schemaXml: input.schemaXml,
-      variables: input.variables,
-      variableValidation: input.variableValidation,
-      iconColor: input.iconColor,
-      tags: input.tags,
-      wizardConfig: input.wizardConfig,
-    });
+    _unwrap(
+      await commands.cmdCreateTemplate(
+        input.name,
+        input.description ?? null,
+        input.schemaXml,
+        input.variables,
+        (input.variableValidation as never) ?? null,
+        input.iconColor ?? null,
+        input.tags ?? null,
+        (input.wizardConfig as never) ?? null,
+      ),
+    );
     // Return the created template by fetching by name
     const template = await this.getTemplateByName(input.name);
     if (!template) {
@@ -194,37 +203,39 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
   }
 
   async updateTemplate(id: string, input: UpdateTemplateInput): Promise<void> {
-    await invoke("cmd_update_template", {
-      id,
-      name: input.name,
-      description: input.description,
-      iconColor: input.iconColor,
-    });
+    _unwrap(
+      await commands.cmdUpdateTemplate(
+        id,
+        input.name ?? null,
+        input.description ?? null,
+        input.iconColor ?? null,
+        null,
+      ),
+    );
   }
 
   async deleteTemplate(id: string): Promise<boolean> {
-    await invoke("cmd_delete_template", { id });
-    return true;
+    return _unwrap(await commands.cmdDeleteTemplate(id)) as boolean;
   }
 
   async toggleFavorite(id: string): Promise<void> {
-    await invoke("cmd_toggle_favorite", { id });
+    _unwrap(await commands.cmdToggleFavorite(id));
   }
 
   async incrementUseCount(id: string): Promise<void> {
-    await invoke("cmd_use_template", { id });
+    _unwrap(await commands.cmdUseTemplate(id));
   }
 
   async getAllTags(): Promise<string[]> {
-    return invoke<string[]>("cmd_get_all_tags");
+    return _unwrap(await commands.cmdGetAllTags()) as string[];
   }
 
   async updateTemplateTags(id: string, tags: string[]): Promise<void> {
-    await invoke("cmd_update_template_tags", { id, tags });
+    _unwrap(await commands.cmdUpdateTemplateTags(id, tags));
   }
 
   async getAllSettings(): Promise<Record<string, string>> {
-    return invoke<Record<string, string>>("cmd_get_settings");
+    return _unwrap(await commands.cmdGetSettings()) as Record<string, string>;
   }
 
   async getSetting(key: string): Promise<string | null> {
@@ -233,39 +244,29 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
   }
 
   async setSetting(key: string, value: string): Promise<void> {
-    await invoke("cmd_set_setting", { key, value });
+    _unwrap(await commands.cmdSetSetting(key, value));
   }
 
   // Recent projects operations
 
   async listRecentProjects(): Promise<RecentProject[]> {
-    return invoke<RecentProject[]>("cmd_list_recent_projects");
+    return _unwrap(await commands.cmdListRecentProjects()) as RecentProject[];
   }
 
   async getRecentProject(id: string): Promise<RecentProject | null> {
-    return invoke<RecentProject | null>("cmd_get_recent_project", { id });
+    return _unwrap(await commands.cmdGetRecentProject(id)) as RecentProject | null;
   }
 
   async addRecentProject(input: CreateRecentProjectInput): Promise<RecentProject> {
-    return invoke<RecentProject>("cmd_add_recent_project", {
-      projectName: input.projectName,
-      outputPath: input.outputPath,
-      schemaXml: input.schemaXml,
-      variables: input.variables,
-      variableValidation: input.variableValidation,
-      templateId: input.templateId,
-      templateName: input.templateName,
-      foldersCreated: input.foldersCreated,
-      filesCreated: input.filesCreated,
-    });
+    return _unwrap(await commands.cmdAddRecentProject(input.projectName, input.outputPath, input.schemaXml, input.variables, input.variableValidation as never, input.templateId ?? null, input.templateName ?? null, input.foldersCreated, input.filesCreated)) as RecentProject;
   }
 
   async deleteRecentProject(id: string): Promise<boolean> {
-    return invoke<boolean>("cmd_delete_recent_project", { id });
+    return _unwrap(await commands.cmdDeleteRecentProject(id)) as boolean;
   }
 
   async clearRecentProjects(): Promise<number> {
-    return invoke<number>("cmd_clear_recent_projects");
+    return _unwrap(await commands.cmdClearRecentProjects()) as number;
   }
 }
 
@@ -275,35 +276,29 @@ class TauriDatabaseAdapter implements DatabaseAdapter {
 
 class TauriSchemaAdapter implements SchemaAdapter {
   async parseSchema(content: string): Promise<SchemaTree> {
-    return invoke<SchemaTree>("cmd_parse_schema", { content });
+    return _unwrap(await commands.cmdParseSchema(content)) as SchemaTree;
   }
 
   async parseSchemaWithInheritance(
     content: string
   ): Promise<ParseWithInheritanceResult> {
-    return invoke<ParseWithInheritanceResult>(
-      "cmd_parse_schema_with_inheritance",
-      { content }
-    );
+    return _unwrap(await commands.cmdParseSchemaWithInheritance(content)) as ParseWithInheritanceResult;
   }
 
   async scanFolder(folderPath: string): Promise<SchemaTree> {
-    return invoke<SchemaTree>("cmd_scan_folder", { folderPath });
+    return _unwrap(await commands.cmdScanFolder(folderPath)) as SchemaTree;
   }
 
   async scanZip(data: Uint8Array, filename: string): Promise<SchemaTree> {
-    return invoke<SchemaTree>("cmd_scan_zip", {
-      data: Array.from(data),
-      filename,
-    });
+    return _unwrap(await commands.cmdScanZip(Array.from(data), filename)) as SchemaTree;
   }
 
   async exportSchemaXml(tree: SchemaTree): Promise<string> {
-    return invoke<string>("cmd_export_schema_xml", { tree });
+    return commands.cmdExportSchemaXml(tree as never);
   }
 
   async extractVariables(content: string): Promise<string[]> {
-    return invoke<string[]>("cmd_extract_variables", { content });
+    return commands.cmdExtractVariables(content);
   }
 }
 
@@ -316,28 +311,14 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
     content: string,
     options: CreateStructureOptions
   ): Promise<CreateResult> {
-    return invoke<CreateResult>("cmd_create_structure", {
-      content,
-      outputPath: options.outputPath,
-      variables: toTokenKeys(options.variables),
-      dryRun: options.dryRun,
-      overwrite: options.overwrite,
-      projectName: options.projectName,
-    });
+    return _unwrap(await commands.cmdCreateStructure(content, options.outputPath, toTokenKeys(options.variables), options.dryRun, options.overwrite, options.projectName ?? null)) as CreateResult;
   }
 
   async createStructureFromTree(
     tree: SchemaTree,
     options: CreateStructureOptions
   ): Promise<CreateResult> {
-    return invoke<CreateResult>("cmd_create_structure_from_tree", {
-      tree,
-      outputPath: options.outputPath,
-      variables: toTokenKeys(options.variables),
-      dryRun: options.dryRun,
-      overwrite: options.overwrite,
-      projectName: options.projectName,
-    });
+    return _unwrap(await commands.cmdCreateStructureFromTree(tree as never, options.outputPath, toTokenKeys(options.variables), options.dryRun, options.overwrite, options.projectName ?? null)) as CreateResult;
   }
 
   async generateDiffPreview(
@@ -346,22 +327,14 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
     variables: Record<string, string>,
     overwrite: boolean
   ): Promise<DiffResult> {
-    return invoke<DiffResult>("cmd_generate_diff_preview", {
-      tree,
-      outputPath,
-      variables: toTokenKeys(variables),
-      overwrite,
-    });
+    return _unwrap(await commands.cmdGenerateDiffPreview(tree, outputPath, toTokenKeys(variables), overwrite)) as DiffResult;
   }
 
   async undoStructure(
     items: CreatedItem[],
     dryRun: boolean
   ): Promise<UndoResult> {
-    return invoke<UndoResult>("cmd_undo_structure", {
-      items,
-      dryRun,
-    });
+    return _unwrap(await commands.cmdUndoStructure(items, dryRun)) as UndoResult;
   }
 }
 
@@ -374,20 +347,14 @@ class TauriValidationAdapter implements ValidationAdapter {
     variables: Record<string, string>,
     rules: Record<string, ValidationRule>
   ): Promise<ValidationError[]> {
-    return invoke<ValidationError[]>("cmd_validate_variables", {
-      variables: toTokenKeys(variables),
-      rules: toTokenKeys(rules),
-    });
+    return _unwrap(await commands.cmdValidateVariables(toTokenKeys(variables), toTokenKeys(rules) as never)) as ValidationError[];
   }
 
   async validateSchema(
     content: string,
     variables: Record<string, string>
   ): Promise<SchemaValidationResult> {
-    return invoke<SchemaValidationResult>("cmd_validate_schema", {
-      content,
-      variables: toTokenKeys(variables),
-    });
+    return _unwrap(await commands.cmdValidateSchema(content, toTokenKeys(variables))) as SchemaValidationResult;
   }
 }
 
@@ -397,17 +364,11 @@ class TauriValidationAdapter implements ValidationAdapter {
 
 class TauriTemplateImportExportAdapter implements TemplateImportExportAdapter {
   async exportTemplate(template: Template): Promise<string> {
-    return invoke<string>("cmd_export_template", {
-      templateId: template.id,
-      includeVariables: true,
-    });
+    return _unwrap(await commands.cmdExportTemplate(template.id, true)) as string;
   }
 
   async exportTemplatesBulk(templates: Template[]): Promise<string> {
-    return invoke<string>("cmd_export_templates_bulk", {
-      templateIds: templates.map((t) => t.id),
-      includeVariables: true,
-    });
+    return _unwrap(await commands.cmdExportTemplatesBulk(templates.map((t) => t.id), true)) as string;
   }
 
   async importTemplatesFromJson(
@@ -415,11 +376,7 @@ class TauriTemplateImportExportAdapter implements TemplateImportExportAdapter {
     duplicateStrategy: DuplicateStrategy,
     includeVariables: boolean = true
   ): Promise<ImportResult> {
-    return invoke<ImportResult>("cmd_import_templates_from_json", {
-      jsonContent,
-      duplicateStrategy,
-      includeVariables,
-    });
+    return _unwrap(await commands.cmdImportTemplatesFromJson(jsonContent, duplicateStrategy, includeVariables)) as ImportResult;
   }
 
   async importTemplatesFromUrl(
@@ -427,11 +384,7 @@ class TauriTemplateImportExportAdapter implements TemplateImportExportAdapter {
     duplicateStrategy: DuplicateStrategy,
     includeVariables: boolean = true
   ): Promise<ImportResult> {
-    return invoke<ImportResult>("cmd_import_templates_from_url", {
-      url,
-      duplicateStrategy,
-      includeVariables,
-    });
+    return _unwrap(await commands.cmdImportTemplatesFromUrl(url, duplicateStrategy, includeVariables)) as ImportResult;
   }
 }
 
@@ -452,11 +405,11 @@ interface WatchErrorPayload {
 
 class TauriWatchAdapter implements WatchAdapter {
   async startWatch(path: string): Promise<void> {
-    await invoke("cmd_start_watch", { path });
+    _unwrap(await commands.cmdStartWatch(path));
   }
 
   async stopWatch(): Promise<void> {
-    await invoke("cmd_stop_watch");
+    _unwrap(await commands.cmdStopWatch());
   }
 
   onSchemaFileChanged(callback: (path: string, content: string) => void): () => void {
@@ -525,11 +478,11 @@ class TauriWatchAdapter implements WatchAdapter {
 
 class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
   async listTeamLibraries(): Promise<TeamLibrary[]> {
-    return invoke<TeamLibrary[]>("cmd_list_team_libraries");
+    return _unwrap(await commands.cmdListTeamLibraries()) as TeamLibrary[];
   }
 
   async addTeamLibrary(name: string, path: string): Promise<TeamLibrary> {
-    return invoke<TeamLibrary>("cmd_add_team_library", { name, path });
+    return _unwrap(await commands.cmdAddTeamLibrary(name, path)) as TeamLibrary;
   }
 
   async updateTeamLibrary(
@@ -541,21 +494,15 @@ class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
       isEnabled?: boolean;
     }
   ): Promise<TeamLibrary | null> {
-    return invoke<TeamLibrary | null>("cmd_update_team_library", {
-      id,
-      name: updates.name,
-      path: updates.path,
-      syncInterval: updates.syncInterval,
-      isEnabled: updates.isEnabled,
-    });
+    return _unwrap(await commands.cmdUpdateTeamLibrary(id, updates.name ?? null, updates.path ?? null, updates.syncInterval ?? null, updates.isEnabled ?? null)) as TeamLibrary | null;
   }
 
   async removeTeamLibrary(id: string): Promise<boolean> {
-    return invoke<boolean>("cmd_remove_team_library", { id });
+    return _unwrap(await commands.cmdRemoveTeamLibrary(id)) as boolean;
   }
 
   async scanTeamLibrary(libraryId: string): Promise<TeamTemplate[]> {
-    return invoke<TeamTemplate[]>("cmd_scan_team_library", { libraryId });
+    return _unwrap(await commands.cmdScanTeamLibrary(libraryId)) as TeamTemplate[];
   }
 
   async getTeamTemplate(filePath: string): Promise<{
@@ -576,7 +523,7 @@ class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
       tags?: string[];
     }>;
   }> {
-    return invoke("cmd_get_team_template", { filePath });
+    return _unwrap(await commands.cmdGetTeamTemplate(filePath)) as never;
   }
 
   async importTeamTemplate(
@@ -584,15 +531,11 @@ class TauriTeamLibraryAdapter implements TeamLibraryAdapter {
     filePath: string,
     strategy: DuplicateStrategy
   ): Promise<TeamImportResult> {
-    return invoke<TeamImportResult>("cmd_import_team_template", {
-      libraryId,
-      filePath,
-      strategy,
-    });
+    return _unwrap(await commands.cmdImportTeamTemplate(libraryId, filePath, strategy)) as TeamImportResult;
   }
 
   async getSyncLog(libraryId: string | null, limit: number): Promise<SyncLogEntry[]> {
-    return invoke<SyncLogEntry[]>("cmd_get_sync_log", { libraryId, limit });
+    return _unwrap(await commands.cmdGetSyncLog(libraryId, limit)) as SyncLogEntry[];
   }
 }
 

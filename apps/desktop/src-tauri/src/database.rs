@@ -60,6 +60,7 @@ fn validate_tags(tags: &[String]) -> Vec<String> {
 
 /// Validation rule for a variable
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[specta(rename = "DbValidationRule")]
 pub struct ValidationRule {
     pub pattern: Option<String>,
     pub min_length: Option<usize>,

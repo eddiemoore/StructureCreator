@@ -13,6 +13,7 @@ use crate::types::{SchemaFileChangedPayload, WatchErrorPayload};
 
 /// Start watching a schema file for changes
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_start_watch(
     app: tauri::AppHandle,
     state: State<Mutex<AppState>>,
@@ -155,6 +156,7 @@ pub fn cmd_start_watch(
 
 /// Stop watching the schema file
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_stop_watch(state: State<Mutex<AppState>>) -> Result<(), String> {
     let mut state_guard = state.lock().map_err(|e| e.to_string())?;
 
@@ -170,6 +172,7 @@ pub fn cmd_stop_watch(state: State<Mutex<AppState>>) -> Result<(), String> {
 
 /// Get the currently watched path (if any)
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_watch_status(state: State<Mutex<AppState>>) -> Result<Option<String>, String> {
     let state_guard = state.lock().map_err(|e| e.to_string())?;
     Ok(state_guard.watch_path.clone())

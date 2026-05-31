@@ -29,7 +29,7 @@ pub struct TeamTemplate {
 }
 
 /// The structure of an exported .sct template file (matches frontend TemplateExport)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TemplateExport {
     pub name: String,
     pub description: Option<String>,
@@ -45,7 +45,7 @@ pub struct TemplateExport {
 }
 
 /// The wrapper structure for .sct files (matches frontend TemplateExportFile)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TemplateExportFile {
     pub version: String,
     #[serde(rename = "type")]
@@ -56,7 +56,7 @@ pub struct TemplateExportFile {
 }
 
 /// Strategy for handling duplicate template names during import
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum DuplicateStrategy {
     /// Skip templates that already exist
@@ -68,7 +68,8 @@ pub enum DuplicateStrategy {
 }
 
 /// Result of importing a template
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[specta(rename = "TeamImportResult")]
 pub struct ImportResult {
     /// Names of successfully imported templates
     pub imported: Vec<String>,
