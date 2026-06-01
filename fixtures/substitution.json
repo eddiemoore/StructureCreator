@@ -33,5 +33,10 @@
     "template": "keep %MISSING% as-is",
     "variables": {},
     "expected": "keep %MISSING% as-is"
+  },
+  {
+    "template": "iter-%i%-%i%",
+    "variables": { "%i%": "0" },
+    "expected": "iter-0-0"
   }
 ]

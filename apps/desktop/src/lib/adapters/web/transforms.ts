@@ -308,8 +308,10 @@ export const substituteVariables = (
   variables: Record<string, string>
 ): string => {
   return text.replace(VARIABLE_REGEX, (match, name, transform) => {
-    // Build the variable key with % delimiters for lookup
-    const key = `%${name.toUpperCase()}%`;
+    // Case-preserved lookup matches the Rust target's substitute_variables
+    // (ADR-0002 / #112). Repeat-loop iteration variables (`%i%`, `%item%`)
+    // are lowercase by convention and require this.
+    const key = `%${name}%`;
     const value = variables[key];
 
     if (value === undefined) {
