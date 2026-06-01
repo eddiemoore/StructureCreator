@@ -142,6 +142,7 @@ fn import_templates_from_json_internal(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_export_template(
     state: State<Mutex<AppState>>,
     template_id: String,
@@ -186,6 +187,7 @@ pub fn cmd_export_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_export_templates_bulk(
     state: State<Mutex<AppState>>,
     template_ids: Vec<String>,
@@ -241,6 +243,7 @@ pub fn cmd_export_templates_bulk(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_import_templates_from_json(
     state: State<Mutex<AppState>>,
     json_content: String,
@@ -252,6 +255,7 @@ pub fn cmd_import_templates_from_json(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_import_templates_from_url(
     url: String,
     state: State<Mutex<AppState>>,

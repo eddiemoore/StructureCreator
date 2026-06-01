@@ -8,6 +8,7 @@ use crate::database::{CreateRecentProjectInput, RecentProject, ValidationRule};
 use crate::state::AppState;
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_list_recent_projects(
     state: State<Mutex<AppState>>,
 ) -> Result<Vec<RecentProject>, String> {
@@ -16,6 +17,7 @@ pub fn cmd_list_recent_projects(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_recent_project(
     state: State<Mutex<AppState>>,
     id: String,
@@ -25,6 +27,7 @@ pub fn cmd_get_recent_project(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_add_recent_project(
     state: State<Mutex<AppState>>,
     project_name: String,
@@ -55,6 +58,7 @@ pub fn cmd_add_recent_project(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_delete_recent_project(
     state: State<Mutex<AppState>>,
     id: String,
@@ -67,6 +71,7 @@ pub fn cmd_delete_recent_project(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_clear_recent_projects(state: State<Mutex<AppState>>) -> Result<usize, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.clear_recent_projects().map_err(|e| e.to_string())

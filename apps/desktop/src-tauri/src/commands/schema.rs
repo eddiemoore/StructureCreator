@@ -11,11 +11,13 @@ use crate::state::AppState;
 use crate::transforms;
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_parse_schema(content: String) -> Result<SchemaTree, String> {
     parse_xml_schema(&content).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_parse_schema_with_inheritance(
     state: State<Mutex<AppState>>,
     content: String,
@@ -44,21 +46,25 @@ pub fn cmd_parse_schema_with_inheritance(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_scan_folder(folder_path: String) -> Result<SchemaTree, String> {
     scan_folder_to_schema(&folder_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_scan_zip(data: Vec<u8>, filename: String) -> Result<SchemaTree, String> {
     scan_zip_to_schema(&data, &filename).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_export_schema_xml(tree: SchemaTree) -> String {
     schema_to_xml(&tree)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_extract_variables(content: String) -> Vec<String> {
     transforms::extract_variables_from_content(&content)
 }

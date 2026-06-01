@@ -3,51 +3,59 @@
  * Implements PluginAdapter interface for the Tauri desktop app.
  */
 
-import { invoke } from "@tauri-apps/api/core";
 import type { PluginAdapter } from "../types";
 import type { Plugin, PluginManifest } from "../../../types/schema";
+
+import { commands } from "../../generated/commands";
+
+/** Throw on a Result-shaped error; return the data on ok. */
+function _unwrap<T>(r: { status: "ok"; data: T } | { status: "error"; error: string }): T {
+  if (r.status === "error") throw new Error(r.error);
+  return r.data;
+}
+
 
 // Plugin types cross IPC in the wire shape directly (codegen, #116).
 
 export class TauriPluginAdapter implements PluginAdapter {
   async listPlugins(): Promise<Plugin[]> {
-    return invoke<Plugin[]>("cmd_list_plugins");
+    return _unwrap(await commands.cmdListPlugins()) as Plugin[];
   }
 
   async getPlugin(id: string): Promise<Plugin | null> {
-    return invoke<Plugin | null>("cmd_get_plugin", { id });
+    return _unwrap(await commands.cmdGetPlugin(id)) as Plugin | null;
   }
 
   async installPlugin(sourcePath: string): Promise<Plugin> {
-    return invoke<Plugin>("cmd_install_plugin", { sourcePath });
+    return _unwrap(await commands.cmdInstallPlugin(sourcePath)) as Plugin;
   }
 
   async uninstallPlugin(id: string): Promise<boolean> {
-    return invoke<boolean>("cmd_uninstall_plugin", { id });
+    return _unwrap(await commands.cmdUninstallPlugin(id)) as boolean;
   }
 
   async enablePlugin(id: string): Promise<Plugin | null> {
-    return invoke<Plugin | null>("cmd_enable_plugin", { id });
+    return _unwrap(await commands.cmdEnablePlugin(id)) as Plugin | null;
   }
 
   async disablePlugin(id: string): Promise<Plugin | null> {
-    return invoke<Plugin | null>("cmd_disable_plugin", { id });
+    return _unwrap(await commands.cmdDisablePlugin(id)) as Plugin | null;
   }
 
   async getPluginSettings(id: string): Promise<Record<string, unknown> | null> {
-    return invoke<Record<string, unknown> | null>("cmd_get_plugin_settings", { id });
+    return _unwrap(await commands.cmdGetPluginSettings(id)) as Record<string, unknown> | null;
   }
 
   async savePluginSettings(id: string, settings: Record<string, unknown>): Promise<Plugin | null> {
-    return invoke<Plugin | null>("cmd_save_plugin_settings", { id, settings });
+    return _unwrap(await commands.cmdSavePluginSettings(id, settings as never)) as Plugin | null;
   }
 
   async scanPlugins(): Promise<PluginManifest[]> {
-    return invoke<PluginManifest[]>("cmd_scan_plugins");
+    return _unwrap(await commands.cmdScanPlugins()) as PluginManifest[];
   }
 
   async syncPlugins(): Promise<Plugin[]> {
-    return invoke<Plugin[]>("cmd_sync_plugins");
+    return _unwrap(await commands.cmdSyncPlugins()) as Plugin[];
   }
 }
 

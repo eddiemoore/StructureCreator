@@ -10,12 +10,14 @@ use crate::plugins;
 use crate::state::AppState;
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_list_plugins(state: State<Mutex<AppState>>) -> Result<Vec<database::Plugin>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.list_plugins().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_plugin(
     state: State<Mutex<AppState>>,
     id: String,
@@ -25,6 +27,7 @@ pub fn cmd_get_plugin(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_install_plugin(
     state: State<Mutex<AppState>>,
     source_path: String,
@@ -42,6 +45,7 @@ pub fn cmd_install_plugin(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_uninstall_plugin(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
 
@@ -61,6 +65,7 @@ pub fn cmd_uninstall_plugin(state: State<Mutex<AppState>>, id: String) -> Result
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_enable_plugin(
     state: State<Mutex<AppState>>,
     id: String,
@@ -70,6 +75,7 @@ pub fn cmd_enable_plugin(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_disable_plugin(
     state: State<Mutex<AppState>>,
     id: String,
@@ -79,6 +85,7 @@ pub fn cmd_disable_plugin(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_plugin_settings(
     state: State<Mutex<AppState>>,
     id: String,
@@ -91,6 +98,7 @@ pub fn cmd_get_plugin_settings(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_save_plugin_settings(
     state: State<Mutex<AppState>>,
     id: String,
@@ -104,6 +112,7 @@ pub fn cmd_save_plugin_settings(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_scan_plugins() -> Result<Vec<plugins::PluginManifest>, String> {
     let plugins_list = plugins::scan_plugins_directory().map_err(|e| e.to_string())?;
     Ok(plugins_list
@@ -113,6 +122,7 @@ pub fn cmd_scan_plugins() -> Result<Vec<plugins::PluginManifest>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_sync_plugins(state: State<Mutex<AppState>>) -> Result<Vec<database::Plugin>, String> {
     // Scan the filesystem for plugins
     let scanned = plugins::scan_plugins_directory().map_err(|e| e.to_string())?;

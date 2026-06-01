@@ -8,12 +8,14 @@ use crate::database::{CreateTemplateInput, Template, UpdateTemplateInput, Valida
 use crate::state::AppState;
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_list_templates(state: State<Mutex<AppState>>) -> Result<Vec<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.list_templates().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_template(
     state: State<Mutex<AppState>>,
     id: String,
@@ -23,6 +25,7 @@ pub fn cmd_get_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_create_template(
     state: State<Mutex<AppState>>,
     name: String,
@@ -52,6 +55,7 @@ pub fn cmd_create_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_update_template(
     state: State<Mutex<AppState>>,
     id: String,
@@ -76,12 +80,14 @@ pub fn cmd_update_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_delete_template(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.delete_template(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_toggle_favorite(
     state: State<Mutex<AppState>>,
     id: String,
@@ -91,6 +97,7 @@ pub fn cmd_toggle_favorite(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_use_template(
     state: State<Mutex<AppState>>,
     id: String,
@@ -104,12 +111,14 @@ pub fn cmd_use_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_all_tags(state: State<Mutex<AppState>>) -> Result<Vec<String>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.get_all_tags().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_update_template_tags(
     state: State<Mutex<AppState>>,
     id: String,

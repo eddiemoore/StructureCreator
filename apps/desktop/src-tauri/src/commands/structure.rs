@@ -8,6 +8,7 @@ use crate::types::{CreateResult, CreatedItem, UndoResult};
 use crate::schema::SchemaTree;
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_create_structure(
     content: String,
     output_path: String,
@@ -28,6 +29,7 @@ pub fn cmd_create_structure(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_create_structure_from_tree(
     tree: SchemaTree,
     output_path: String,
@@ -48,6 +50,7 @@ pub fn cmd_create_structure_from_tree(
 
 /// Undo a previously created structure by deleting created files and folders
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_undo_structure(items: Vec<CreatedItem>, dry_run: bool) -> Result<UndoResult, String> {
     undo_structure(&items, dry_run)
 }

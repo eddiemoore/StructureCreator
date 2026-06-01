@@ -260,7 +260,7 @@ pub struct ImportResult {
 }
 
 /// Strategy for handling duplicate template names during import
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DuplicateStrategy {
     /// Skip importing templates that already exist

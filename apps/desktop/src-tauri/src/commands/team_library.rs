@@ -8,6 +8,7 @@ use crate::state::AppState;
 use crate::team_library;
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_list_team_libraries(
     state: State<Mutex<AppState>>,
 ) -> Result<Vec<database::TeamLibrary>, String> {
@@ -16,6 +17,7 @@ pub fn cmd_list_team_libraries(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_add_team_library(
     state: State<Mutex<AppState>>,
     name: String,
@@ -37,6 +39,7 @@ pub fn cmd_add_team_library(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_update_team_library(
     state: State<Mutex<AppState>>,
     id: String,
@@ -64,12 +67,14 @@ pub fn cmd_update_team_library(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_remove_team_library(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     state.db.delete_team_library(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_scan_team_library(
     state: State<Mutex<AppState>>,
     library_id: String,
@@ -113,6 +118,7 @@ pub fn cmd_scan_team_library(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_team_template(
     file_path: String,
 ) -> Result<team_library::TemplateExportFile, String> {
@@ -120,6 +126,7 @@ pub fn cmd_get_team_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_import_team_template(
     state: State<Mutex<AppState>>,
     library_id: String,
@@ -158,6 +165,7 @@ pub fn cmd_import_team_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cmd_get_sync_log(
     state: State<Mutex<AppState>>,
     library_id: Option<String>,
