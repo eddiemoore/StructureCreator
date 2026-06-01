@@ -1,20 +1,5 @@
 import type { SchemaNode, SchemaTree } from "@structure-creator/shared";
-
-/**
- * Case-preserving variable substitution for path/name expansion. Mirrors the
- * Rust target's substitution: looks the captured name up verbatim, so a
- * lowercase iteration var (`%i%`) resolves against a `%i%`-keyed entry. This
- * is distinct from the web engine's `substituteVariables`, which uppercases
- * the lookup key for user-facing tokens.
- */
-const substituteInName = (
-  text: string,
-  variables: Record<string, string>
-): string =>
-  text.replace(
-    /%([A-Za-z_][A-Za-z0-9_]*)%/g,
-    (match, name) => variables[`%${name}%`] ?? match
-  );
+import { substituteVariables } from "./transforms";
 
 /**
  * Pure tree expander: given a parsed schema and variable map, return the
@@ -43,7 +28,7 @@ const walk = (
   paths: string[],
   variables: Record<string, string>
 ): void => {
-  const name = substituteInName(node.name, variables);
+  const name = substituteVariables(node.name, variables);
   const path = prefix ? `${prefix}/${name}` : name;
 
   if (node.type === "folder") {
@@ -121,7 +106,7 @@ const parseRepeatCount = (
   variables: Record<string, string>
 ): number => {
   if (!raw) return 0;
-  const substituted = substituteInName(raw, variables);
+  const substituted = substituteVariables(raw, variables);
   const n = Number.parseInt(substituted, 10);
   if (!Number.isFinite(n) || n < 0) return 0;
   return n;
