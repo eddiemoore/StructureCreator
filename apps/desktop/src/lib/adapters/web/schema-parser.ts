@@ -155,7 +155,12 @@ const parseNode = (element: Element, depth: number): SchemaNode => {
   }
 
   const tagName = element.tagName.toLowerCase();
-  let name = element.getAttribute("name") || tagName;
+  // Control-flow elements (if/else/repeat) have no user-facing name; the Rust
+  // target serializes them as empty string. Fall back to the tag name only
+  // for non-control-flow elements (folder/file/extends/etc.) where the tag
+  // name is meaningful as a default.
+  const isControlFlow = ["if", "else", "repeat"].includes(tagName);
+  let name = element.getAttribute("name") || (isControlFlow ? "" : tagName);
 
   // Validate name for file/folder nodes to prevent path traversal
   // Skip validation for control structures (if/else/repeat) which use internal names
@@ -198,10 +203,26 @@ const parseNode = (element: Element, depth: number): SchemaNode => {
     name,
   };
 
-  // Get attributes
+  // Capture only attributes NOT mapped to dedicated SchemaNode fields, so
+  // that `attributes` carries unhandled extras for round-trip preservation
+  // without duplicating url/var/count/etc. This matches the Rust target
+  // (parse_element in src-tauri/src/schema.rs).
+  const HANDLED_ATTRS = new Set([
+    "name",
+    "url",
+    "var",
+    "count",
+    "as",
+    "generate",
+    "template",
+    "width",
+    "height",
+    "background",
+    "format",
+  ]);
   const attributes: Record<string, string> = {};
   for (const attr of element.attributes) {
-    if (attr.name !== "name") {
+    if (!HANDLED_ATTRS.has(attr.name)) {
       attributes[attr.name] = attr.value;
     }
   }

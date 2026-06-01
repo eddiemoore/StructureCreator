@@ -1,0 +1,93 @@
+[
+  {
+    "name": "plain folder with one file",
+    "xml": "<folder name=\"root\"><file name=\"hello.txt\" /></folder>",
+    "expected": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          { "type": "file", "name": "hello.txt" }
+        ]
+      },
+      "stats": { "folders": 1, "files": 1, "downloads": 0, "generated": 0 }
+    }
+  },
+  {
+    "name": "nested folders",
+    "xml": "<folder name=\"root\"><folder name=\"src\"><file name=\"index.ts\" /></folder><folder name=\"docs\" /></folder>",
+    "expected": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "folder",
+            "name": "src",
+            "children": [{ "type": "file", "name": "index.ts" }]
+          },
+          { "type": "folder", "name": "docs" }
+        ]
+      },
+      "stats": { "folders": 3, "files": 1, "downloads": 0, "generated": 0 }
+    }
+  },
+  {
+    "name": "file with url (download)",
+    "xml": "<folder name=\"root\"><file name=\"logo.png\" url=\"https://example.com/logo.png\" /></folder>",
+    "expected": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          { "type": "file", "name": "logo.png", "url": "https://example.com/logo.png" }
+        ]
+      },
+      "stats": { "folders": 1, "files": 1, "downloads": 1, "generated": 0 }
+    }
+  },
+  {
+    "name": "if/else block",
+    "xml": "<folder name=\"root\"><if var=\"FLAG\"><file name=\"yes.txt\" /></if><else><file name=\"no.txt\" /></else></folder>",
+    "expected": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "if",
+            "name": "",
+            "children": [{ "type": "file", "name": "yes.txt" }],
+            "condition_var": "FLAG"
+          },
+          {
+            "type": "else",
+            "name": "",
+            "children": [{ "type": "file", "name": "no.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 1, "files": 2, "downloads": 0, "generated": 0 }
+    }
+  },
+  {
+    "name": "repeat block",
+    "xml": "<folder name=\"root\"><repeat count=\"3\" as=\"i\"><file name=\"item-%i%.txt\" /></repeat></folder>",
+    "expected": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "children": [{ "type": "file", "name": "item-%i%.txt" }],
+            "repeat_count": "3",
+            "repeat_as": "i"
+          }
+        ]
+      },
+      "stats": { "folders": 1, "files": 1, "downloads": 0, "generated": 0 }
+    }
+  }
+]

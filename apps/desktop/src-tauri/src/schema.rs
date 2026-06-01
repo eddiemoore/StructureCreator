@@ -2762,6 +2762,35 @@ export const EXTENSION = true;
         assert!(tree.variable_definitions.is_none());
     }
 
+    // Golden-vector parser parity contract (ADR-0002 / #96): the same XML
+    // schema fixture is parsed by both the Rust target (this test) and the
+    // web target. Each target serializes its parsed tree to JSON and compares
+    // against the committed `expected` tree in the fixture. Divergence fails.
+    #[test]
+    fn test_schema_parse_matches_golden_contract() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            xml: String,
+            expected: serde_json::Value,
+        }
+
+        let fixture = include_str!("../../../../fixtures/schema-parse.json");
+        let cases: Vec<Case> = serde_json::from_str(fixture).expect("valid fixture JSON");
+        assert!(!cases.is_empty(), "schema-parse fixture must contain cases");
+
+        for case in cases {
+            let tree = parse_xml_schema(&case.xml)
+                .unwrap_or_else(|e| panic!("case '{}' parse error: {}", case.name, e));
+            let got = serde_json::to_value(&tree).expect("serialize parsed tree");
+            assert_eq!(
+                got, case.expected,
+                "case '{}': parser output diverged from fixture",
+                case.name
+            );
+        }
+    }
+
     // Type-drift codegen (ADR-0003 / issue #97): the TypeScript wire type for
     // SchemaNode is generated from this Rust struct via specta. The generated
     // file is checked in at packages/shared/src/generated/schemaNode.ts; any
