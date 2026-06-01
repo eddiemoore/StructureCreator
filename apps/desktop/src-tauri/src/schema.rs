@@ -2808,6 +2808,11 @@ export const EXTENSION = true;
         emit!(VariableDefinition);
         emit!(SchemaTree);
         emit!(ValidationRule);
+        // database::ValidationRule is referenced by Template/RecentProject via
+        // their `variable_validation` field; specta renames it to
+        // `DbValidationRule` to avoid clashing with the camelCase variant
+        // above (#104). Must be emitted so the reference resolves.
+        emit!(crate::database::ValidationRule);
 
         // Result / undo cluster
         emit!(crate::types::LogEntry);

@@ -49,6 +49,10 @@ export type SchemaTree = { root: SchemaNode; stats: SchemaStats; hooks?: SchemaH
  * Use `From<database::ValidationRule>` for easy conversion.
  */
 export type ValidationRule = { pattern?: string | null; minLength?: number | null; maxLength?: number | null; required?: boolean }
+/**
+ * Validation rule for a variable
+ */
+export type DbValidationRule = { pattern: string | null; min_length: number | null; max_length: number | null; required?: boolean }
 export type LogEntry = { log_type: string; message: string; details: string | null }
 export type ResultSummary = { folders_created: number; files_created: number; files_downloaded: number; files_generated?: number; errors: number; skipped: number; hooks_executed?: number; hooks_failed?: number }
 export type HookResult = { command: string; success: boolean; exit_code: number | null; stdout: string | null; stderr: string | null }
