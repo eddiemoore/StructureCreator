@@ -424,6 +424,38 @@ mod tests {
     }
 
     #[test]
+    fn preview_shows_substituted_url() {
+        let t = tree(SchemaNode {
+            name: "root".to_string(),
+            node_type: "folder".to_string(),
+            children: Some(vec![SchemaNode {
+                name: "logo.png".to_string(),
+                node_type: "file".to_string(),
+                url: Some("https://cdn.example.com/%VERSION%/logo.png".to_string()),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        });
+
+        let mut variables = HashMap::new();
+        variables.insert("%VERSION%".to_string(), "1.2.3".to_string());
+
+        let temp = tempfile::tempdir().unwrap();
+        let result =
+            generate_diff_preview(&t, temp.path().to_str().unwrap(), &variables, false).unwrap();
+
+        let file = &result.root.children.as_ref().unwrap()[0];
+        assert_eq!(
+            file.url.as_deref(),
+            Some("https://cdn.example.com/1.2.3/logo.png")
+        );
+        assert_eq!(
+            file.new_content.as_deref(),
+            Some("[Content from URL: https://cdn.example.com/1.2.3/logo.png]")
+        );
+    }
+
+    #[test]
     fn preview_and_creation_agree_on_planned_paths() {
         // The same expansion feeds both; sanity-check the diff tree mirrors
         // plan::to_paths for a schema with if/else and repeat.
