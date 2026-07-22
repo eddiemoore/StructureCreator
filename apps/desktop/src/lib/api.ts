@@ -15,7 +15,7 @@
  *   const templates = await api.database.listTemplates();
  */
 
-import { isTauri, getCapabilities, type PlatformCapabilities } from "./platform";
+import { isTauri } from "./platform";
 import type { PlatformAdapter } from "./adapters/types";
 
 // Re-export types for convenience
@@ -38,13 +38,6 @@ export type {
 // Global adapter instance
 let adapter: PlatformAdapter | null = null;
 let initPromise: Promise<void> | null = null;
-
-/**
- * Get the platform capabilities.
- */
-export const capabilities = (): PlatformCapabilities => {
-  return getCapabilities();
-};
 
 /**
  * Check if the API has been initialized.
@@ -111,11 +104,6 @@ export const api = {
    * Check if initialized.
    */
   isInitialized,
-
-  /**
-   * Get platform capabilities.
-   */
-  capabilities,
 
   /**
    * Check if running in Tauri.

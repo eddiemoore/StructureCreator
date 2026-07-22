@@ -10,6 +10,7 @@ import { useAppStore } from "./store/appStore";
 import { useKeyboardShortcuts, useUpdater } from "./hooks";
 import { SHORTCUT_EVENTS } from "./constants/shortcuts";
 import { api } from "./lib/api";
+import { supports } from "./lib/capabilities";
 import type { Settings, ThemeMode, AccentColor } from "./types/schema";
 import { DEFAULT_SETTINGS } from "./types/schema";
 import { applyTheme, applyAccentColor } from "./utils/theme";
@@ -97,7 +98,7 @@ function App() {
   // Uses a ref to avoid re-running when checkForUpdates changes
   const hasCheckedForUpdates = useRef(false);
   useEffect(() => {
-    if (!api.isTauri() || !isInitialized || hasCheckedForUpdates.current) {
+    if (!supports("self-update") || !isInitialized || hasCheckedForUpdates.current) {
       return;
     }
 
@@ -151,8 +152,8 @@ function App() {
         setProjectName(newSettings.defaultProjectName);
       }
 
-      // Load plugins (Tauri only - sync from filesystem)
-      if (api.isTauri()) {
+      // Load plugins (sync from filesystem) where the Target supports them
+      if (supports("plugins")) {
         try {
           const plugins = await api.plugin.syncPlugins();
           setPlugins(plugins);

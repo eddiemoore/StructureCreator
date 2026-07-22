@@ -1,5 +1,6 @@
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
+import { supports } from "../lib/capabilities";
 import { UpdateBadge } from "./UpdateBadge";
 
 interface FooterProps {
@@ -42,7 +43,7 @@ export const Footer = ({ onOpenSettings, onOpenUpdateModal }: FooterProps) => {
             Settings
           </button>
         )}
-        {onOpenUpdateModal && api.isTauri() && (
+        {onOpenUpdateModal && supports("self-update") && (
           <UpdateBadge onClick={onOpenUpdateModal} />
         )}
       </div>
