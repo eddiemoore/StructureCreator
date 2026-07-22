@@ -303,6 +303,24 @@ export const extractVariablesFromContent = (content: string): string[] => {
 };
 
 /**
+ * Shared truthiness rule for `<if>` schema conditions and `{{if}}` template
+ * directives (ADR-0004, issue #129): the value is trimmed and lowercased;
+ * blank values and "false", "0", "no", "off", "disabled" are falsy,
+ * everything else is truthy.
+ */
+export const isTruthyValue = (value: string): boolean => {
+  const trimmed = value.trim().toLowerCase();
+  return (
+    trimmed !== "" &&
+    trimmed !== "false" &&
+    trimmed !== "0" &&
+    trimmed !== "no" &&
+    trimmed !== "off" &&
+    trimmed !== "disabled"
+  );
+};
+
+/**
  * Substitute variables in a string.
  */
 export const substituteVariables = (

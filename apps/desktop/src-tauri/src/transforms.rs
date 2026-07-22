@@ -201,6 +201,17 @@ pub fn extract_variables_from_content(content: &str) -> Vec<String> {
 ///
 /// Unknown transformations are silently left as-is (the variable reference remains unchanged).
 /// This allows forward compatibility with new transforms while making typos visible in output.
+/// Shared truthiness rule for `<if>` schema conditions and `{{if}}` template
+/// directives (ADR-0004, issue #129): the value is trimmed and lowercased;
+/// blank values and "false", "0", "no", "off", "disabled" are falsy,
+/// everything else is truthy.
+pub fn is_truthy_value(value: &str) -> bool {
+    !matches!(
+        value.trim().to_lowercase().as_str(),
+        "" | "false" | "0" | "no" | "off" | "disabled"
+    )
+}
+
 pub fn substitute_variables(text: &str, variables: &HashMap<String, String>) -> String {
     let refs = find_variable_refs(text);
     let mut result = text.to_string();

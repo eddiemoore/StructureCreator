@@ -24,7 +24,7 @@
  */
 
 import type { SchemaNode, SchemaTree } from "./types";
-import { substituteVariables } from "./transforms";
+import { substituteVariables, isTruthyValue } from "./transforms";
 import { processTemplate } from "./templating";
 
 /** Maximum number of iterations allowed in a repeat block. */
@@ -382,6 +382,5 @@ const isTruthy = (
   if (!conditionVar) return false;
   const value = variables[`%${conditionVar}%`];
   if (value === undefined) return false;
-  const trimmed = value.trim().toLowerCase();
-  return trimmed !== "" && trimmed !== "false" && trimmed !== "0";
+  return isTruthyValue(value);
 };
