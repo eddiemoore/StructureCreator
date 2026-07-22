@@ -14,9 +14,10 @@ import {
 } from "./Icons";
 import { DiffPreviewModal } from "./DiffPreviewModal";
 import { ConfirmDialog } from "./ConfirmDialog";
-import type { CreateResult, ResultSummary, ValidationRule, UndoResult } from "../types/schema";
+import type { ResultSummary } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
-import { getPluginRuntime, processTreeContent } from "../lib/plugins";
+import * as creationRun from "../lib/creationRun";
+import type { CreationInputs, CreationReporter } from "../lib/creationRun";
 
 export const RightPanel = () => {
   const {
@@ -72,8 +73,8 @@ export const RightPanel = () => {
   const handleCreateRef = useRef<(() => void) | null>(null);
 
   // Ref for the auto-create handler (used in watch mode callbacks)
-  // Accepts optional overrides for tree/content/varsMap to use newly parsed values before state updates
-  const autoCreateHandlerRef = useRef<((overrides?: { tree?: typeof schemaTree; content?: string; varsMap?: Record<string, string> }) => Promise<void>) | null>(null);
+  // Accepts optional overrides for tree/content to use newly parsed values before state updates
+  const autoCreateHandlerRef = useRef<((overrides?: { tree?: typeof schemaTree; content?: string }) => Promise<void>) | null>(null);
 
   // Keyboard shortcut subscription
   useEffect(() => {
@@ -197,208 +198,46 @@ export const RightPanel = () => {
     });
   };
 
-  // Build variable maps from current variables
-  const buildVariableMaps = () => {
-    const varsMap: Record<string, string> = {};
-    const rulesMap: Record<string, ValidationRule> = {};
-    variables.forEach((v) => {
-      varsMap[v.name] = v.value;
-      if (v.validation) {
-        rulesMap[v.name] = v.validation;
-      }
-    });
-    return { varsMap, rulesMap };
+  // Reporter wiring: the creation run emits logs/progress/errors, the store holds them
+  const reporter: CreationReporter = {
+    onLog: addLog,
+    onProgress: setProgress,
+    onValidationErrors: setValidationErrors,
+    onDiffStart: () => {
+      setDiffLoading(true);
+      setDiffError(null);
+      setDiffResult(null);
+      setShowDiffModal(true);
+    },
   };
 
-  // Run validation and return true if valid
-  const runValidation = async (varsMap: Record<string, string>, rulesMap: Record<string, ValidationRule>): Promise<boolean> => {
-    if (Object.keys(rulesMap).length === 0) {
-      return true;
-    }
+  // Build creation-run inputs; overrides let watch mode pass a freshly parsed
+  // tree/content before React state has updated
+  const buildInputs = (overrides?: { tree?: typeof schemaTree; content?: string }): CreationInputs => ({
+    tree: overrides?.tree ?? schemaTree,
+    content: overrides?.content ?? schemaContent,
+    variables,
+    outputPath: outputPath!,
+    projectName,
+    overwrite,
+    plugins,
+    schemaPath,
+  });
 
-    addLog({ type: "info", message: "Validating variables..." });
-    setProgress({ status: "running", current: 0, total: 0 });
-
-    try {
-      const errors = await api.validation.validateVariables(varsMap, rulesMap);
-
-      if (errors.length > 0) {
-        setValidationErrors(errors);
-        addLog({
-          type: "error",
-          message: `Validation failed: ${errors.length} error${errors.length > 1 ? "s" : ""}. Check the Variables section to fix.`,
-        });
-        errors.forEach((err) => {
-          addLog({
-            type: "error",
-            message: err.message,
-            details: `Variable: ${err.variable_name}`,
-          });
-        });
-        setProgress({ status: "error" });
-        return false;
+  // Run the creation and wire results into the store
+  const runCreate = async (inputs: CreationInputs) => {
+    const outcome = await creationRun.create(inputs, reporter);
+    setSummary(outcome.summary);
+    if (outcome.ok) {
+      if (outcome.createdItems) {
+        setLastCreation(outcome.createdItems);
       }
-      return true;
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      addLog({
-        type: "error",
-        message: `Validation failed: ${errorMessage}`,
-      });
-      setProgress({ status: "error" });
-      return false;
-    }
-  };
-
-  // Execute the actual structure creation
-  // Optional overrides allow watch mode to pass the newly parsed tree/content
-  // before React state has updated, and varsMap to avoid rebuilding it
-  const executeCreate = async (
-    isDryRun: boolean,
-    overrides?: { tree?: typeof schemaTree; content?: string; varsMap?: Record<string, string> }
-  ) => {
-    const effectiveTree = overrides?.tree ?? schemaTree;
-    const effectiveContent = overrides?.content ?? schemaContent;
-    const { varsMap: builtVarsMap, rulesMap } = buildVariableMaps();
-    const varsMap = overrides?.varsMap ?? builtVarsMap;
-
-    setProgress({
-      status: "running",
-      current: 0,
-      total: effectiveTree!.stats.folders + effectiveTree!.stats.files,
-    });
-
-    try {
-      addLog({ type: "info", message: isDryRun ? "Starting dry run..." : "Starting structure creation..." });
-
-      // Load and process plugins for file-processor capability
-      const enabledFileProcessors = plugins.filter(
-        (p) => p.is_enabled && p.capabilities.includes("file-processor")
-      );
-
-      let treeToCreate = effectiveTree;
-
-      if (enabledFileProcessors.length > 0 && effectiveTree) {
-        try {
-          const runtime = getPluginRuntime();
-          // Reload plugins to ensure we have the latest code from disk
-          await runtime.loadPlugins(enabledFileProcessors, true);
-
-          if (runtime.hasProcessors()) {
-            addLog({ type: "info", message: `Processing files with ${enabledFileProcessors.length} plugin(s)...` });
-            treeToCreate = await processTreeContent(effectiveTree, runtime, varsMap, projectName);
-          }
-        } catch (pluginError) {
-          const message = pluginError instanceof Error ? pluginError.message : String(pluginError);
-          addLog({ type: "warning", message: `Plugin processing warning: ${message}` });
-          // Continue with original tree if plugin processing fails
-        }
+      try {
+        const projects = await api.database.listRecentProjects();
+        setRecentProjects(projects);
+      } catch (e) {
+        console.warn("Failed to refresh recent projects:", e);
       }
-
-      let result: CreateResult;
-
-      // Use tree-based creation when plugins have processed the tree
-      // This ensures plugin modifications (like headers) are included
-      const useTreeCreation = treeToCreate && (treeToCreate !== effectiveTree || !effectiveContent);
-
-      if (useTreeCreation) {
-        result = await api.structureCreator.createStructureFromTree(treeToCreate!, {
-          outputPath: outputPath!,
-          variables: varsMap,
-          dryRun: isDryRun,
-          overwrite,
-          projectName,
-        });
-      } else if (effectiveContent) {
-        result = await api.structureCreator.createStructure(effectiveContent, {
-          outputPath: outputPath!,
-          variables: varsMap,
-          dryRun: isDryRun,
-          overwrite,
-          projectName,
-        });
-      } else {
-        throw new Error("No schema available");
-      }
-
-      result.logs.forEach((log) => {
-        addLog({
-          type: log.log_type as "success" | "error" | "warning" | "info",
-          message: log.message,
-          details: log.details,
-        });
-      });
-
-      setSummary(result.summary);
-
-      const hasErrors = result.summary.errors > 0 || result.summary.hooks_failed > 0;
-      if (hasErrors) {
-        setProgress({ status: "error" });
-        const errorParts = [];
-        if (result.summary.errors > 0) {
-          errorParts.push(`${result.summary.errors} error(s)`);
-        }
-        if (result.summary.hooks_failed > 0) {
-          errorParts.push(`${result.summary.hooks_failed} hook(s) failed`);
-        }
-        addLog({
-          type: "warning",
-          message: `Completed with ${errorParts.join(" and ")}`,
-        });
-      } else {
-        setProgress({ status: "completed" });
-        const successParts = [isDryRun ? "Dry run completed!" : "Structure created successfully!"];
-        if (result.summary.hooks_executed > 0) {
-          successParts.push(`${result.summary.hooks_executed} hook(s) executed.`);
-        }
-        addLog({ type: "success", message: successParts.join(" ") });
-
-        // Record to history for non-dry-run successful creations
-        if (!isDryRun) {
-          // Store created items for undo functionality
-          if (result.created_items && result.created_items.length > 0) {
-            setLastCreation(result.created_items);
-          }
-
-          try {
-            // Get schema XML - use effectiveContent if available, or export from tree
-            let schemaXml = effectiveContent || "";
-            if (!schemaXml && effectiveTree) {
-              schemaXml = await api.schema.exportSchemaXml(effectiveTree);
-            }
-
-            // Extract template info from schemaPath if it was loaded from a template
-            let templateId: string | null = null;
-            let templateName: string | null = null;
-            if (schemaPath?.startsWith("template:")) {
-              templateName = schemaPath.slice("template:".length);
-            }
-
-            await api.database.addRecentProject({
-              projectName,
-              outputPath: outputPath!,
-              schemaXml,
-              variables: varsMap,
-              variableValidation: rulesMap,
-              templateId,
-              templateName,
-              foldersCreated: result.summary.folders_created,
-              filesCreated: result.summary.files_created,
-            });
-
-            // Refresh the recent projects list
-            const projects = await api.database.listRecentProjects();
-            setRecentProjects(projects);
-          } catch (historyError) {
-            // Don't fail the creation if history recording fails
-            console.warn("Failed to record project to history:", historyError);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to create structure:", e);
-      setProgress({ status: "error" });
-      addLog({ type: "error", message: `Fatal error: ${e}` });
     }
   };
 
@@ -408,43 +247,14 @@ export const RightPanel = () => {
 
     setUndoLoading(true);
     clearLogs();
-    setProgress({ status: "running", current: 0, total: 0 });
-    addLog({ type: "info", message: "Undoing last structure creation..." });
 
     try {
-      const result: UndoResult = await api.structureCreator.undoStructure(lastCreation, false);
-
-      // Log each operation
-      result.logs.forEach((log) => {
-        addLog({
-          type: log.log_type as "success" | "error" | "warning" | "info",
-          message: log.message,
-          details: log.details,
-        });
-      });
-
-      const hasErrors = result.summary.errors > 0;
-      if (hasErrors) {
-        setProgress({ status: "error" });
-        addLog({
-          type: "warning",
-          message: `Undo completed with ${result.summary.errors} error(s)`,
-        });
-      } else {
-        setProgress({ status: "completed" });
-        addLog({
-          type: "success",
-          message: `Undo complete: ${result.summary.files_deleted} file(s) and ${result.summary.folders_deleted} folder(s) deleted`,
-        });
+      const outcome = await creationRun.undo(lastCreation, reporter);
+      // The undo ran (possibly with partial errors) — its items are spent
+      if (outcome.summary) {
+        setLastCreation(null);
+        setSummary(null);
       }
-
-      // Clear the last creation after undo
-      setLastCreation(null);
-      setSummary(null);
-    } catch (e) {
-      console.error("Failed to undo structure:", e);
-      setProgress({ status: "error" });
-      addLog({ type: "error", message: `Undo failed: ${e}` });
     } finally {
       setUndoLoading(false);
       setShowUndoConfirm(false);
@@ -482,80 +292,21 @@ export const RightPanel = () => {
     setExpandedErrors(new Set());
     setValidationErrors([]);
 
-    const { varsMap, rulesMap } = buildVariableMaps();
-
-    // Run schema validation first (XML syntax, undefined variables, etc.)
-    if (schemaContent) {
-      addLog({ type: "info", message: "Validating schema..." });
-      setProgress({ status: "running", current: 0, total: 0 });
-
-      try {
-        const schemaValidation = await api.validation.validateSchema(schemaContent, varsMap);
-
-        // Log any warnings (they don't block creation)
-        for (const warning of schemaValidation.warnings) {
-          addLog({
-            type: "warning",
-            message: warning.message,
-            details: warning.nodePath ? `Path: ${warning.nodePath}` : undefined,
-          });
-        }
-
-        // If there are errors, stop here
-        if (!schemaValidation.isValid) {
-          for (const error of schemaValidation.errors) {
-            addLog({
-              type: "error",
-              message: error.message,
-              details: error.nodePath ? `Path: ${error.nodePath}` : undefined,
-            });
-          }
-          setProgress({ status: "error" });
-          return;
-        }
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : String(e);
-        addLog({
-          type: "error",
-          message: `Schema validation failed: ${errorMessage}`,
-        });
-        setProgress({ status: "error" });
-        return;
-      }
-    }
-
-    // Run variable validation
-    const isValid = await runValidation(varsMap, rulesMap);
-    if (!isValid) return;
-
-    // If dry run is enabled, generate diff preview instead
+    // If dry run is enabled, preview the Plan against disk instead
     if (dryRun && schemaTree) {
-      setDiffLoading(true);
-      setDiffError(null);
-      setDiffResult(null);
-      setShowDiffModal(true);
-
-      try {
-        const result = await api.structureCreator.generateDiffPreview(
-          schemaTree,
-          outputPath!,
-          varsMap,
-          overwrite
-        );
-        setDiffResult(result);
-      } catch (e) {
-        console.error("Failed to generate diff preview:", e);
-        const errorMessage = e instanceof Error ? e.message : String(e);
-        setDiffError(errorMessage);
-        // Don't close modal - show error in modal instead
-      } finally {
-        setDiffLoading(false);
+      const outcome = await creationRun.preview(buildInputs(), reporter);
+      setDiffLoading(false);
+      if (outcome.ok) {
+        setDiffResult(outcome.diff);
+      } else if (outcome.stage === "diff") {
+        // Modal is already open (onDiffStart) - show error in modal
+        setDiffError(outcome.error ?? "Failed to generate diff preview");
       }
+      // Validation failures never open the modal; errors are in the log
       return;
     }
 
-    // Otherwise, execute creation directly
-    await executeCreate(false);
+    await runCreate(buildInputs());
   };
 
   // Update refs so keyboard shortcut and watch mode can trigger create
@@ -569,10 +320,10 @@ export const RightPanel = () => {
       }
     };
 
-    // Auto-create handler for watch mode - skips validation UI and directly creates
-    // Accepts optional overrides to use newly parsed tree/content before state updates
+    // Auto-create handler for watch mode - an ordinary creation-run caller.
+    // Overrides carry the freshly parsed tree/content before state updates;
+    // the run itself guards the output path and validates.
     autoCreateHandlerRef.current = async (overrides) => {
-      // Check if we can execute - use override tree if provided for the check
       const effectiveTree = overrides?.tree ?? schemaTree;
       const canExecuteNow = effectiveTree && outputPath && projectName;
 
@@ -580,30 +331,7 @@ export const RightPanel = () => {
         return;
       }
 
-      // Verify output path still exists before auto-creating
-      try {
-        const pathExists = await api.fileSystem.exists(outputPath!);
-        if (!pathExists) {
-          addLog({ type: "error", message: "Auto-create aborted: output path no longer exists" });
-          return;
-        }
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : String(e);
-        addLog({ type: "error", message: `Auto-create aborted: failed to verify output path - ${errorMessage}` });
-        return;
-      }
-
-      const { varsMap, rulesMap } = buildVariableMaps();
-
-      // Run validation silently
-      const isValid = await runValidation(varsMap, rulesMap);
-      if (!isValid) {
-        addLog({ type: "error", message: "Auto-create aborted due to validation errors" });
-        return;
-      }
-
-      // Execute creation (not dry run for watch mode), passing overrides including varsMap
-      await executeCreate(false, { ...overrides, varsMap });
+      await runCreate(buildInputs(overrides));
     };
   });
 
@@ -614,7 +342,7 @@ export const RightPanel = () => {
     setDiffError(null);
     setDiffLoading(false);
     // Execute the actual creation (not dry run)
-    await executeCreate(false);
+    await runCreate(buildInputs());
   };
 
   // Handle closing diff modal
