@@ -6,6 +6,7 @@
 // Domain modules (unchanged)
 pub mod database;
 pub mod generators;
+pub mod plan;
 pub mod plugins;
 pub mod schema;
 pub mod team_library;
