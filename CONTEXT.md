@@ -19,6 +19,10 @@ _Avoid_: var, key, delimited name.
 The delimited `%NAME%` form of a Variable name as it appears in schema text and on the Tauri IPC wire. Produced only at outbound edges from a Variable name; never the stored or internal form.
 _Avoid_: variable placeholder, %-name, wrapped name.
 
+**Plan**:
+The tree of resolved nodes a Target produces by expanding a Schema with a complete Variable map (built-ins included): resolved names, rendered inline content, with IO-dependent content deferred as instructions (download, generate). Pure and deterministic — the unit the golden-vector contract pins. Creating a structure executes a Plan; diff preview compares a Plan against disk.
+_Avoid_: preview tree, expanded tree, diff tree.
+
 **Target**:
 A platform implementation that turns a Schema into a structure: the native target (Rust backend, via Tauri) and the web target (TypeScript, in-browser). Both are permanently supported.
 _Avoid_: platform, mode, backend.
@@ -32,6 +36,7 @@ _Avoid_: feature flag, permission.
 - A **Schema** contains zero or more **Variable**s.
 - A **Variable** has exactly one **Variable name** (clean, canonical).
 - A **Variable token** is derived from a **Variable name** at an outbound edge (IPC to the Rust backend, or template-substitution scan); converting back (strip delimiters) is idempotent.
+- A **Target** expands a **Schema** plus complete **Variable** values into a **Plan**; execution (create) and diff preview are thin consumers of the Plan.
 - Both **Target**s must produce identical results for the shared semantic core (substitution, transforms, templating, schema-structure semantics); they may differ only where one lacks a **Capability**, and there the lacking Target fails loudly.
 
 ## Example dialogue
