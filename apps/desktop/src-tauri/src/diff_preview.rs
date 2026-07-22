@@ -1,16 +1,16 @@
 //! Diff preview generation for schema trees.
 //!
-//! Generates a preview of what changes would be made when creating a structure,
-//! including file diffs for existing files that would be overwritten.
+//! Thin consumer of the Plan module (ADR-0004): the schema is expanded by
+//! the same pure `plan::expand` that structure creation executes, then the
+//! Plan is compared against disk. Generates file diffs for existing files
+//! that would be overwritten.
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::schema::SchemaNode;
+use crate::plan::{self, PlanContent, PlanKind, PlanNode, PlanNote};
 use crate::schema::SchemaTree;
-use crate::structure_creator::MAX_REPEAT_COUNT;
-use crate::transforms::substitute_variables;
 use crate::types::{
     DiffAction, DiffHunk, DiffLine, DiffLineType, DiffNode, DiffNodeType, DiffResult, DiffSummary,
 };
@@ -23,10 +23,6 @@ use crate::types::{
 const MAX_DIFF_CONTENT_SIZE: usize = 50000;
 /// Maximum number of lines to show in diff
 const MAX_DIFF_LINES: usize = 1000;
-/// Maximum characters to show for condition values in if block names
-const MAX_CONDITION_DISPLAY_LEN: usize = 20;
-/// Truncated display length (leaving room for "...")
-const TRUNCATED_CONDITION_LEN: usize = 17;
 /// Sample size for binary content detection (8KB)
 const BINARY_SAMPLE_SIZE: usize = 8192;
 /// Threshold percentage for binary detection (if >10% non-printable, treat as binary)
@@ -53,14 +49,176 @@ pub fn generate_diff_preview(
         warnings: Vec::new(),
     };
 
-    let root = generate_diff_node(&tree.root, &base_path, variables, overwrite, &mut summary)?
-        .ok_or_else(|| "Failed to generate diff for root node".to_string())?;
+    let structure_plan = plan::expand(tree, variables);
+
+    // Loud expansion errors/warnings surface as diff warnings; repeat
+    // announcements and infos are execution-log concerns, not diff ones.
+    for note in &structure_plan.notes {
+        match note {
+            PlanNote::Error { message, .. } | PlanNote::Warning { message, .. } => {
+                summary.warnings.push(message.clone());
+            }
+            PlanNote::Info { .. } | PlanNote::RepeatExpanded { .. } => {}
+        }
+    }
+
+    let mut roots: Vec<DiffNode> = structure_plan
+        .roots
+        .iter()
+        .map(|node| diff_plan_node(node, &base_path, overwrite, &mut summary))
+        .collect();
+
+    // DiffResult wants a single root. A schema whose root is a folder/file
+    // expands to exactly one Plan node; a root-level control node can expand
+    // to zero or many, which get wrapped in a synthetic container.
+    let root = if roots.len() == 1 {
+        roots.remove(0)
+    } else {
+        DiffNode {
+            id: generate_diff_id(),
+            node_type: DiffNodeType::Folder,
+            name: String::new(),
+            path: output_path.to_string(),
+            action: DiffAction::Unchanged,
+            existing_content: None,
+            new_content: None,
+            diff_hunks: None,
+            url: None,
+            is_binary: false,
+            children: if roots.is_empty() { None } else { Some(roots) },
+        }
+    };
 
     // Compute total_items from the individual counts
     summary.total_items =
         summary.creates + summary.overwrites + summary.skips + summary.unchanged_folders;
 
     Ok(DiffResult { root, summary })
+}
+
+// ============================================================================
+// Plan walk
+// ============================================================================
+
+/// Compare one Plan node against disk.
+fn diff_plan_node(
+    node: &PlanNode,
+    parent_path: &Path,
+    overwrite: bool,
+    summary: &mut DiffSummary,
+) -> DiffNode {
+    let node_path = parent_path.join(&node.name);
+    // Check if path exists, handling potential errors gracefully
+    let exists = node_path.try_exists().unwrap_or(false);
+
+    match &node.kind {
+        PlanKind::Folder { children } => {
+            let child_nodes: Vec<DiffNode> = children
+                .iter()
+                .map(|child| diff_plan_node(child, &node_path, overwrite, summary))
+                .collect();
+
+            let action = if exists {
+                summary.unchanged_folders += 1;
+                DiffAction::Unchanged
+            } else {
+                summary.creates += 1;
+                DiffAction::Create
+            };
+
+            DiffNode {
+                id: generate_diff_id(),
+                node_type: DiffNodeType::Folder,
+                name: node.name.clone(),
+                path: node_path.to_string_lossy().to_string(),
+                action,
+                existing_content: None,
+                new_content: None,
+                diff_hunks: None,
+                url: None,
+                is_binary: false,
+                children: if child_nodes.is_empty() {
+                    None
+                } else {
+                    Some(child_nodes)
+                },
+            }
+        }
+        PlanKind::File { content } => {
+            let action = if exists {
+                if overwrite {
+                    summary.overwrites += 1;
+                    DiffAction::Overwrite
+                } else {
+                    summary.skips += 1;
+                    DiffAction::Skip
+                }
+            } else {
+                summary.creates += 1;
+                DiffAction::Create
+            };
+
+            // New content: inline text is already fully rendered by the Plan
+            // (using safe UTF-8 truncation for display)
+            let (new_content, url) = match content {
+                PlanContent::Download { url } => {
+                    (Some(format!("[Content from URL: {}]", url)), Some(url.clone()))
+                }
+                PlanContent::Generate { .. } => (None, None),
+                PlanContent::Inline { text, had_content } => (
+                    if *had_content {
+                        Some(truncate_utf8(text, MAX_DIFF_CONTENT_SIZE))
+                    } else {
+                        None
+                    },
+                    None,
+                ),
+            };
+
+            // Get existing content and compute diff if overwriting
+            let (existing_content, diff_hunks, is_binary) = if action == DiffAction::Overwrite {
+                match fs::read(&node_path) {
+                    Ok(bytes) => {
+                        if is_binary_content(&bytes) {
+                            (None, None, true)
+                        } else {
+                            let existing = String::from_utf8_lossy(&bytes);
+                            let existing_str = truncate_utf8(&existing, MAX_DIFF_CONTENT_SIZE);
+
+                            let hunks = if let Some(ref new) = new_content {
+                                if !new.starts_with("[Content from URL:") {
+                                    Some(compute_diff(&existing_str, new))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+
+                            (Some(existing_str), hunks, false)
+                        }
+                    }
+                    Err(_) => (None, None, false),
+                }
+            } else {
+                (None, None, false)
+            };
+
+            DiffNode {
+                id: generate_diff_id(),
+                node_type: DiffNodeType::File,
+                name: node.name.clone(),
+                path: node_path.to_string_lossy().to_string(),
+                action,
+                existing_content,
+                new_content,
+                diff_hunks,
+                url,
+                is_binary,
+                children: None,
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -181,329 +339,150 @@ fn generate_diff_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
-/// Check if a variable value is considered "truthy" for conditional evaluation
-/// Returns the resolved value along with the truthiness result
-fn check_var_truthy(var_name: &str, variables: &HashMap<String, String>) -> (bool, String) {
-    let var_key = format!("%{}%", var_name);
-    let value = variables
-        .get(&var_key)
-        .or_else(|| variables.get(var_name))
-        .cloned()
-        .unwrap_or_default();
-    let is_truthy = !value.is_empty() && value != "0" && value.to_lowercase() != "false";
-    (is_truthy, value)
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::{SchemaNode, SchemaStats};
 
-/// Recursively generate diff nodes for the schema tree
-fn generate_diff_node(
-    node: &SchemaNode,
-    current_path: &PathBuf,
-    variables: &HashMap<String, String>,
-    overwrite: bool,
-    summary: &mut DiffSummary,
-) -> Result<Option<DiffNode>, String> {
-    let schema_node_type = &node.node_type;
-
-    // Handle control flow nodes (if, else, repeat)
-    // NOTE: "if" and "else" cases here are fallbacks for edge cases (e.g., if the root node
-    // is an "if" block). In normal operation, process_diff_children handles these inline
-    // to properly track if/else pairing context.
-    match schema_node_type.as_str() {
-        "if" => {
-            // Fallback handler for "if" nodes not processed by process_diff_children
-            let var_name = node.condition_var.as_deref().unwrap_or("CONDITION");
-            let (is_truthy, resolved_value) = check_var_truthy(var_name, variables);
-
-            if is_truthy {
-                let children =
-                    process_diff_children(node, current_path, variables, overwrite, summary)?;
-                if children.is_empty() {
-                    return Ok(None);
-                }
-                let display_value = if resolved_value.chars().count() > MAX_CONDITION_DISPLAY_LEN {
-                    format!(
-                        "{}...",
-                        resolved_value
-                            .chars()
-                            .take(TRUNCATED_CONDITION_LEN)
-                            .collect::<String>()
-                    )
-                } else {
-                    resolved_value
-                };
-                return Ok(Some(DiffNode {
-                    id: generate_diff_id(),
-                    node_type: DiffNodeType::Folder,
-                    name: format!("if {} ({})", var_name, display_value),
-                    path: current_path.to_string_lossy().to_string(),
-                    action: DiffAction::Unchanged,
-                    existing_content: None,
-                    new_content: None,
-                    diff_hunks: None,
-                    url: None,
-                    is_binary: false,
-                    children: Some(children),
-                }));
-            }
-            return Ok(None);
+    fn tree(root: SchemaNode) -> SchemaTree {
+        SchemaTree {
+            root,
+            stats: SchemaStats::default(),
+            hooks: None,
+            variable_definitions: None,
         }
-        "else" => {
-            // Fallback: else blocks without context are skipped (proper handling is in process_diff_children)
-            return Ok(None);
-        }
-        "repeat" => {
-            // Expand repeat blocks. Edge semantics follow the Plan spec
-            // (ADR-0004, create-walker semantics): missing count defaults to
-            // 1; invalid, negative, or above-maximum counts and invalid
-            // iteration-variable names warn loudly and skip the block.
-            let as_var = node.repeat_as.as_deref().unwrap_or("i");
-            let first_char = as_var.chars().next();
-            if as_var.is_empty()
-                || !as_var.chars().all(|c| c.is_alphanumeric() || c == '_')
-                || first_char.map_or(false, |c| c.is_ascii_digit())
-            {
-                summary
-                    .warnings
-                    .push(format!("Invalid repeat variable name: '{}'", as_var));
-                return Ok(None);
-            }
-
-            let count_str = node.repeat_count.as_deref().unwrap_or("1");
-            let resolved_count_str = substitute_variables(count_str, variables);
-            let count: usize = match resolved_count_str.trim().parse::<i64>() {
-                Ok(n) if n < 0 => {
-                    summary.warnings.push(format!(
-                        "Repeat count cannot be negative: '{}'",
-                        resolved_count_str
-                    ));
-                    return Ok(None);
-                }
-                Ok(n) if n as u64 > MAX_REPEAT_COUNT as u64 => {
-                    summary.warnings.push(format!(
-                        "Repeat count '{}' exceeds maximum of {}",
-                        n, MAX_REPEAT_COUNT
-                    ));
-                    return Ok(None);
-                }
-                Ok(n) => n as usize,
-                Err(_) => {
-                    summary.warnings.push(format!(
-                        "Invalid repeat count: '{}' (resolved from '{}')",
-                        resolved_count_str, count_str
-                    ));
-                    return Ok(None);
-                }
-            };
-            let mut all_children = Vec::new();
-
-            for i in 0..count {
-                // Create iteration variables
-                let mut iter_vars = variables.clone();
-                iter_vars.insert(format!("%{}%", as_var), i.to_string());
-                iter_vars.insert(format!("%{}_1%", as_var), (i + 1).to_string());
-
-                // Use process_diff_children to properly handle if/else pairs
-                let iteration_children =
-                    process_diff_children(node, current_path, &iter_vars, overwrite, summary)?;
-                all_children.extend(iteration_children);
-            }
-
-            if all_children.is_empty() {
-                return Ok(None);
-            }
-
-            return Ok(Some(DiffNode {
-                id: generate_diff_id(),
-                node_type: DiffNodeType::Folder,
-                name: format!("repeat {} as {}", count, as_var),
-                path: current_path.to_string_lossy().to_string(),
-                action: DiffAction::Unchanged,
-                existing_content: None,
-                new_content: None,
-                diff_hunks: None,
-                url: None,
-                is_binary: false,
-                children: Some(all_children),
-            }));
-        }
-        _ => {}
     }
 
-    // Apply variable substitution to name
-    let resolved_name = substitute_variables(&node.name, variables);
-    let node_path = current_path.join(&resolved_name);
+    #[test]
+    fn diff_matches_creation_semantics_for_repeat_edges() {
+        // count above maximum: block skipped, loud warning — same as create
+        let repeat = SchemaNode {
+            node_type: "repeat".to_string(),
+            repeat_count: Some("10001".to_string()),
+            repeat_as: Some("i".to_string()),
+            children: Some(vec![SchemaNode {
+                name: "item-%i%.txt".to_string(),
+                node_type: "file".to_string(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        };
+        let t = tree(SchemaNode {
+            name: "root".to_string(),
+            node_type: "folder".to_string(),
+            children: Some(vec![repeat]),
+            ..Default::default()
+        });
 
-    // Check if path exists, handling potential errors gracefully
-    let exists = node_path.try_exists().unwrap_or(false);
+        let temp = tempfile::tempdir().unwrap();
+        let result = generate_diff_preview(
+            &t,
+            temp.path().to_str().unwrap(),
+            &HashMap::new(),
+            false,
+        )
+        .unwrap();
 
-    match schema_node_type.as_str() {
-        "folder" => {
-            let children =
-                process_diff_children(node, &node_path, variables, overwrite, summary)?;
+        assert_eq!(result.root.name, "root");
+        assert!(result.root.children.is_none(), "block must be skipped");
+        assert_eq!(result.summary.warnings.len(), 1);
+        assert!(result.summary.warnings[0].contains("exceeds maximum"));
+    }
 
-            let action = if exists {
-                summary.unchanged_folders += 1;
-                DiffAction::Unchanged
-            } else {
-                summary.creates += 1;
-                DiffAction::Create
-            };
+    #[test]
+    fn overwrite_diff_includes_hunks_for_existing_text_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let root_dir = temp.path().join("root");
+        fs::create_dir_all(&root_dir).unwrap();
+        fs::write(root_dir.join("a.txt"), "old line\n").unwrap();
 
-            Ok(Some(DiffNode {
-                id: generate_diff_id(),
-                node_type: DiffNodeType::Folder,
-                name: resolved_name,
-                path: node_path.to_string_lossy().to_string(),
-                action,
-                existing_content: None,
-                new_content: None,
-                diff_hunks: None,
-                url: None,
-                is_binary: false,
-                children: if children.is_empty() {
-                    None
-                } else {
-                    Some(children)
+        let t = tree(SchemaNode {
+            name: "root".to_string(),
+            node_type: "folder".to_string(),
+            children: Some(vec![SchemaNode {
+                name: "a.txt".to_string(),
+                node_type: "file".to_string(),
+                content: Some("new line\n".to_string()),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        });
+
+        let result = generate_diff_preview(
+            &t,
+            temp.path().to_str().unwrap(),
+            &HashMap::new(),
+            true, // overwrite
+        )
+        .unwrap();
+
+        let file = &result.root.children.as_ref().unwrap()[0];
+        assert_eq!(file.action, DiffAction::Overwrite);
+        assert_eq!(file.existing_content.as_deref(), Some("old line\n"));
+        assert!(file.diff_hunks.as_ref().is_some_and(|h| !h.is_empty()));
+        assert_eq!(result.summary.overwrites, 1);
+    }
+
+    #[test]
+    fn preview_and_creation_agree_on_planned_paths() {
+        // The same expansion feeds both; sanity-check the diff tree mirrors
+        // plan::to_paths for a schema with if/else and repeat.
+        let t = tree(SchemaNode {
+            name: "app".to_string(),
+            node_type: "folder".to_string(),
+            children: Some(vec![
+                SchemaNode {
+                    node_type: "if".to_string(),
+                    condition_var: Some("FLAG".to_string()),
+                    children: Some(vec![SchemaNode {
+                        name: "on.txt".to_string(),
+                        node_type: "file".to_string(),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
                 },
-            }))
-        }
-        "file" => {
-            let action = if exists {
-                if overwrite {
-                    summary.overwrites += 1;
-                    DiffAction::Overwrite
-                } else {
-                    summary.skips += 1;
-                    DiffAction::Skip
+                SchemaNode {
+                    node_type: "repeat".to_string(),
+                    repeat_count: Some("2".to_string()),
+                    repeat_as: Some("n".to_string()),
+                    children: Some(vec![SchemaNode {
+                        name: "f-%n%.txt".to_string(),
+                        node_type: "file".to_string(),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                },
+            ]),
+            ..Default::default()
+        });
+
+        let mut variables = HashMap::new();
+        variables.insert("%FLAG%".to_string(), "yes".to_string());
+
+        let temp = tempfile::tempdir().unwrap();
+        let result =
+            generate_diff_preview(&t, temp.path().to_str().unwrap(), &variables, false).unwrap();
+
+        fn collect(node: &DiffNode, prefix: &str, out: &mut Vec<String>) {
+            let path = if prefix.is_empty() {
+                node.name.clone()
+            } else {
+                format!("{}/{}", prefix, node.name)
+            };
+            out.push(path.clone());
+            if let Some(children) = &node.children {
+                for child in children {
+                    collect(child, &path, out);
                 }
-            } else {
-                summary.creates += 1;
-                DiffAction::Create
-            };
-
-            // Get new content (using safe UTF-8 truncation)
-            let new_content = if let Some(url) = &node.url {
-                Some(format!("[Content from URL: {}]", url))
-            } else if let Some(content) = &node.content {
-                let resolved = substitute_variables(content, variables);
-                Some(truncate_utf8(&resolved, MAX_DIFF_CONTENT_SIZE))
-            } else {
-                None
-            };
-
-            // Get existing content and compute diff if overwriting
-            let (existing_content, diff_hunks, is_binary) = if action == DiffAction::Overwrite {
-                match fs::read(&node_path) {
-                    Ok(bytes) => {
-                        if is_binary_content(&bytes) {
-                            (None, None, true)
-                        } else {
-                            let existing = String::from_utf8_lossy(&bytes);
-                            let existing_str = truncate_utf8(&existing, MAX_DIFF_CONTENT_SIZE);
-
-                            let hunks = if let Some(ref new) = new_content {
-                                if !new.starts_with("[Content from URL:") {
-                                    Some(compute_diff(&existing_str, new))
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            };
-
-                            (Some(existing_str), hunks, false)
-                        }
-                    }
-                    Err(_) => (None, None, false),
-                }
-            } else {
-                (None, None, false)
-            };
-
-            Ok(Some(DiffNode {
-                id: generate_diff_id(),
-                node_type: DiffNodeType::File,
-                name: resolved_name,
-                path: node_path.to_string_lossy().to_string(),
-                action,
-                existing_content,
-                new_content,
-                diff_hunks,
-                url: node.url.clone(),
-                is_binary,
-                children: None,
-            }))
+            }
         }
-        _ => Ok(None),
+        let mut diff_paths = Vec::new();
+        collect(&result.root, "", &mut diff_paths);
+        diff_paths.sort();
+
+        let mut plan_paths = plan::to_paths(&plan::expand(&t, &variables));
+        plan_paths.sort();
+
+        assert_eq!(diff_paths, plan_paths);
     }
-}
-
-/// Process children of a node, handling if/else conditional pairs correctly.
-///
-/// The if/else handling works as follows:
-/// 1. When we encounter an "if" node, we check its condition
-/// 2. If truthy, we process its children and set skip_next_else=true
-/// 3. If falsy, we skip its children and set skip_next_else=false
-/// 4. When we encounter an "else" node immediately after, we check skip_next_else
-/// 5. The skip flag is reset after processing an else, or when a non-else node
-///    follows something other than an if (handles malformed schemas gracefully)
-fn process_diff_children(
-    node: &SchemaNode,
-    current_path: &PathBuf,
-    variables: &HashMap<String, String>,
-    overwrite: bool,
-    summary: &mut DiffSummary,
-) -> Result<Vec<DiffNode>, String> {
-    let mut children = Vec::new();
-
-    if let Some(node_children) = &node.children {
-        let mut skip_next_else = false;
-        let mut last_was_if = false;
-
-        for child in node_children {
-            // Handle if/else pairs
-            if child.node_type == "if" {
-                let var_name = child.condition_var.as_deref().unwrap_or("CONDITION");
-                let (is_truthy, _) = check_var_truthy(var_name, variables);
-
-                skip_next_else = is_truthy;
-
-                if is_truthy {
-                    // Use process_diff_children recursively to properly handle nested if/else pairs
-                    let nested_children =
-                        process_diff_children(child, current_path, variables, overwrite, summary)?;
-                    children.extend(nested_children);
-                }
-                last_was_if = true;
-                continue;
-            }
-
-            if child.node_type == "else" {
-                if !skip_next_else {
-                    // Use process_diff_children recursively to properly handle nested if/else pairs
-                    let nested_children =
-                        process_diff_children(child, current_path, variables, overwrite, summary)?;
-                    children.extend(nested_children);
-                }
-                skip_next_else = false;
-                last_was_if = false;
-                continue;
-            }
-
-            // Reset skip flag when a non-else node follows a non-if node.
-            // This handles edge cases where the schema might have unexpected ordering.
-            if !last_was_if {
-                skip_next_else = false;
-            }
-            last_was_if = false;
-
-            if let Some(diff_node) =
-                generate_diff_node(child, current_path, variables, overwrite, summary)?
-            {
-                children.push(diff_node);
-            }
-        }
-    }
-
-    Ok(children)
 }
