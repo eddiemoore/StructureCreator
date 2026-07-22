@@ -5,7 +5,6 @@
 
 import type {
   SchemaTree,
-  SchemaNode,
   CreateResult,
   BackendLogEntry,
   ResultSummary,
@@ -25,15 +24,13 @@ import {
 import { isValidPublicUrl } from "./url-validation";
 import {
   isTextFile,
-  MAX_REPEAT_COUNT,
   FETCH_TIMEOUT_MS,
-  MAX_SCHEMA_DEPTH,
   MAX_DOWNLOAD_SIZE_BYTES,
   MAX_DIFF_FILE_READ_BYTES,
   validatePathComponent,
 } from "./constants";
 import { generateImage, generateSqlite } from "./generators";
-import { processTemplate, expand } from "@structure-creator/shared";
+import { expand } from "@structure-creator/shared";
 import type { PlanNode, PlanFolder, PlanFile } from "@structure-creator/shared";
 
 /**
@@ -539,21 +536,19 @@ const executeFile = async (
 // Diff Preview Generation
 // ============================================================================
 
-interface DiffContext {
-  rootHandle: FileSystemDirectoryHandle;
-  variables: Record<string, string>;
+interface DiffWalkContext {
   overwrite: boolean;
   warnings: string[];
-  ifWasTrue: boolean;
-  // Tracks if we're in a virtual subtree (parent folder doesn't exist)
-  // When true, skip file existence checks since the folder doesn't exist yet
-  inVirtualSubtree: boolean;
-  // Current recursion depth to prevent stack overflow
-  depth: number;
+  generateId: () => string;
 }
 
 /**
  * Generate a diff preview showing what would be created/changed.
+ *
+ * Thin consumer of the shared Plan module (ADR-0004): the Schema is
+ * expanded by the same pure `expand` the create executor runs, then the
+ * Plan is compared against disk. Plan-level errors/warnings surface as
+ * diff warnings.
  */
 export const generateDiffPreview = async (
   tree: SchemaTree,
@@ -561,26 +556,38 @@ export const generateDiffPreview = async (
   variables: Record<string, string>,
   overwrite: boolean
 ): Promise<DiffResult> => {
-  const context: DiffContext = {
-    rootHandle,
-    variables,
-    overwrite,
-    warnings: [],
-    ifWasTrue: false,
-    inVirtualSubtree: false,
-    depth: 0,
-  };
+  const plan = expand(tree, variables);
 
   let idCounter = 0;
-  const generateId = (): string => `diff_${idCounter++}`;
+  const context: DiffWalkContext = {
+    overwrite,
+    warnings: [
+      ...plan.errors.map((e) => e.message),
+      ...plan.warnings.map((w) => w.message),
+    ],
+    generateId: () => `diff_${idCounter++}`,
+  };
 
-  const root = await generateDiffNode(
-    tree.root,
-    rootHandle,
-    context,
-    "",
-    generateId
-  );
+  const children: DiffNode[] = [];
+  for (const node of plan.nodes) {
+    children.push(await diffPlanNode(node, rootHandle, "", context));
+  }
+
+  // DiffResult wants a single root. A schema whose root is a folder/file
+  // expands to exactly one Plan node; a root-level control node can expand
+  // to zero or many, which get wrapped in a synthetic container.
+  const root: DiffNode =
+    children.length === 1
+      ? children[0]
+      : {
+          id: context.generateId(),
+          node_type: "folder",
+          name: "",
+          path: "",
+          action: "unchanged",
+          is_binary: false,
+          children: children.length > 0 ? children : undefined,
+        };
 
   const summary = calculateDiffSummary(root, context.warnings);
 
@@ -591,118 +598,65 @@ export const generateDiffPreview = async (
 };
 
 /**
- * Generate diff for a single node.
+ * Compare one Plan node against disk. `parentHandle` is null inside a
+ * virtual subtree (an ancestor folder that doesn't exist yet), where
+ * existence checks are skipped — everything there is a create.
  */
-const generateDiffNode = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: DiffContext,
+const diffPlanNode = (
+  node: PlanNode,
+  parentHandle: FileSystemDirectoryHandle | null,
   currentPath: string,
-  generateId: () => string
-): Promise<DiffNode> => {
-  // Check recursion depth to prevent stack overflow
-  if (context.depth >= MAX_SCHEMA_DEPTH) {
-    context.warnings.push(`Maximum schema depth (${MAX_SCHEMA_DEPTH}) exceeded at: ${currentPath}`);
-    return {
-      id: generateId(),
-      node_type: "folder",
-      name: "[depth exceeded]",
-      path: currentPath,
-      action: "skip",
-      is_binary: false,
-    };
-  }
-  context.depth++;
+  context: DiffWalkContext
+): Promise<DiffNode> =>
+  node.kind === "folder"
+    ? diffPlanFolder(node, parentHandle, currentPath, context)
+    : diffPlanFile(node, parentHandle, currentPath, context);
 
-  try {
-    switch (node.type) {
-      case "folder":
-        return await generateDiffFolder(node, parentHandle, context, currentPath, generateId);
-      case "file":
-        return await generateDiffFile(node, parentHandle, context, currentPath, generateId);
-      case "if":
-        return await generateDiffIf(node, parentHandle, context, currentPath, generateId);
-      case "else":
-        return await generateDiffElse(node, parentHandle, context, currentPath, generateId);
-      case "repeat":
-        return await generateDiffRepeat(node, parentHandle, context, currentPath, generateId);
-    }
-  } finally {
-    context.depth--;
-  }
-};
-
-const generateDiffFolder = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: DiffContext,
+const diffPlanFolder = async (
+  folder: PlanFolder,
+  parentHandle: FileSystemDirectoryHandle | null,
   currentPath: string,
-  generateId: () => string
+  context: DiffWalkContext
 ): Promise<DiffNode> => {
-  const folderName = substituteVariables(node.name, context.variables);
-
   // Validate folder name to prevent path traversal
   try {
-    validatePathComponent(folderName);
+    validatePathComponent(folder.name);
   } catch (e) {
-    context.warnings.push(`Invalid folder name: ${folderName} - ${e instanceof Error ? e.message : String(e)}`);
+    context.warnings.push(
+      `Invalid folder name: ${folder.name} - ${e instanceof Error ? e.message : String(e)}`
+    );
     return {
-      id: generateId(),
+      id: context.generateId(),
       node_type: "folder",
-      name: `[invalid: ${folderName}]`,
+      name: `[invalid: ${folder.name}]`,
       path: currentPath,
       action: "skip",
       is_binary: false,
     };
   }
 
-  const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+  const folderPath = currentPath ? `${currentPath}/${folder.name}` : folder.name;
 
-  let exists = false;
   let folderHandle: FileSystemDirectoryHandle | null = null;
-
-  try {
-    folderHandle = await parentHandle.getDirectoryHandle(folderName);
-    exists = true;
-  } catch {
-    exists = false;
+  if (parentHandle) {
+    try {
+      folderHandle = await parentHandle.getDirectoryHandle(folder.name);
+    } catch {
+      folderHandle = null;
+    }
   }
 
-  const action: DiffAction = exists ? "unchanged" : "create";
+  const action: DiffAction = folderHandle ? "unchanged" : "create";
 
-  // Process children
   const children: DiffNode[] = [];
-  if (node.children) {
-    const childHandle = folderHandle || parentHandle;
-    const savedIfWasTrue = context.ifWasTrue;
-    const savedInVirtualSubtree = context.inVirtualSubtree;
-    context.ifWasTrue = false;
-
-    // If folder doesn't exist, mark children as being in a virtual subtree
-    // This prevents incorrect file existence checks
-    if (!folderHandle) {
-      context.inVirtualSubtree = true;
-    }
-
-    for (const child of node.children) {
-      const childDiff = await generateDiffNode(
-        child,
-        childHandle,
-        context,
-        folderPath,
-        generateId
-      );
-      children.push(childDiff);
-    }
-
-    context.ifWasTrue = savedIfWasTrue;
-    context.inVirtualSubtree = savedInVirtualSubtree;
+  for (const child of folder.children) {
+    children.push(await diffPlanNode(child, folderHandle, folderPath, context));
   }
 
   return {
-    id: generateId(),
+    id: context.generateId(),
     node_type: "folder",
-    name: folderName,
+    name: folder.name,
     path: folderPath,
     action,
     is_binary: false,
@@ -710,49 +664,47 @@ const generateDiffFolder = async (
   };
 };
 
-const generateDiffFile = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: DiffContext,
+const diffPlanFile = async (
+  file: PlanFile,
+  parentHandle: FileSystemDirectoryHandle | null,
   currentPath: string,
-  generateId: () => string
+  context: DiffWalkContext
 ): Promise<DiffNode> => {
-  const fileName = substituteVariables(node.name, context.variables);
-
   // Validate file name to prevent path traversal
   try {
-    validatePathComponent(fileName);
+    validatePathComponent(file.name);
   } catch (e) {
-    context.warnings.push(`Invalid file name: ${fileName} - ${e instanceof Error ? e.message : String(e)}`);
+    context.warnings.push(
+      `Invalid file name: ${file.name} - ${e instanceof Error ? e.message : String(e)}`
+    );
     return {
-      id: generateId(),
+      id: context.generateId(),
       node_type: "file",
-      name: `[invalid: ${fileName}]`,
+      name: `[invalid: ${file.name}]`,
       path: currentPath,
       action: "skip",
       is_binary: false,
     };
   }
 
-  const filePath = currentPath ? `${currentPath}/${fileName}` : fileName;
+  const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
 
   let exists = false;
   let existingContent: string | undefined;
 
-  // Skip file existence check if in virtual subtree (parent folder doesn't exist)
-  if (!context.inVirtualSubtree) {
+  if (parentHandle) {
     try {
-      const fileHandle = await parentHandle.getFileHandle(fileName);
-      const file = await fileHandle.getFile();
+      const fileHandle = await parentHandle.getFileHandle(file.name);
+      const existing = await fileHandle.getFile();
       exists = true;
 
       // Try to read as text, but only if file is not too large
       try {
-        if (file.size <= MAX_DIFF_FILE_READ_BYTES) {
-          existingContent = await file.text();
+        if (existing.size <= MAX_DIFF_FILE_READ_BYTES) {
+          existingContent = await existing.text();
         } else {
           // File too large for diff preview
-          existingContent = `[File too large for diff preview: ${(file.size / 1024 / 1024).toFixed(1)}MB]`;
+          existingContent = `[File too large for diff preview: ${(existing.size / 1024 / 1024).toFixed(1)}MB]`;
         }
       } catch {
         existingContent = undefined;
@@ -769,208 +721,42 @@ const generateDiffFile = async (
     action = "create";
   }
 
-  // Get new content
   let newContent: string | undefined;
+  let url: string | undefined;
+  let generate: "image" | "sqlite" | undefined;
   let isBinary = false;
 
-  if (node.url) {
+  if (file.content.kind === "download") {
     isBinary = true; // URLs are treated as binary (no text diff)
+    url = file.content.url;
     // Validate URL to warn about invalid URLs in preview
-    const url = substituteVariables(node.url, context.variables);
-    const urlValidation = isValidPublicUrl(url);
+    const urlValidation = isValidPublicUrl(file.content.url);
     if (!urlValidation.valid) {
-      context.warnings.push(`Invalid URL for ${fileName}: ${urlValidation.error}`);
+      context.warnings.push(
+        `Invalid URL for ${file.name}: ${urlValidation.error}`
+      );
     }
-  } else if (node.generate) {
+  } else if (file.content.kind === "generate") {
     isBinary = true; // Generated files are binary (no text diff)
-  } else if (node.content) {
-    // Process template directives if template="true", then substitute variables
-    if (node.template) {
-      const templateResult = processTemplate(node.content, context.variables);
-      if (templateResult.ok) {
-        newContent = substituteVariables(templateResult.value, context.variables);
-      } else {
-        // Template error - show error in preview
-        context.warnings.push(`Template error in ${fileName}: ${templateResult.error.message}`);
-        newContent = substituteVariables(node.content, context.variables);
-      }
-    } else {
-      newContent = substituteVariables(node.content, context.variables);
-    }
+    generate = file.content.generator;
+  } else {
+    newContent = file.content.text === "" ? undefined : file.content.text;
   }
 
   return {
-    id: generateId(),
+    id: context.generateId(),
     node_type: "file",
-    name: fileName,
+    name: file.name,
     path: filePath,
     action,
     existing_content: existingContent,
     new_content: newContent,
-    url: node.url ? substituteVariables(node.url, context.variables) : undefined,
+    url,
     is_binary: isBinary,
-    generate: node.generate,
+    generate,
   };
 };
 
-const generateDiffIf = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: DiffContext,
-  currentPath: string,
-  generateId: () => string
-): Promise<DiffNode> => {
-  const varName = node.condition_var || "";
-  const varKey = `%${varName}%`;
-  const value = context.variables[varKey] || "";
-
-  const isTruthy =
-    value.trim() !== "" &&
-    value.toLowerCase() !== "0" &&
-    value.toLowerCase() !== "false" &&
-    value.toLowerCase() !== "no";
-
-  context.ifWasTrue = isTruthy;
-
-  const children: DiffNode[] = [];
-  if (isTruthy && node.children) {
-    for (const child of node.children) {
-      const childDiff = await generateDiffNode(
-        child,
-        parentHandle,
-        context,
-        currentPath,
-        generateId
-      );
-      children.push(childDiff);
-    }
-  }
-
-  // Return a virtual node for the if block
-  return {
-    id: generateId(),
-    node_type: "folder",
-    name: `[if ${varName}]`,
-    path: currentPath,
-    action: isTruthy ? "create" : "skip",
-    is_binary: false,
-    children: children.length > 0 ? children : undefined,
-  };
-};
-
-const generateDiffElse = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: DiffContext,
-  currentPath: string,
-  generateId: () => string
-): Promise<DiffNode> => {
-  const shouldProcess = !context.ifWasTrue;
-
-  const children: DiffNode[] = [];
-  if (shouldProcess && node.children) {
-    for (const child of node.children) {
-      const childDiff = await generateDiffNode(
-        child,
-        parentHandle,
-        context,
-        currentPath,
-        generateId
-      );
-      children.push(childDiff);
-    }
-  }
-
-  return {
-    id: generateId(),
-    node_type: "folder",
-    name: "[else]",
-    path: currentPath,
-    action: shouldProcess ? "create" : "skip",
-    is_binary: false,
-    children: children.length > 0 ? children : undefined,
-  };
-};
-
-const generateDiffRepeat = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: DiffContext,
-  currentPath: string,
-  generateId: () => string
-): Promise<DiffNode> => {
-  let countStr = node.repeat_count || "1";
-  countStr = substituteVariables(countStr, context.variables);
-
-  const count = parseInt(countStr, 10);
-  if (isNaN(count) || count < 0) {
-    context.warnings.push(`Invalid repeat count: ${countStr}`);
-    return {
-      id: generateId(),
-      node_type: "folder",
-      name: `[repeat (invalid)]`,
-      path: currentPath,
-      action: "skip",
-      is_binary: false,
-    };
-  }
-
-  if (count > MAX_REPEAT_COUNT) {
-    context.warnings.push(
-      `Repeat count ${count} exceeds maximum allowed (${MAX_REPEAT_COUNT})`
-    );
-    return {
-      id: generateId(),
-      node_type: "folder",
-      name: `[repeat (exceeds limit)]`,
-      path: currentPath,
-      action: "skip",
-      is_binary: false,
-    };
-  }
-
-  const repeatAs = node.repeat_as || "i";
-  const children: DiffNode[] = [];
-
-  for (let i = 0; i < count; i++) {
-    // Use uppercase keys to match substituteVariables lookup
-    const scopedVars = {
-      ...context.variables,
-      [`%${repeatAs.toUpperCase()}%`]: i.toString(),
-      [`%${repeatAs.toUpperCase()}_1%`]: (i + 1).toString(),
-    };
-
-    // Create scoped context - ifWasTrue is reset for each iteration
-    const scopedContext: DiffContext = {
-      ...context,
-      variables: scopedVars,
-      ifWasTrue: false,
-    };
-
-    if (node.children) {
-      for (const child of node.children) {
-        const childDiff = await generateDiffNode(
-          child,
-          parentHandle,
-          scopedContext,
-          currentPath,
-          generateId
-        );
-        children.push(childDiff);
-      }
-    }
-  }
-
-  return {
-    id: generateId(),
-    node_type: "folder",
-    name: `[repeat ${count}x]`,
-    path: currentPath,
-    action: count > 0 ? "create" : "skip",
-    is_binary: false,
-    children: children.length > 0 ? children : undefined,
-  };
-};
 
 /**
  * Calculate summary statistics from a diff tree.
