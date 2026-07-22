@@ -23,6 +23,10 @@ _Avoid_: variable placeholder, %-name, wrapped name.
 The tree of resolved nodes a Target produces by expanding a Schema with a complete Variable map (built-ins included): resolved names, rendered inline content, with IO-dependent content deferred as instructions (download, generate). Pure and deterministic — the unit the golden-vector contract pins. Creating a structure executes a Plan; diff preview compares a Plan against disk.
 _Avoid_: preview tree, expanded tree, diff tree.
 
+**Creation run**:
+The frontend sequence that turns user inputs into a structure: validate (schema, then Variables), optionally preview (compare the Plan against disk), execute the creation, record history, and optionally undo. Stateless — results are returned to the caller; the store holds them.
+_Avoid_: create flow, execution flow, creation session.
+
 **Target**:
 A platform implementation that turns a Schema into a structure: the native target (Rust backend, via Tauri) and the web target (TypeScript, in-browser). Both are permanently supported.
 _Avoid_: platform, mode, backend.
@@ -37,6 +41,7 @@ _Avoid_: feature flag, permission.
 - A **Variable** has exactly one **Variable name** (clean, canonical).
 - A **Variable token** is derived from a **Variable name** at an outbound edge (IPC to the Rust backend, or template-substitution scan); converting back (strip delimiters) is idempotent.
 - A **Target** expands a **Schema** plus complete **Variable** values into a **Plan**; execution (create) and diff preview are thin consumers of the Plan.
+- A **Creation run** sequences validation, Plan preview, execution, history recording, and undo through the active **Target**; watch auto-create and the keyboard shortcut are ordinary callers of it.
 - Both **Target**s must produce identical results for the shared semantic core (substitution, transforms, templating, schema-structure semantics); they may differ only where one lacks a **Capability**, and there the lacking Target fails loudly.
 
 ## Example dialogue
