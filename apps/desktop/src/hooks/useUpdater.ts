@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react";
 import { useAppStore } from "../store/appStore";
-import { api } from "../lib/api";
+import { supports, capabilityMessage } from "../lib/capabilities";
 
 type Update = Awaited<ReturnType<typeof import("@tauri-apps/plugin-updater").check>>;
 
@@ -24,9 +24,9 @@ export const useUpdater = (): UseUpdaterReturn => {
 
   const checkForUpdates = useCallback(
     async (silent = false) => {
-      if (!api.isTauri()) {
+      if (!supports("self-update")) {
         if (!silent) {
-          setUpdateError("Updates are only available in the desktop app");
+          setUpdateError(capabilityMessage("self-update"));
         }
         return;
       }
@@ -77,8 +77,8 @@ export const useUpdater = (): UseUpdaterReturn => {
   );
 
   const downloadAndInstall = useCallback(async () => {
-    if (!api.isTauri()) {
-      setUpdateError("Updates are only available in the desktop app");
+    if (!supports("self-update")) {
+      setUpdateError(capabilityMessage("self-update"));
       return;
     }
 
@@ -121,7 +121,7 @@ export const useUpdater = (): UseUpdaterReturn => {
   }, [setUpdateStatus, setUpdateProgress, setUpdateError]);
 
   const installAndRelaunch = useCallback(async () => {
-    if (!api.isTauri()) {
+    if (!supports("self-update")) {
       return;
     }
 

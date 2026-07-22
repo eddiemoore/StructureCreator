@@ -44,6 +44,7 @@ import { validateVariables as validateVars, extractVariablesFromContent } from "
 import { toTokenKeys } from "../../../utils/variableName";
 import { WebTemplateImportExportAdapter } from "./template-io";
 import { scanZipToSchema } from "./zip-utils";
+import { CapabilityError } from "../../capabilities";
 
 // ============================================================================
 // Helper Functions
@@ -295,21 +296,8 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
     _items: CreatedItem[],
     _dryRun: boolean
   ): Promise<UndoResult> {
-    // Web mode doesn't support undo - the File System Access API doesn't support
-    // deletion reliably across all browsers
-    return {
-      logs: [{
-        log_type: "warning",
-        message: "Undo is not supported in web mode",
-        details: "Please use the desktop app for undo functionality",
-      }],
-      summary: {
-        files_deleted: 0,
-        folders_deleted: 0,
-        items_skipped: 0,
-        errors: 0,
-      },
-    };
+    // The File System Access API doesn't support deletion reliably across browsers
+    throw new CapabilityError("undo");
   }
 }
 
@@ -350,7 +338,7 @@ class WebValidationAdapter implements ValidationAdapter {
 
 class WebWatchAdapter implements WatchAdapter {
   async startWatch(_path: string): Promise<void> {
-    throw new Error("Watch mode is not supported in the web browser. Please use the desktop app for file watching functionality.");
+    throw new CapabilityError("watch");
   }
 
   async stopWatch(): Promise<void> {
@@ -379,7 +367,7 @@ class WebTeamLibraryAdapter implements TeamLibraryAdapter {
   }
 
   async addTeamLibrary(_name: string, _path: string): Promise<TeamLibrary> {
-    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+    throw new CapabilityError("team-libraries");
   }
 
   async updateTeamLibrary(
@@ -391,15 +379,15 @@ class WebTeamLibraryAdapter implements TeamLibraryAdapter {
       isEnabled?: boolean;
     }
   ): Promise<TeamLibrary | null> {
-    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+    throw new CapabilityError("team-libraries");
   }
 
   async removeTeamLibrary(_id: string): Promise<boolean> {
-    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+    throw new CapabilityError("team-libraries");
   }
 
   async scanTeamLibrary(_libraryId: string): Promise<TeamTemplate[]> {
-    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+    throw new CapabilityError("team-libraries");
   }
 
   async getTeamTemplate(_filePath: string): Promise<{
@@ -420,7 +408,7 @@ class WebTeamLibraryAdapter implements TeamLibraryAdapter {
       tags?: string[];
     }>;
   }> {
-    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+    throw new CapabilityError("team-libraries");
   }
 
   async importTeamTemplate(
@@ -428,7 +416,7 @@ class WebTeamLibraryAdapter implements TeamLibraryAdapter {
     _filePath: string,
     _strategy: DuplicateStrategy
   ): Promise<TeamImportResult> {
-    throw new Error("Team libraries are not supported in the web browser. Please use the desktop app for team library functionality.");
+    throw new CapabilityError("team-libraries");
   }
 
   async getSyncLog(_libraryId: string | null, _limit: number): Promise<SyncLogEntry[]> {
@@ -451,19 +439,19 @@ class WebPluginAdapter implements PluginAdapter {
   }
 
   async installPlugin(_sourcePath: string): Promise<Plugin> {
-    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+    throw new CapabilityError("plugins");
   }
 
   async uninstallPlugin(_id: string): Promise<boolean> {
-    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+    throw new CapabilityError("plugins");
   }
 
   async enablePlugin(_id: string): Promise<Plugin | null> {
-    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+    throw new CapabilityError("plugins");
   }
 
   async disablePlugin(_id: string): Promise<Plugin | null> {
-    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+    throw new CapabilityError("plugins");
   }
 
   async getPluginSettings(_id: string): Promise<Record<string, unknown> | null> {
@@ -471,7 +459,7 @@ class WebPluginAdapter implements PluginAdapter {
   }
 
   async savePluginSettings(_id: string, _settings: Record<string, unknown>): Promise<Plugin | null> {
-    throw new Error("Plugins are not supported in the web browser. Please use the desktop app for plugin functionality.");
+    throw new CapabilityError("plugins");
   }
 
   async scanPlugins(): Promise<PluginManifest[]> {

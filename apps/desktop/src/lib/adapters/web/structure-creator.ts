@@ -22,6 +22,7 @@ import {
   processZipWithVariables,
 } from "./zip-utils";
 import { isValidPublicUrl } from "./url-validation";
+import { capabilityWarning } from "../../capabilities";
 import {
   isTextFile,
   FETCH_TIMEOUT_MS,
@@ -156,13 +157,12 @@ export const createStructureFromTree = async (
     await executeNode(node, rootHandle, context, "", false);
   }
 
-  // Note: Hooks are not supported in web mode
+  // Degrade-with-warning: hooks are a missing Capability on the web Target,
+  // but partial results (the created structure) are still meaningful
   if (tree.hooks?.post_create && tree.hooks.post_create.length > 0) {
-    context.logs.push({
-      log_type: "warning",
-      message: "Post-create hooks are not supported in web mode",
-      details: `${tree.hooks.post_create.length} hook(s) skipped`,
-    });
+    context.logs.push(
+      capabilityWarning("hooks", `${tree.hooks.post_create.length} hook(s) skipped`)
+    );
   }
 
   return {

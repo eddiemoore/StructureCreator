@@ -32,7 +32,7 @@ A platform implementation that turns a Schema into a structure: the native targe
 _Avoid_: platform, mode, backend.
 
 **Capability**:
-A discrete feature a Target may or may not support (file downloads, binary processing, hooks, watch, robust XML lexing). When a Target lacks a Capability it fails loudly, never silently producing a different result.
+A discrete feature a Target may or may not support (file downloads, binary processing, hooks, watch, robust XML lexing). When a Target lacks a Capability it fails loudly, never silently producing a different result. Failing loudly takes one of two declared forms: refusing the operation (a typed `CapabilityError`), or — where partial results are meaningful, as with post-create hooks — completing with an explicit warning. The per-Target support matrix lives in one frontend module, the Capability registry; adapters and UI gating both consult it.
 _Avoid_: feature flag, permission.
 
 ## Relationships

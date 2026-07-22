@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
-import { isTauri } from "../lib/platform";
+import { supports } from "../lib/capabilities";
 import {
   FolderIcon,
   PlusIcon,
@@ -144,8 +144,7 @@ export const TeamLibrariesSection = () => {
     addLog,
   } = useAppStore();
 
-  // Team libraries require file system access, only available in desktop app
-  const isDesktop = isTauri();
+  const isDesktop = supports("team-libraries");
 
   const [isExpanded, setIsExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);

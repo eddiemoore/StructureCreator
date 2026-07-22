@@ -18,6 +18,7 @@ import type { ResultSummary } from "../types/schema";
 import { SHORTCUT_EVENTS, getShortcutLabel } from "../constants/shortcuts";
 import * as creationRun from "../lib/creationRun";
 import type { CreationInputs, CreationReporter } from "../lib/creationRun";
+import { supports } from "../lib/capabilities";
 
 export const RightPanel = () => {
   const {
@@ -66,8 +67,8 @@ export const RightPanel = () => {
   const [undoLoading, setUndoLoading] = useState(false);
 
   const canExecute = schemaTree && outputPath && projectName;
-  const canWatch = schemaPath && schemaPath !== "new-schema" && !schemaPath.startsWith("template:") && api.isTauri();
-  const canUndo = canUndoCreation() && api.isTauri();
+  const canWatch = schemaPath && schemaPath !== "new-schema" && !schemaPath.startsWith("template:") && supports("watch");
+  const canUndo = canUndoCreation() && supports("undo");
 
   // Ref to hold the create handler for keyboard shortcut
   const handleCreateRef = useRef<(() => void) | null>(null);
