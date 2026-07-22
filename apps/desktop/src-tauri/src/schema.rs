@@ -7,7 +7,7 @@ use std::io::Read;
 /// Default condition variable name for if blocks without an explicit var attribute
 const DEFAULT_CONDITION_VAR: &str = "CONDITION";
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, specta::Type)]
 pub struct SchemaNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
