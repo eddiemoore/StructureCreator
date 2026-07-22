@@ -118,16 +118,12 @@ export const isTextFile = (filename: string): boolean => {
 };
 
 /**
- * Maximum recursion depth for schema tree processing.
- * Prevents stack overflow from deeply nested or malicious schemas.
+ * Maximum recursion depth for schema tree processing and maximum number of
+ * iterations allowed in a repeat block. Canonical values live next to the
+ * shared Plan module (ADR-0004, issue #125); re-exported here for existing
+ * web-adapter importers.
  */
-export const MAX_SCHEMA_DEPTH = 100;
-
-/**
- * Maximum number of iterations allowed in a repeat block.
- * Prevents resource exhaustion from large repeat counts.
- */
-export const MAX_REPEAT_COUNT = 10000;
+export { MAX_SCHEMA_DEPTH, MAX_REPEAT_COUNT } from "@structure-creator/shared";
 
 /**
  * Default timeout for fetch operations in milliseconds.
