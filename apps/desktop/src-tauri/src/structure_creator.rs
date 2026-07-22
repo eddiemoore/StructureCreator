@@ -1604,6 +1604,8 @@ mod tests {
             variables: HashMap<String, String>,
             #[serde(rename = "expectedPaths")]
             expected_paths: Vec<String>,
+            #[serde(rename = "expectedErrors", default)]
+            expected_errors: usize,
         }
 
         fn collect_paths(node: &crate::types::DiffNode, prefix: &str, out: &mut Vec<String>) {
@@ -1653,6 +1655,14 @@ mod tests {
                 paths, expected,
                 "case '{}': paths mismatch",
                 case.name
+            );
+
+            assert_eq!(
+                result.summary.warnings.len(),
+                case.expected_errors,
+                "case '{}': loud-error count mismatch (warnings: {:?})",
+                case.name,
+                result.summary.warnings
             );
         }
     }

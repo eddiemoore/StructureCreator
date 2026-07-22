@@ -125,5 +125,134 @@
     },
     "variables": { "%COUNT%": "2" },
     "expectedPaths": ["root", "root/x-0.txt", "root/x-1.txt"]
+  },
+  {
+    "name": "repeat with missing count defaults to one iteration",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_as": "i",
+            "children": [{ "type": "file", "name": "item-%i%.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root", "root/item-0.txt"]
+  },
+  {
+    "name": "repeat injects both 0-indexed and 1-indexed iteration variables",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_count": "2",
+            "repeat_as": "n",
+            "children": [{ "type": "file", "name": "item-%n%-of-%n_1%.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root", "root/item-0-of-1.txt", "root/item-1-of-2.txt"]
+  },
+  {
+    "name": "repeat with negative count errors loudly and skips the block",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_count": "-2",
+            "repeat_as": "i",
+            "children": [{ "type": "file", "name": "item-%i%.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root"],
+    "expectedErrors": 1
+  },
+  {
+    "name": "repeat with non-numeric count errors loudly and skips the block",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_count": "banana",
+            "repeat_as": "i",
+            "children": [{ "type": "file", "name": "item-%i%.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root"],
+    "expectedErrors": 1
+  },
+  {
+    "name": "repeat with count above maximum errors loudly and skips the block",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_count": "10001",
+            "repeat_as": "i",
+            "children": [{ "type": "file", "name": "item-%i%.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root"],
+    "expectedErrors": 1
+  },
+  {
+    "name": "repeat with invalid iteration variable name errors loudly and skips the block",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "repeat",
+            "name": "",
+            "repeat_count": "2",
+            "repeat_as": "1bad",
+            "children": [{ "type": "file", "name": "item.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {},
+    "expectedPaths": ["root"],
+    "expectedErrors": 1
   }
 ]

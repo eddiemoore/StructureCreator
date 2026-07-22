@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use crate::schema::SchemaNode;
 use crate::schema::SchemaTree;
+use crate::structure_creator::MAX_REPEAT_COUNT;
 use crate::transforms::substitute_variables;
 use crate::types::{
     DiffAction, DiffHunk, DiffLine, DiffLineType, DiffNode, DiffNodeType, DiffResult, DiffSummary,
@@ -22,8 +23,6 @@ use crate::types::{
 const MAX_DIFF_CONTENT_SIZE: usize = 50000;
 /// Maximum number of lines to show in diff
 const MAX_DIFF_LINES: usize = 1000;
-/// Maximum iterations for repeat blocks in diff preview
-const MAX_REPEAT_ITERATIONS: usize = 100;
 /// Maximum characters to show for condition values in if block names
 const MAX_CONDITION_DISPLAY_LEN: usize = 20;
 /// Truncated display length (leaving room for "...")
@@ -253,29 +252,48 @@ fn generate_diff_node(
             return Ok(None);
         }
         "repeat" => {
-            // Expand repeat blocks
+            // Expand repeat blocks. Edge semantics follow the Plan spec
+            // (ADR-0004, create-walker semantics): missing count defaults to
+            // 1; invalid, negative, or above-maximum counts and invalid
+            // iteration-variable names warn loudly and skip the block.
+            let as_var = node.repeat_as.as_deref().unwrap_or("i");
+            let first_char = as_var.chars().next();
+            if as_var.is_empty()
+                || !as_var.chars().all(|c| c.is_alphanumeric() || c == '_')
+                || first_char.map_or(false, |c| c.is_ascii_digit())
+            {
+                summary
+                    .warnings
+                    .push(format!("Invalid repeat variable name: '{}'", as_var));
+                return Ok(None);
+            }
+
             let count_str = node.repeat_count.as_deref().unwrap_or("1");
             let resolved_count_str = substitute_variables(count_str, variables);
-            let count = match resolved_count_str.parse::<usize>() {
-                Ok(n) => {
-                    if n > MAX_REPEAT_ITERATIONS {
-                        summary.warnings.push(format!(
-                            "Repeat count {} exceeds maximum ({}), clamped to {}",
-                            n, MAX_REPEAT_ITERATIONS, MAX_REPEAT_ITERATIONS
-                        ));
-                    }
-                    n.min(MAX_REPEAT_ITERATIONS)
+            let count: usize = match resolved_count_str.trim().parse::<i64>() {
+                Ok(n) if n < 0 => {
+                    summary.warnings.push(format!(
+                        "Repeat count cannot be negative: '{}'",
+                        resolved_count_str
+                    ));
+                    return Ok(None);
                 }
+                Ok(n) if n as u64 > MAX_REPEAT_COUNT as u64 => {
+                    summary.warnings.push(format!(
+                        "Repeat count '{}' exceeds maximum of {}",
+                        n, MAX_REPEAT_COUNT
+                    ));
+                    return Ok(None);
+                }
+                Ok(n) => n as usize,
                 Err(_) => {
                     summary.warnings.push(format!(
-                        "Invalid repeat count '{}' (resolved from '{}'), defaulting to 1",
+                        "Invalid repeat count: '{}' (resolved from '{}')",
                         resolved_count_str, count_str
                     ));
-                    1
+                    return Ok(None);
                 }
             };
-
-            let as_var = node.repeat_as.as_deref().unwrap_or("i");
             let mut all_children = Vec::new();
 
             for i in 0..count {
