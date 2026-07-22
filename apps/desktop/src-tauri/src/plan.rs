@@ -127,24 +127,12 @@ fn collect_paths(node: &PlanNode, prefix: &str, out: &mut Vec<String>) {
     }
 }
 
-/// Check if a string value is "truthy".
-/// Empty strings and common falsy values ("false", "0", "no") are considered false
-fn is_truthy(value: &str) -> bool {
-    if value.is_empty() {
-        return false;
-    }
-    !matches!(
-        value.to_lowercase().as_str(),
-        "false" | "0" | "no" | "off" | "disabled"
-    )
-}
-
 fn evaluate_if_condition(node: &SchemaNode, variables: &HashMap<String, String>) -> bool {
     if let Some(var_name) = &node.condition_var {
         let lookup_key = format!("%{}%", var_name);
         variables
             .get(&lookup_key)
-            .map(|v| is_truthy(v))
+            .map(|v| crate::transforms::is_truthy_value(v))
             .unwrap_or(false)
     } else {
         false

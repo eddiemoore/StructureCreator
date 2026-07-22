@@ -89,10 +89,7 @@ static TEMPLATE_VAR_REGEX: Lazy<Regex> = Lazy::new(|| {
 fn is_truthy(variables: &HashMap<String, String>, var_name: &str) -> bool {
     let key = format!("%{}%", var_name);
     match variables.get(&key) {
-        Some(value) => {
-            let trimmed = value.trim().to_lowercase();
-            !trimmed.is_empty() && trimmed != "false" && trimmed != "0"
-        }
+        Some(value) => crate::transforms::is_truthy_value(value),
         None => false,
     }
 }

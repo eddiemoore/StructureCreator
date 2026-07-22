@@ -127,6 +127,75 @@
     "expectedPaths": ["root", "root/x-0.txt", "root/x-1.txt"]
   },
   {
+    "name": "if with no off disabled values is falsy",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "A",
+            "children": [{ "type": "file", "name": "a.txt" }]
+          },
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "B",
+            "children": [{ "type": "file", "name": "b.txt" }]
+          },
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "C",
+            "children": [{ "type": "file", "name": "c.txt" }]
+          },
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "D",
+            "children": [{ "type": "file", "name": "d.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": {
+      "%A%": "no",
+      "%B%": "OFF",
+      "%C%": "Disabled",
+      "%D%": "yes"
+    },
+    "expectedPaths": ["root", "root/d.txt"]
+  },
+  {
+    "name": "if truthiness trims whitespace before evaluating",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "PADDED",
+            "children": [{ "type": "file", "name": "padded.txt" }]
+          },
+          {
+            "type": "if",
+            "name": "",
+            "condition_var": "BLANK",
+            "children": [{ "type": "file", "name": "blank.txt" }]
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": { "%PADDED%": " false ", "%BLANK%": "   " },
+    "expectedPaths": ["root"]
+  },
+  {
     "name": "repeat with missing count defaults to one iteration",
     "tree": {
       "root": {

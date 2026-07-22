@@ -20,6 +20,26 @@
     "expected": "no"
   },
   {
+    "template": "{{if FLAG}}yes{{else}}no{{endif}}",
+    "variables": { "%FLAG%": "No" },
+    "expected": "no"
+  },
+  {
+    "template": "{{if FLAG}}yes{{else}}no{{endif}}",
+    "variables": { "%FLAG%": "off" },
+    "expected": "no"
+  },
+  {
+    "template": "{{if FLAG}}yes{{else}}no{{endif}}",
+    "variables": { "%FLAG%": "DISABLED" },
+    "expected": "no"
+  },
+  {
+    "template": "{{if FLAG}}yes{{else}}no{{endif}}",
+    "variables": { "%FLAG%": " false " },
+    "expected": "no"
+  },
+  {
     "template": "{{for x in LIST}}{{x}}-{{endfor}}",
     "variables": { "%LIST%": "a,b,c" },
     "expected": "a-b-c-"

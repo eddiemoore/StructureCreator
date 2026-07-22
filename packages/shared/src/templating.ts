@@ -52,14 +52,15 @@ const TEMPLATE_VAR_REGEX = /\{\{(?:if|for\s+[a-z_][a-z0-9_]*\s+in)\s+([A-Za-z_][
  * Check if a variable is truthy.
  * A variable is truthy if it exists, is non-empty, is not "false", and is not "0".
  */
+import { isTruthyValue } from "./transforms";
+
 function isTruthy(variables: Record<string, string>, varName: string): boolean {
   const key = `%${varName}%`;
   const value = variables[key];
   if (value === undefined) {
     return false;
   }
-  const trimmed = value.trim().toLowerCase();
-  return trimmed !== "" && trimmed !== "false" && trimmed !== "0";
+  return isTruthyValue(value);
 }
 
 /**
