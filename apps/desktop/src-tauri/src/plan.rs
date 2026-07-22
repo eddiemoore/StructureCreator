@@ -327,7 +327,9 @@ fn expand_node(
         }
         "file" => {
             let content = if let Some(url) = &node.url {
-                PlanContent::Download { url: url.clone() }
+                PlanContent::Download {
+                    url: substitute_variables(url, variables),
+                }
             } else if node.generate.is_some() {
                 PlanContent::Generate { node: node.clone() }
             } else {
@@ -448,20 +450,22 @@ mod tests {
     }
 
     #[test]
-    fn url_becomes_download_instruction() {
+    fn url_becomes_download_instruction_with_variables_resolved() {
         let mut f = file("logo.png");
-        f.url = Some("https://example.com/logo.png".to_string());
+        f.url = Some("https://example.com/%VERSION%/a%20b/%NOPE%/logo.png".to_string());
         let t = tree(folder("root", vec![f]));
-        let plan = expand(&t, &HashMap::new());
+        let plan = expand(&t, &vars(&[("%VERSION%", "1.2.3")]));
 
         let PlanKind::Folder { children } = &plan.roots[0].kind else {
             panic!()
         };
+        // Defined tokens resolve; percent-encoding and undefined tokens
+        // stay untouched (issue #133).
         assert!(matches!(
             &children[0].kind,
             PlanKind::File {
                 content: PlanContent::Download { url }
-            } if url == "https://example.com/logo.png"
+            } if url == "https://example.com/1.2.3/a%20b/%NOPE%/logo.png"
         ));
     }
 

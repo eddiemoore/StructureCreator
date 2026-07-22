@@ -1367,6 +1367,32 @@ mod tests {
             expected_paths: Vec<String>,
             #[serde(rename = "expectedErrors", default)]
             expected_errors: usize,
+            #[serde(rename = "expectedUrls", default)]
+            expected_urls: HashMap<String, String>,
+        }
+
+        fn collect_urls(
+            node: &crate::plan::PlanNode,
+            prefix: &str,
+            out: &mut HashMap<String, String>,
+        ) {
+            let path = if prefix.is_empty() {
+                node.name.clone()
+            } else {
+                format!("{}/{}", prefix, node.name)
+            };
+            match &node.kind {
+                crate::plan::PlanKind::Folder { children } => {
+                    for child in children {
+                        collect_urls(child, &path, out);
+                    }
+                }
+                crate::plan::PlanKind::File { content } => {
+                    if let crate::plan::PlanContent::Download { url } = content {
+                        out.insert(path, url.clone());
+                    }
+                }
+            }
         }
 
         let fixture = include_str!("../../../../fixtures/schema-structure.json");
@@ -1395,6 +1421,22 @@ mod tests {
                 case.name,
                 structure_plan.notes
             );
+
+            if !case.expected_urls.is_empty() {
+                let mut urls = HashMap::new();
+                for root in &structure_plan.roots {
+                    collect_urls(root, "", &mut urls);
+                }
+                for (path, expected_url) in &case.expected_urls {
+                    assert_eq!(
+                        urls.get(path),
+                        Some(expected_url),
+                        "case '{}': URL mismatch at '{}'",
+                        case.name,
+                        path
+                    );
+                }
+            }
         }
     }
 }

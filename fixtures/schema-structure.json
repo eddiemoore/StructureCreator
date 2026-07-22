@@ -127,6 +127,45 @@
     "expectedPaths": ["root", "root/x-0.txt", "root/x-1.txt"]
   },
   {
+    "name": "url variable substitution resolves defined tokens and leaves undefined and percent-encoding untouched",
+    "tree": {
+      "root": {
+        "type": "folder",
+        "name": "root",
+        "children": [
+          {
+            "type": "file",
+            "name": "logo.png",
+            "url": "https://cdn.example.com/%VERSION%/logo.png"
+          },
+          {
+            "type": "file",
+            "name": "raw.png",
+            "url": "https://cdn.example.com/%UNDEFINED_TOKEN%/raw.png"
+          },
+          {
+            "type": "file",
+            "name": "encoded.png",
+            "url": "https://cdn.example.com/my%20file/%2Fpath/encoded.png"
+          }
+        ]
+      },
+      "stats": { "folders": 0, "files": 0, "downloads": 0, "generated": 0 }
+    },
+    "variables": { "%VERSION%": "1.2.3" },
+    "expectedPaths": [
+      "root",
+      "root/logo.png",
+      "root/raw.png",
+      "root/encoded.png"
+    ],
+    "expectedUrls": {
+      "root/logo.png": "https://cdn.example.com/1.2.3/logo.png",
+      "root/raw.png": "https://cdn.example.com/%UNDEFINED_TOKEN%/raw.png",
+      "root/encoded.png": "https://cdn.example.com/my%20file/%2Fpath/encoded.png"
+    }
+  },
+  {
     "name": "if with no off disabled values is falsy",
     "tree": {
       "root": {
