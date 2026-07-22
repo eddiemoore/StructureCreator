@@ -2,14 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import type { SchemaTree } from "@structure-creator/shared";
-import { expandTree } from "../lib/adapters/web/expand-tree";
+import { expand, toPaths } from "@structure-creator/shared";
 
 /**
  * Golden-vector contract (ADR-0002, ADR-0004). The schema-structure fixtures
  * pin structural semantics (variable substitution in names, repeat expansion,
  * condition evaluation, loud-error edges) across targets, consumed by both
- * this web TS suite (via `expandTree`) and the Rust suite (via
- * `generate_diff_preview`).
+ * this web TS suite (via the shared production `expand` Plan module) and the
+ * Rust suite.
  */
 interface SchemaStructureCase {
   name: string;
@@ -35,11 +35,11 @@ describe("schema-structure golden-vector contract", () => {
   it.each(cases)(
     "$name",
     ({ tree, variables, expectedPaths, expectedErrors }) => {
-      const { paths, errors } = expandTree(tree, variables);
-      const got = [...paths].sort();
+      const plan = expand(tree, variables);
+      const got = toPaths(plan);
       const expected = [...expectedPaths].sort();
       expect(got).toEqual(expected);
-      expect(errors.length).toBe(expectedErrors ?? 0);
+      expect(plan.errors.length).toBe(expectedErrors ?? 0);
     }
   );
 });

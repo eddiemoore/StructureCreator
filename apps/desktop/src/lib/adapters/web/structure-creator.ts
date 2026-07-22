@@ -33,7 +33,8 @@ import {
   validatePathComponent,
 } from "./constants";
 import { generateImage, generateSqlite } from "./generators";
-import { processTemplate } from "@structure-creator/shared";
+import { processTemplate, expand } from "@structure-creator/shared";
+import type { PlanNode, PlanFolder, PlanFile } from "@structure-creator/shared";
 
 /**
  * Process a downloaded file, applying variable substitution where applicable.
@@ -93,24 +94,21 @@ const processDownloadedFile = async (
   return data;
 };
 
-interface CreationContext {
-  rootHandle: FileSystemDirectoryHandle;
-  variables: Record<string, string>;
+interface ExecutionContext {
   dryRun: boolean;
   overwrite: boolean;
   logs: BackendLogEntry[];
   summary: ResultSummary;
-  // Track if previous sibling was an if that evaluated to true
-  ifWasTrue: boolean;
-  // In dry run, tracks if we're in a virtual subtree (parent folder doesn't exist)
-  // When true, skip file existence checks since the folder doesn't exist yet
-  inVirtualSubtree: boolean;
-  // Current recursion depth to prevent stack overflow
-  depth: number;
 }
 
 /**
  * Create structure from a SchemaTree.
+ *
+ * Thin executor of the shared Plan module (ADR-0004): schema-structure
+ * semantics (if/else/repeat, name resolution, content rendering) live in
+ * the pure shared `expand`; this walker only performs IO — directory/file
+ * creation via the File System Access API, downloads via fetch, and
+ * Generate instructions dispatched to the web generators.
  */
 export const createStructureFromTree = async (
   tree: SchemaTree,
@@ -119,9 +117,7 @@ export const createStructureFromTree = async (
   dryRun: boolean,
   overwrite: boolean
 ): Promise<CreateResult> => {
-  const context: CreationContext = {
-    rootHandle,
-    variables,
+  const context: ExecutionContext = {
     dryRun,
     overwrite,
     logs: [],
@@ -135,13 +131,33 @@ export const createStructureFromTree = async (
       hooks_executed: 0,
       hooks_failed: 0,
     },
-    ifWasTrue: false,
-    inVirtualSubtree: false,
-    depth: 0,
   };
 
-  // Create the root structure
-  await processNode(tree.root, rootHandle, context, "");
+  // Expand the schema into a Plan (pure), then execute it (IO).
+  const plan = expand(tree, variables);
+
+  for (const warning of plan.warnings) {
+    context.logs.push({
+      log_type: "warning",
+      message: warning.message,
+      details: warning.details,
+    });
+  }
+
+  for (const error of plan.errors) {
+    context.logs.push({
+      log_type: "error",
+      message: error.message,
+      details: error.path
+        ? [error.details, `At: ${error.path}`].filter(Boolean).join("\n")
+        : error.details,
+    });
+    context.summary.errors++;
+  }
+
+  for (const node of plan.nodes) {
+    await executeNode(node, rootHandle, context, "", false);
+  }
 
   // Note: Hooks are not supported in web mode
   if (tree.hooks?.post_create && tree.hooks.post_create.length > 0) {
@@ -161,59 +177,38 @@ export const createStructureFromTree = async (
 };
 
 /**
- * Process a single node in the schema tree.
+ * Execute a single Plan node (IO only — semantics live in the shared
+ * `expand`).
+ *
+ * `inVirtualSubtree`: in dry run, tracks whether a parent folder doesn't
+ * exist on disk yet; when true, file existence checks are skipped since
+ * the folder itself would be newly created.
  */
-const processNode = async (
-  node: SchemaNode,
+const executeNode = async (
+  node: PlanNode,
   parentHandle: FileSystemDirectoryHandle,
-  context: CreationContext,
-  currentPath: string
+  context: ExecutionContext,
+  currentPath: string,
+  inVirtualSubtree: boolean
 ): Promise<void> => {
-  // Check recursion depth to prevent stack overflow
-  if (context.depth >= MAX_SCHEMA_DEPTH) {
-    context.logs.push({
-      log_type: "error",
-      message: `Maximum schema depth (${MAX_SCHEMA_DEPTH}) exceeded at: ${currentPath}`,
-      details: "Schema nesting is too deep. This may indicate a malformed schema.",
-    });
-    context.summary.errors++;
-    return;
-  }
-  context.depth++;
-
-  try {
-    switch (node.type) {
-      case "folder":
-        await processFolder(node, parentHandle, context, currentPath);
-        break;
-      case "file":
-        await processFile(node, parentHandle, context, currentPath);
-        break;
-      case "if":
-        await processIf(node, parentHandle, context, currentPath);
-        break;
-      case "else":
-        await processElse(node, parentHandle, context, currentPath);
-        break;
-      case "repeat":
-        await processRepeat(node, parentHandle, context, currentPath);
-        break;
-    }
-  } finally {
-    context.depth--;
+  if (node.kind === "folder") {
+    await executeFolder(node, parentHandle, context, currentPath, inVirtualSubtree);
+  } else {
+    await executeFile(node, parentHandle, context, currentPath, inVirtualSubtree);
   }
 };
 
 /**
- * Process a folder node.
+ * Execute a folder Plan node.
  */
-const processFolder = async (
-  node: SchemaNode,
+const executeFolder = async (
+  node: PlanFolder,
   parentHandle: FileSystemDirectoryHandle,
-  context: CreationContext,
-  currentPath: string
+  context: ExecutionContext,
+  currentPath: string,
+  inVirtualSubtree: boolean
 ): Promise<void> => {
-  const folderName = substituteVariables(node.name, context.variables);
+  const folderName = node.name;
 
   // Validate folder name to prevent path traversal
   try {
@@ -259,26 +254,20 @@ const processFolder = async (
       context.summary.folders_created++;
     }
 
-    // Process children
-    if (node.children) {
-      // Save and reset state for child level
-      const savedIfWasTrue = context.ifWasTrue;
-      const savedInVirtualSubtree = context.inVirtualSubtree;
-      context.ifWasTrue = false;
+    // In dry run, if the folder doesn't exist, children are in a virtual
+    // subtree - this prevents incorrect file existence checks
+    const childInVirtualSubtree =
+      inVirtualSubtree || (context.dryRun && !folderHandle);
+    const handleForChildren = folderHandle || parentHandle;
 
-      // In dry run, if folder doesn't exist, mark children as being in a virtual subtree
-      // This prevents incorrect file existence checks
-      if (context.dryRun && !folderHandle) {
-        context.inVirtualSubtree = true;
-      }
-
-      const handleForChildren = folderHandle || parentHandle;
-      for (const child of node.children) {
-        await processNode(child, handleForChildren, context, folderPath);
-      }
-
-      context.ifWasTrue = savedIfWasTrue;
-      context.inVirtualSubtree = savedInVirtualSubtree;
+    for (const child of node.children) {
+      await executeNode(
+        child,
+        handleForChildren,
+        context,
+        folderPath,
+        childInVirtualSubtree
+      );
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -292,15 +281,16 @@ const processFolder = async (
 };
 
 /**
- * Process a file node.
+ * Execute a file Plan node.
  */
-const processFile = async (
-  node: SchemaNode,
+const executeFile = async (
+  node: PlanFile,
   parentHandle: FileSystemDirectoryHandle,
-  context: CreationContext,
-  currentPath: string
+  context: ExecutionContext,
+  currentPath: string,
+  inVirtualSubtree: boolean
 ): Promise<void> => {
-  const fileName = substituteVariables(node.name, context.variables);
+  const fileName = node.name;
 
   // Validate file name to prevent path traversal
   try {
@@ -321,7 +311,7 @@ const processFile = async (
   try {
     // Check if file exists (skip if in virtual subtree - folder doesn't exist yet)
     let fileExists = false;
-    if (!context.inVirtualSubtree) {
+    if (!inVirtualSubtree) {
       try {
         await parentHandle.getFileHandle(fileName);
         fileExists = true;
@@ -339,14 +329,14 @@ const processFile = async (
       return;
     }
 
-    // Get content
+    // Content: inline is fully rendered by the Plan; download/generate are
+    // deferred IO instructions executed here
     let content: string | Uint8Array = "";
     let isDownload = false;
 
-    if (node.url) {
-      // Download from URL
+    if (node.content.kind === "download") {
       isDownload = true;
-      const url = substituteVariables(node.url, context.variables);
+      const url = node.content.url;
 
       // Validate URL to prevent SSRF attacks
       const urlValidation = isValidPublicUrl(url);
@@ -406,14 +396,14 @@ const processFile = async (
           throw e;
         }
 
-        // Process the downloaded content for variable substitution
-        const processedContent = await processDownloadedFile(
+        // Process the downloaded content for variable substitution, using
+        // the variable map in scope at this Plan node (includes repeat
+        // iteration variables)
+        content = await processDownloadedFile(
           rawContent,
           fileName,
-          context.variables
+          node.content.variables
         );
-
-        content = processedContent;
       } catch (fetchError) {
         const errorMessage =
           fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -425,10 +415,12 @@ const processFile = async (
         context.summary.errors++;
         return;
       }
-    } else if (node.generate) {
+    } else if (node.content.kind === "generate") {
       // Generate binary file (image or SQLite database)
+      const generatorType =
+        node.content.generator === "image" ? "image" : "SQLite database";
+
       if (context.dryRun) {
-        const generatorType = node.generate === "image" ? "image" : "SQLite database";
         context.logs.push({
           log_type: "info",
           message: `Would generate ${generatorType}: ${filePath}`,
@@ -439,16 +431,16 @@ const processFile = async (
 
       try {
         const generatorContext = {
-          variables: context.variables,
+          variables: node.content.variables,
           dryRun: context.dryRun,
         };
 
         let data: Uint8Array | null = null;
 
-        if (node.generate === "image") {
-          data = await generateImage(node, generatorContext);
-        } else if (node.generate === "sqlite") {
-          data = await generateSqlite(node, generatorContext);
+        if (node.content.generator === "image") {
+          data = await generateImage(node.content.spec, generatorContext);
+        } else if (node.content.generator === "sqlite") {
+          data = await generateSqlite(node.content.spec, generatorContext);
         }
 
         if (data) {
@@ -468,7 +460,6 @@ const processFile = async (
             await writable.close();
           }
 
-          const generatorType = node.generate === "image" ? "image" : "SQLite database";
           context.logs.push({
             log_type: "success",
             message: `Generated ${generatorType}: ${filePath}`,
@@ -486,24 +477,10 @@ const processFile = async (
         context.summary.errors++;
       }
       return;
-    } else if (node.content) {
-      // Process template directives if template="true", then substitute variables
-      if (node.template) {
-        const templateResult = processTemplate(node.content, context.variables);
-        if (templateResult.ok) {
-          content = substituteVariables(templateResult.value, context.variables);
-        } else {
-          // Template error - log warning and fall back to raw content with variable substitution
-          context.logs.push({
-            log_type: "warning",
-            message: `Template error in ${fileName}`,
-            details: templateResult.error.message,
-          });
-          content = substituteVariables(node.content, context.variables);
-        }
-      } else {
-        content = substituteVariables(node.content, context.variables);
-      }
+    } else {
+      // Inline content is fully rendered (templating then substitution) by
+      // the shared expand; template errors surfaced as Plan warnings
+      content = node.content.text;
     }
 
     if (context.dryRun) {
@@ -555,115 +532,6 @@ const processFile = async (
       details: errorMessage,
     });
     context.summary.errors++;
-  }
-};
-
-/**
- * Process an if node.
- */
-const processIf = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: CreationContext,
-  currentPath: string
-): Promise<void> => {
-  // Evaluate the condition
-  const varName = node.condition_var || "";
-  const varKey = `%${varName}%`;
-  const value = context.variables[varKey] || "";
-
-  // Truthy: non-empty string that isn't "0", "false", or "no"
-  const isTruthy =
-    value.trim() !== "" &&
-    value.toLowerCase() !== "0" &&
-    value.toLowerCase() !== "false" &&
-    value.toLowerCase() !== "no";
-
-  context.ifWasTrue = isTruthy;
-
-  if (isTruthy && node.children) {
-    for (const child of node.children) {
-      await processNode(child, parentHandle, context, currentPath);
-    }
-  }
-};
-
-/**
- * Process an else node.
- */
-const processElse = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: CreationContext,
-  currentPath: string
-): Promise<void> => {
-  // Only process if the preceding if was false
-  if (!context.ifWasTrue && node.children) {
-    for (const child of node.children) {
-      await processNode(child, parentHandle, context, currentPath);
-    }
-  }
-};
-
-/**
- * Process a repeat node.
- */
-const processRepeat = async (
-  node: SchemaNode,
-  parentHandle: FileSystemDirectoryHandle,
-  context: CreationContext,
-  currentPath: string
-): Promise<void> => {
-  // Get repeat count
-  let countStr = node.repeat_count || "1";
-  countStr = substituteVariables(countStr, context.variables);
-
-  const count = parseInt(countStr, 10);
-  if (isNaN(count) || count < 0) {
-    context.logs.push({
-      log_type: "warning",
-      message: `Invalid repeat count: ${countStr}`,
-      details: "Using 0 iterations",
-    });
-    return;
-  }
-
-  if (count > MAX_REPEAT_COUNT) {
-    context.logs.push({
-      log_type: "error",
-      message: `Repeat count ${count} exceeds maximum allowed (${MAX_REPEAT_COUNT})`,
-      details: "Skipping repeat block to prevent resource exhaustion",
-    });
-    context.summary.errors++;
-    return;
-  }
-
-  const repeatAs = node.repeat_as || "i";
-
-  // Process children for each iteration
-  for (let i = 0; i < count; i++) {
-    // Create scoped variables for this iteration
-    // Use uppercase keys to match substituteVariables lookup
-    const scopedVars = {
-      ...context.variables,
-      [`%${repeatAs.toUpperCase()}%`]: i.toString(),
-      [`%${repeatAs.toUpperCase()}_1%`]: (i + 1).toString(),
-    };
-
-    // Create scoped context - ifWasTrue is reset for each iteration
-    // Note: logs, summary, and warnings are shared by reference (shallow spread),
-    // so mutations in child processing automatically reflect in the parent context
-    const scopedContext: CreationContext = {
-      ...context,
-      variables: scopedVars,
-      ifWasTrue: false,
-    };
-
-    if (node.children) {
-      for (const child of node.children) {
-        await processNode(child, parentHandle, scopedContext, currentPath);
-      }
-    }
   }
 };
 
