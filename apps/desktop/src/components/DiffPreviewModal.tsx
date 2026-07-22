@@ -63,6 +63,9 @@ const LINE_STYLES: Record<DiffLineType, { bg: string; text: string; prefix: stri
   },
 };
 
+/** Max children rendered per tree level; the rest collapse into a count row. */
+const MAX_RENDERED_CHILDREN = 200;
+
 interface DiffTreeItemProps {
   node: DiffNode;
   depth: number;
@@ -158,10 +161,11 @@ const DiffTreeItem = ({
         )}
       </div>
 
-      {/* Children */}
+      {/* Children — rendering-only cap so huge plans (e.g. large repeats)
+          stay responsive; the diff itself is computed in full (ADR-0004) */}
       {isExpanded && hasChildren && (
         <div role="group">
-          {node.children!.map((child) => (
+          {node.children!.slice(0, MAX_RENDERED_CHILDREN).map((child) => (
             <DiffTreeItem
               key={child.id}
               node={child}
@@ -172,6 +176,14 @@ const DiffTreeItem = ({
               onSelect={onSelect}
             />
           ))}
+          {node.children!.length > MAX_RENDERED_CHILDREN && (
+            <div
+              className="py-1 px-2 text-mac-sm text-text-muted italic"
+              style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}
+            >
+              …and {node.children!.length - MAX_RENDERED_CHILDREN} more items
+            </div>
+          )}
         </div>
       )}
     </div>
