@@ -17,6 +17,7 @@ import type { SchemaNode, EditorMode } from "../types/schema";
 import { VisualSchemaEditor } from "./VisualSchemaEditor";
 import { XmlSchemaEditor } from "./XmlSchemaEditor";
 import { INDENT_PX } from "../utils/schemaTree";
+import { asVariableName, toToken } from "@structure-creator/shared";
 
 /** Safely extract hostname from URL, returning null if URL is malformed */
 const getUrlHostname = (url: string): string | null => {
@@ -46,14 +47,14 @@ const TreeItem = ({ node, depth, projectName }: TreeItemProps) => {
 
   // For conditional nodes, show the condition info
   const conditionalLabel = isIf
-    ? `if %${node.condition_var || "?"}%`
+    ? `if ${toToken(asVariableName(node.condition_var || "?"))}`
     : isElse
     ? "else"
     : null;
 
   // For repeat nodes, show the count and iteration variable
   const repeatLabel = isRepeat
-    ? `repeat ${node.repeat_count || "1"} as %${node.repeat_as || "i"}%`
+    ? `repeat ${node.repeat_count || "1"} as ${toToken(asVariableName(node.repeat_as || "i"))}`
     : null;
 
   // Render children (shared between conditional and non-conditional nodes)

@@ -346,23 +346,23 @@ describe("applyWizardModifiers", () => {
 
   it("sets include variable to true when answer is truthy", () => {
     const result = applyWizardModifiers(config, { q1: true, q2: "test" }, {});
-    expect(result["%FEATURE_ENABLED%"]).toBe("true");
+    expect(result["FEATURE_ENABLED"]).toBe("true");
   });
 
   it("sets include variable to empty when answer is falsy", () => {
     const result = applyWizardModifiers(config, { q1: false, q2: "test" }, {});
-    expect(result["%FEATURE_ENABLED%"]).toBe("");
+    expect(result["FEATURE_ENABLED"]).toBe("");
   });
 
   it("sets variable from text answer", () => {
     const result = applyWizardModifiers(config, { q2: "my-project" }, {});
-    expect(result["%PROJECT_NAME%"]).toBe("my-project");
+    expect(result["PROJECT_NAME"]).toBe("my-project");
   });
 
   it("preserves existing variables", () => {
     const existing = { "%EXISTING%": "value" };
     const result = applyWizardModifiers(config, { q2: "test" }, existing);
-    expect(result["%EXISTING%"]).toBe("value");
+    expect(result["EXISTING"]).toBe("value");
   });
 
   it("handles valueMap for single choice", () => {
@@ -377,16 +377,16 @@ describe("applyWizardModifiers", () => {
         },
       ],
     };
-    expect(applyWizardModifiers(configWithValueMap, { choice: "yes" }, {})["%IS_SELECTED%"]).toBe("true");
-    expect(applyWizardModifiers(configWithValueMap, { choice: "no" }, {})["%IS_SELECTED%"]).toBe("");
+    expect(applyWizardModifiers(configWithValueMap, { choice: "yes" }, {})["IS_SELECTED"]).toBe("true");
+    expect(applyWizardModifiers(configWithValueMap, { choice: "no" }, {})["IS_SELECTED"]).toBe("");
   });
 
   it("handles array answers for include", () => {
     const result = applyWizardModifiers(config, { q1: ["a", "b"] }, {});
-    expect(result["%FEATURE_ENABLED%"]).toBe("true");
+    expect(result["FEATURE_ENABLED"]).toBe("true");
 
     const emptyResult = applyWizardModifiers(config, { q1: [] }, {});
-    expect(emptyResult["%FEATURE_ENABLED%"]).toBe("");
+    expect(emptyResult["FEATURE_ENABLED"]).toBe("");
   });
 
   it("converts boolean to string for set_variable", () => {
@@ -396,8 +396,8 @@ describe("applyWizardModifiers", () => {
         { questionId: "bool", action: "set_variable", variableName: "BOOL_VAR" },
       ],
     };
-    expect(applyWizardModifiers(configWithBool, { bool: true }, {})["%BOOL_VAR%"]).toBe("true");
-    expect(applyWizardModifiers(configWithBool, { bool: false }, {})["%BOOL_VAR%"]).toBe("false");
+    expect(applyWizardModifiers(configWithBool, { bool: true }, {})["BOOL_VAR"]).toBe("true");
+    expect(applyWizardModifiers(configWithBool, { bool: false }, {})["BOOL_VAR"]).toBe("false");
   });
 
   it("joins array for set_variable", () => {
@@ -407,7 +407,7 @@ describe("applyWizardModifiers", () => {
         { questionId: "arr", action: "set_variable", variableName: "ARR_VAR" },
       ],
     };
-    expect(applyWizardModifiers(configWithArray, { arr: ["a", "b", "c"] }, {})["%ARR_VAR%"]).toBe("a,b,c");
+    expect(applyWizardModifiers(configWithArray, { arr: ["a", "b", "c"] }, {})["ARR_VAR"]).toBe("a,b,c");
   });
 });
 

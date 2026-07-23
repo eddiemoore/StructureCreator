@@ -12,7 +12,7 @@ _Avoid_: template (reserved for saved, reusable schemas), structure (reserved fo
 A named placeholder whose value the user supplies, substituted into the structure at creation time.
 
 **Variable name**:
-The canonical clean identifier of a Variable (e.g. `NAME`) — the in-app, internal form. Held everywhere in the frontend; carried as a branded `VariableName` type so a raw or delimited string cannot stand in for one.
+The canonical clean identifier of a Variable (e.g. `NAME`) — the in-app, internal form. Held everywhere in the frontend; carried as a branded `VariableName` type so a raw or delimited string cannot stand in for one. Every string operation on a name — normalize (strip delimiters), tokenize, sanitize raw editor input, validate for iteration use — lives in the shared variable-name module; callers never touch `%` or name-shaped regex directly.
 _Avoid_: var, key, delimited name.
 
 **Variable token**:

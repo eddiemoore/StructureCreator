@@ -41,7 +41,7 @@ import { WebFileSystemAdapter, getHandleRegistry } from "./filesystem";
 import { parseSchema, exportSchemaXml, scanDirectoryToSchema } from "./schema-parser";
 import { createStructureFromTree, generateDiffPreview } from "./structure-creator";
 import { validateVariables as validateVars, extractVariablesFromContent } from "./transforms";
-import { toTokenKeys } from "../../../utils/variableName";
+import { toTokenKeys } from "@structure-creator/shared";
 import { WebTemplateImportExportAdapter } from "./template-io";
 import { scanZipToSchema } from "./zip-utils";
 import { CapabilityError } from "../../capabilities";

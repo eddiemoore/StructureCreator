@@ -4,7 +4,7 @@
  */
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { toTokenKeys } from "../../../utils/variableName";
+import { toTokenKeys } from "@structure-creator/shared";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   readTextFile,
