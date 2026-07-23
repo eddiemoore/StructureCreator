@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { Variable, ValidationRule, ValidationError, VariableDefinition } from "../../types/schema";
-import { asVariableName } from "../../utils/variableName";
+import { asVariableName } from "@structure-creator/shared";
 
 export interface VariablesSlice {
   variables: Variable[];

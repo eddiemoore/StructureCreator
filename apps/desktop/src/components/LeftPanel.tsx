@@ -810,7 +810,7 @@ export const LeftPanel = ({ searchInputRef, onImportExportModalChange }: LeftPan
         <div className="space-y-1.5">
           {variables.map((variable) => {
             // Match by clean name (without % delimiters) since validation returns clean names
-            const cleanName = variable.name.replace(/^%|%$/g, "");
+            const cleanName = asVariableName(variable.name);
             const varError = validationErrors.find(
               (e) => e.variable_name === cleanName
             );

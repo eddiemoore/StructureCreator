@@ -15,6 +15,7 @@ import type {
   SchemaTree,
   ValidationRule,
 } from "../types/schema";
+import { asVariableName, sanitizeVariableName, toNameKeys } from "@structure-creator/shared";
 
 // ============================================================================
 // Constants
@@ -345,8 +346,14 @@ const parseSchemaModifier = (data: unknown): WizardSchemaModifier | null => {
   const modifier: WizardSchemaModifier = {
     questionId: m.questionId as string,
     action: m.action,
-    nodeConditionVar: typeof m.nodeConditionVar === "string" ? m.nodeConditionVar : undefined,
-    variableName: typeof m.variableName === "string" ? m.variableName : undefined,
+    nodeConditionVar:
+      typeof m.nodeConditionVar === "string"
+        ? sanitizeVariableName(m.nodeConditionVar) || undefined
+        : undefined,
+    variableName:
+      typeof m.variableName === "string"
+        ? sanitizeVariableName(m.variableName) || undefined
+        : undefined,
     valueMap,
   };
 
@@ -439,23 +446,14 @@ export const parseWizardConfig = (config: unknown): WizardConfig | null => {
 // ============================================================================
 
 /**
- * Normalizes a variable name to include % delimiters.
- * @param name - The variable name (with or without %)
- * @returns The normalized name with % delimiters
- */
-const normalizeVariableName = (name: string): string => {
-  if (name.startsWith("%") && name.endsWith("%")) return name;
-  return `%${name}%`;
-};
-
-/**
  * Apply wizard answers to generate condition variables and template variables.
- * Returns a map of variable names (with % delimiters) to their values.
+ * Returns a map keyed by clean **Variable name** (ADR-0001); existing keys of
+ * any form (clean, token, or mixed) are normalized.
  *
  * @param config - The wizard configuration
  * @param answers - The user's answers
  * @param existingVariables - Variables to merge with (lower priority)
- * @returns A record of variable names to values
+ * @returns A record of clean variable names to values
  *
  * @example
  * ```typescript
@@ -467,7 +465,7 @@ export const applyWizardModifiers = (
   answers: WizardAnswers,
   existingVariables: Record<string, string>
 ): Record<string, string> => {
-  const result = { ...existingVariables };
+  const result = toNameKeys(existingVariables);
 
   for (const modifier of config.schemaModifiers) {
     const answer = answers[modifier.questionId];
@@ -476,7 +474,7 @@ export const applyWizardModifiers = (
       case "include":
       case "exclude": {
         if (modifier.nodeConditionVar) {
-          const varName = normalizeVariableName(modifier.nodeConditionVar);
+          const varName = asVariableName(modifier.nodeConditionVar);
 
           if (modifier.valueMap && typeof answer === "string") {
             const mappedValue = modifier.valueMap[answer];
@@ -493,7 +491,7 @@ export const applyWizardModifiers = (
       }
       case "set_variable": {
         if (modifier.variableName) {
-          const varName = normalizeVariableName(modifier.variableName);
+          const varName = asVariableName(modifier.variableName);
           let value = "";
 
           if (modifier.valueMap && typeof answer === "string") {
@@ -534,8 +532,7 @@ const isConditionMet = (
 ): boolean => {
   if (!conditionVar) return true;
 
-  const normalizedName = normalizeVariableName(conditionVar);
-  const value = conditionVariables[normalizedName];
+  const value = conditionVariables[asVariableName(conditionVar)];
   return value === "true";
 };
 
@@ -726,7 +723,8 @@ export const filterTreeByConditions = (
   tree: SchemaTree,
   conditionVariables: Record<string, string>
 ): SchemaTree => {
-  const filteredRoot = filterNode(tree.root, conditionVariables);
+  // Inbound edge: accept clean, token, or mixed keys; lookups are clean.
+  const filteredRoot = filterNode(tree.root, toNameKeys(conditionVariables));
 
   if (!filteredRoot) {
     return {

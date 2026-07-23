@@ -7,7 +7,7 @@ import { WizardStep } from "./WizardStep";
 import { WizardPreview } from "./WizardPreview";
 import { WizardErrorBoundary } from "./WizardErrorBoundary";
 import { XIcon, LoaderIcon } from "../Icons";
-import { asVariableName } from "@structure-creator/shared";
+import { asVariableName, toNameKeys } from "@structure-creator/shared";
 import {
   parseWizardConfig,
   applyWizardModifiers,
@@ -274,17 +274,17 @@ export const TemplateWizard = () => {
         { ...result.mergedVariables, ...template.variables }
       );
 
-      // Merge validation rules
-      const mergedValidation = {
+      // Merge validation rules, clean-keyed to match finalVariables' keys
+      const mergedValidation = toNameKeys({
         ...result.mergedVariableValidation,
         ...template.variable_validation,
-      };
+      });
 
       // Convert to Variable array format for the store
       const loadedVariables: Variable[] = Object.entries(finalVariables).map(([name, value]) => ({
         name: asVariableName(name),
         value,
-        validation: mergedValidation[name],
+        validation: mergedValidation[asVariableName(name)],
       }));
 
       setVariables(loadedVariables);

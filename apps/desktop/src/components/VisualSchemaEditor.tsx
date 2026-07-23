@@ -21,7 +21,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { FolderIcon, FileIcon, PlusIcon, TrashIcon, SaveIcon, BranchIcon, GitMergeIcon, RepeatIcon } from "./Icons";
 import type { SchemaNode, NodeType } from "../types/schema";
 import { findNode, findParent, canHaveChildren, INDENT_PX } from "../utils/schemaTree";
-import { sanitizeVariableName, validateVariableName, validateRepeatCount } from "../utils/validation";
+import { validateRepeatCount } from "../utils/validation";
+import { asVariableName, sanitizeVariableName, validateVariableName, toToken } from "@structure-creator/shared";
 
 /** Default condition variable name for new if blocks */
 const DEFAULT_CONDITION_VAR = "CONDITION";
@@ -1084,11 +1085,11 @@ export const VisualSchemaEditor = () => {
               const getDisplayName = (): string => {
                 switch (nodeType) {
                   case "if":
-                    return `if %${draggedNode.condition_var || "?"}%`;
+                    return `if ${toToken(asVariableName(draggedNode.condition_var || "?"))}`;
                   case "else":
                     return "else";
                   case "repeat":
-                    return `repeat ${draggedNode.repeat_count || DEFAULT_REPEAT_COUNT} as %${draggedNode.repeat_as || DEFAULT_REPEAT_AS}%`;
+                    return `repeat ${draggedNode.repeat_count || DEFAULT_REPEAT_COUNT} as ${toToken(asVariableName(draggedNode.repeat_as || DEFAULT_REPEAT_AS))}`;
                   default:
                     return draggedNode.name === "%PROJECT_NAME%"
                       ? projectName
