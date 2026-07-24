@@ -28,7 +28,7 @@ pub fn cmd_parse_schema_with_inheritance(
     let loader = |name: &str| -> Option<TemplateData> {
         state_guard
             .db
-            .get_template_by_name(name)
+            .templates().get_by_name(name)
             .ok()
             .flatten()
             .map(|t| TemplateData {

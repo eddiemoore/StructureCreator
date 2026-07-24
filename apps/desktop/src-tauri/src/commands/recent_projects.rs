@@ -13,7 +13,7 @@ pub fn cmd_list_recent_projects(
     state: State<Mutex<AppState>>,
 ) -> Result<Vec<RecentProject>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.list_recent_projects().map_err(|e| e.to_string())
+    state.db.recent_projects().list().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -23,7 +23,7 @@ pub fn cmd_get_recent_project(
     id: String,
 ) -> Result<Option<RecentProject>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.get_recent_project(&id).map_err(|e| e.to_string())
+    state.db.recent_projects().get(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -43,7 +43,7 @@ pub fn cmd_add_recent_project(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .add_recent_project(CreateRecentProjectInput {
+        .recent_projects().add(CreateRecentProjectInput {
             project_name,
             output_path,
             schema_xml,
@@ -66,7 +66,7 @@ pub fn cmd_delete_recent_project(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .delete_recent_project(&id)
+        .recent_projects().delete(&id)
         .map_err(|e| e.to_string())
 }
 
@@ -74,5 +74,5 @@ pub fn cmd_delete_recent_project(
 #[specta::specta]
 pub fn cmd_clear_recent_projects(state: State<Mutex<AppState>>) -> Result<usize, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.clear_recent_projects().map_err(|e| e.to_string())
+    state.db.recent_projects().clear().map_err(|e| e.to_string())
 }

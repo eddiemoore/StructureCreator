@@ -13,7 +13,7 @@ pub fn cmd_list_team_libraries(
     state: State<Mutex<AppState>>,
 ) -> Result<Vec<database::TeamLibrary>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.list_team_libraries().map_err(|e| e.to_string())
+    state.db.team_libraries().list().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -34,7 +34,7 @@ pub fn cmd_add_team_library(
     };
     state
         .db
-        .create_team_library(input)
+        .team_libraries().create(input)
         .map_err(|e| e.to_string())
 }
 
@@ -62,7 +62,7 @@ pub fn cmd_update_team_library(
     };
     state
         .db
-        .update_team_library(&id, input)
+        .team_libraries().update(&id, input)
         .map_err(|e| e.to_string())
 }
 
@@ -70,7 +70,7 @@ pub fn cmd_update_team_library(
 #[specta::specta]
 pub fn cmd_remove_team_library(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.delete_team_library(&id).map_err(|e| e.to_string())
+    state.db.team_libraries().delete(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -84,7 +84,7 @@ pub fn cmd_scan_team_library(
     // Get the library to find its path
     let library = state
         .db
-        .get_team_library(&library_id)
+        .team_libraries().get(&library_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Library not found: {}", library_id))?;
 
@@ -98,14 +98,14 @@ pub fn cmd_scan_team_library(
     // Update last_sync_at timestamp
     state
         .db
-        .update_team_library_last_sync(&library_id)
+        .team_libraries().update_last_sync(&library_id)
         .map_err(|e| eprintln!("Warning: Failed to update last_sync_at: {}", e))
         .ok();
 
     // Log the scan
     state
         .db
-        .add_sync_log(
+        .team_libraries().add_sync_log(
             &library_id,
             "scan",
             None,
@@ -148,7 +148,7 @@ pub fn cmd_import_team_template(
     for imported_name in &result.imported {
         state
             .db
-            .add_sync_log(&library_id, "import", Some(imported_name), None)
+            .team_libraries().add_sync_log(&library_id, "import", Some(imported_name), None)
             .map_err(|e| eprintln!("Warning: Failed to log import: {}", e))
             .ok();
     }
@@ -156,7 +156,7 @@ pub fn cmd_import_team_template(
     for error in &result.errors {
         state
             .db
-            .add_sync_log(&library_id, "error", None, Some(error))
+            .team_libraries().add_sync_log(&library_id, "error", None, Some(error))
             .map_err(|e| eprintln!("Warning: Failed to log error: {}", e))
             .ok();
     }
@@ -174,6 +174,6 @@ pub fn cmd_get_sync_log(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .get_sync_log(library_id.as_deref(), limit)
+        .team_libraries().sync_log(library_id.as_deref(), limit)
         .map_err(|e| e.to_string())
 }

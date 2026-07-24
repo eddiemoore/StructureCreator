@@ -13,7 +13,7 @@ use crate::state::AppState;
 #[specta::specta]
 pub fn cmd_list_plugins(state: State<Mutex<AppState>>) -> Result<Vec<database::Plugin>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.list_plugins().map_err(|e| e.to_string())
+    state.db.plugins().list().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -23,7 +23,7 @@ pub fn cmd_get_plugin(
     id: String,
 ) -> Result<Option<database::Plugin>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.get_plugin(&id).map_err(|e| e.to_string())
+    state.db.plugins().get(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -41,7 +41,7 @@ pub fn cmd_install_plugin(
     // Create database entry
     let input = plugins::manifest_to_create_input(&manifest, &dest_path);
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.create_plugin(input).map_err(|e| e.to_string())
+    state.db.plugins().create(input).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -52,7 +52,7 @@ pub fn cmd_uninstall_plugin(state: State<Mutex<AppState>>, id: String) -> Result
     // Get plugin to find its path
     let plugin = state
         .db
-        .get_plugin(&id)
+        .plugins().get(&id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Plugin not found".to_string())?;
 
@@ -61,7 +61,7 @@ pub fn cmd_uninstall_plugin(state: State<Mutex<AppState>>, id: String) -> Result
     plugins::uninstall_plugin(&plugin_path).map_err(|e| e.to_string())?;
 
     // Remove from database
-    state.db.delete_plugin(&id).map_err(|e| e.to_string())
+    state.db.plugins().delete(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -71,7 +71,7 @@ pub fn cmd_enable_plugin(
     id: String,
 ) -> Result<Option<database::Plugin>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.enable_plugin(&id).map_err(|e| e.to_string())
+    state.db.plugins().enable(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -81,7 +81,7 @@ pub fn cmd_disable_plugin(
     id: String,
 ) -> Result<Option<database::Plugin>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.disable_plugin(&id).map_err(|e| e.to_string())
+    state.db.plugins().disable(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -93,7 +93,7 @@ pub fn cmd_get_plugin_settings(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .get_plugin_settings(&id)
+        .plugins().settings(&id)
         .map_err(|e| e.to_string())
 }
 
@@ -107,7 +107,7 @@ pub fn cmd_save_plugin_settings(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .save_plugin_settings(&id, settings)
+        .plugins().save_settings(&id, settings)
         .map_err(|e| e.to_string())
 }
 
@@ -130,7 +130,7 @@ pub fn cmd_sync_plugins(state: State<Mutex<AppState>>) -> Result<Vec<database::P
     let state = state.lock().map_err(|e| e.to_string())?;
 
     // Get current database plugins
-    let db_plugins = state.db.list_plugins().map_err(|e| e.to_string())?;
+    let db_plugins = state.db.plugins().list().map_err(|e| e.to_string())?;
 
     let db_plugin_names: HashSet<String> = db_plugins.iter().map(|p| p.name.clone()).collect();
     let scanned_names: HashSet<String> = scanned.iter().map(|(_, m)| m.name.clone()).collect();
@@ -139,17 +139,17 @@ pub fn cmd_sync_plugins(state: State<Mutex<AppState>>) -> Result<Vec<database::P
     for (path, manifest) in &scanned {
         if !db_plugin_names.contains(&manifest.name) {
             let input = plugins::manifest_to_create_input(manifest, path);
-            let _ = state.db.create_plugin(input);
+            let _ = state.db.plugins().create(input);
         }
     }
 
     // Remove DB entries for plugins that no longer exist
     for plugin in &db_plugins {
         if !scanned_names.contains(&plugin.name) {
-            let _ = state.db.delete_plugin(&plugin.id);
+            let _ = state.db.plugins().delete(&plugin.id);
         }
     }
 
     // Return updated list
-    state.db.list_plugins().map_err(|e| e.to_string())
+    state.db.plugins().list().map_err(|e| e.to_string())
 }
