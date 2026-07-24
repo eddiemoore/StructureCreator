@@ -10,7 +10,7 @@ use crate::state::AppState;
 #[specta::specta]
 pub fn cmd_get_settings(state: State<Mutex<AppState>>) -> Result<HashMap<String, String>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.get_all_settings().map_err(|e| e.to_string())
+    state.db.settings().all().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -23,6 +23,6 @@ pub fn cmd_set_setting(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .set_setting(&key, &value)
+        .settings().set(&key, &value)
         .map_err(|e| e.to_string())
 }

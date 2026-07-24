@@ -11,7 +11,7 @@ use crate::state::AppState;
 #[specta::specta]
 pub fn cmd_list_templates(state: State<Mutex<AppState>>) -> Result<Vec<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.list_templates().map_err(|e| e.to_string())
+    state.db.templates().list().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -21,7 +21,7 @@ pub fn cmd_get_template(
     id: String,
 ) -> Result<Option<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.get_template(&id).map_err(|e| e.to_string())
+    state.db.templates().get(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -40,7 +40,7 @@ pub fn cmd_create_template(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .create_template(CreateTemplateInput {
+        .templates().create(CreateTemplateInput {
             name,
             description,
             schema_xml,
@@ -67,7 +67,7 @@ pub fn cmd_update_template(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .update_template(
+        .templates().update(
             &id,
             UpdateTemplateInput {
                 name,
@@ -83,7 +83,7 @@ pub fn cmd_update_template(
 #[specta::specta]
 pub fn cmd_delete_template(state: State<Mutex<AppState>>, id: String) -> Result<bool, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.delete_template(&id).map_err(|e| e.to_string())
+    state.db.templates().delete(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -93,7 +93,7 @@ pub fn cmd_toggle_favorite(
     id: String,
 ) -> Result<Option<Template>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.toggle_favorite(&id).map_err(|e| e.to_string())
+    state.db.templates().toggle_favorite(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -105,16 +105,16 @@ pub fn cmd_use_template(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .increment_use_count(&id)
+        .templates().increment_use_count(&id)
         .map_err(|e| e.to_string())?;
-    state.db.get_template(&id).map_err(|e| e.to_string())
+    state.db.templates().get(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn cmd_get_all_tags(state: State<Mutex<AppState>>) -> Result<Vec<String>, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
-    state.db.get_all_tags().map_err(|e| e.to_string())
+    state.db.templates().all_tags().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -127,6 +127,6 @@ pub fn cmd_update_template_tags(
     let state = state.lock().map_err(|e| e.to_string())?;
     state
         .db
-        .update_template_tags(&id, tags)
+        .templates().update_tags(&id, tags)
         .map_err(|e| e.to_string())
 }

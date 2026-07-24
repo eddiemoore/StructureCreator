@@ -262,7 +262,7 @@ fn import_single_template(
     strategy: &DuplicateStrategy,
 ) -> Result<Option<String>, String> {
     // Check if template with this name exists
-    let existing = db.get_template_by_name(&template.name)
+    let existing = db.templates().get_by_name(&template.name)
         .map_err(|e| format!("Database error: {}", e))?;
 
     if let Some(existing_template) = existing {
@@ -272,16 +272,16 @@ fn import_single_template(
             }
             DuplicateStrategy::Replace => {
                 // Delete existing and create new
-                db.delete_template(&existing_template.id)
+                db.templates().delete(&existing_template.id)
                     .map_err(|e| format!("Failed to delete existing template: {}", e))?;
             }
             DuplicateStrategy::Rename => {
                 // Generate a unique name
-                let unique_name = db.generate_unique_template_name(&template.name)
+                let unique_name = db.templates().generate_unique_name(&template.name)
                     .map_err(|e| format!("Failed to generate unique name: {}", e))?;
 
                 let input = create_template_input(template, Some(&unique_name));
-                db.create_template(input)
+                db.templates().create(input)
                     .map_err(|e| format!("Failed to create template: {}", e))?;
 
                 return Ok(Some(unique_name));
@@ -291,7 +291,7 @@ fn import_single_template(
 
     // Create the template
     let input = create_template_input(template, None);
-    db.create_template(input)
+    db.templates().create(input)
         .map_err(|e| format!("Failed to create template: {}", e))?;
 
     Ok(Some(template.name.clone()))

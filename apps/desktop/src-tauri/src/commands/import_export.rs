@@ -63,7 +63,7 @@ fn import_templates_from_json_internal(
 
         // Check for duplicate (use validated/trimmed name)
         let existing = db
-            .get_template_by_name(&validated_name)
+            .templates().get_by_name(&validated_name)
             .map_err(|e| e.to_string())?;
 
         let final_name = if existing.is_some() {
@@ -74,7 +74,7 @@ fn import_templates_from_json_internal(
                 }
                 DuplicateStrategy::Replace => {
                     // Delete existing template
-                    if let Err(e) = db.delete_template_by_name(&validated_name) {
+                    if let Err(e) = db.templates().delete_by_name(&validated_name) {
                         result
                             .errors
                             .push(format!("Failed to replace '{}': {}", validated_name, e));
@@ -83,7 +83,7 @@ fn import_templates_from_json_internal(
                     validated_name.clone()
                 }
                 DuplicateStrategy::Rename => {
-                    match db.generate_unique_template_name(&validated_name) {
+                    match db.templates().generate_unique_name(&validated_name) {
                         Ok(name) => name,
                         Err(e) => {
                             result.errors.push(format!(
@@ -130,7 +130,7 @@ fn import_templates_from_json_internal(
             wizard_config: template_export.wizard_config,
         };
 
-        match db.create_template(input) {
+        match db.templates().create(input) {
             Ok(_) => result.imported.push(final_name),
             Err(e) => result
                 .errors
@@ -151,7 +151,7 @@ pub fn cmd_export_template(
     let state = state.lock().map_err(|e| e.to_string())?;
     let template = state
         .db
-        .get_template(&template_id)
+        .templates().get(&template_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Template not found: {}", template_id))?;
 
@@ -197,11 +197,11 @@ pub fn cmd_export_templates_bulk(
 
     // If no IDs provided, export all templates
     let templates = if template_ids.is_empty() {
-        state.db.list_templates().map_err(|e| e.to_string())?
+        state.db.templates().list().map_err(|e| e.to_string())?
     } else {
         let mut result = Vec::new();
         for id in &template_ids {
-            if let Some(t) = state.db.get_template(id).map_err(|e| e.to_string())? {
+            if let Some(t) = state.db.templates().get(id).map_err(|e| e.to_string())? {
                 result.push(t);
             }
         }

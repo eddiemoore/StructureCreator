@@ -422,12 +422,12 @@ fn extract_schema_variables(content: &str) -> std::collections::HashSet<String> 
 
 fn find_template(db: &Database, name_or_id: &str) -> Result<Template, String> {
     // Try to find by ID first
-    if let Ok(Some(template)) = db.get_template(name_or_id) {
+    if let Ok(Some(template)) = db.templates().get(name_or_id) {
         return Ok(template);
     }
 
     // Search by name (case-insensitive)
-    match db.get_template_by_name(name_or_id) {
+    match db.templates().get_by_name(name_or_id) {
         Ok(Some(template)) => Ok(template),
         Ok(None) => Err(format!("Template not found: '{}'", name_or_id)),
         Err(e) => Err(format!("Database error: {}", e)),
@@ -650,7 +650,7 @@ fn cmd_create(
         };
 
         // Increment use count (non-fatal if this fails)
-        if let Err(e) = db.increment_use_count(&template.id) {
+        if let Err(e) = db.templates().increment_use_count(&template.id) {
             status!(quiet || json_output, "Warning: Could not update use count: {}", e);
         }
 
@@ -731,7 +731,7 @@ fn cmd_templates_list(json_output: bool, quiet: bool) -> CliResult {
         Ok(db) => db,
         Err(e) => return CliResult::Error(e),
     };
-    let templates = match db.list_templates() {
+    let templates = match db.templates().list() {
         Ok(t) => t,
         Err(e) => return CliResult::Error(e.to_string()),
     };
@@ -952,11 +952,11 @@ fn cmd_templates_import(path: &std::path::Path, force: bool, quiet: bool) -> Cli
     };
 
     // Check for existing template with same name (case-insensitive)
-    match db.get_template_by_name(&export.name) {
+    match db.templates().get_by_name(&export.name) {
         Ok(Some(existing)) => {
             if force {
                 // Delete existing template
-                if let Err(e) = db.delete_template(&existing.id) {
+                if let Err(e) = db.templates().delete(&existing.id) {
                     return CliResult::Error(format!("Failed to delete existing template: {}", e));
                 }
                 status!(quiet, "Replacing existing template '{}'", export.name);
@@ -983,7 +983,7 @@ fn cmd_templates_import(path: &std::path::Path, force: bool, quiet: bool) -> Cli
         wizard_config: export.wizard_config,
     };
 
-    let template = match db.create_template(input) {
+    let template = match db.templates().create(input) {
         Ok(t) => t,
         Err(e) => return CliResult::Error(format!("Failed to create template: {}", e)),
     };
@@ -1017,7 +1017,7 @@ fn cmd_templates_delete(name: &str, force: bool, quiet: bool) -> CliResult {
         ));
     }
 
-    match db.delete_template(&template.id) {
+    match db.templates().delete(&template.id) {
         Ok(true) => {
             status!(quiet, "Deleted template '{}'", template.name);
             CliResult::Success
