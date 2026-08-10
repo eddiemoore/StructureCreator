@@ -19,6 +19,14 @@ _Avoid_: var, key, delimited name.
 The delimited `%NAME%` form of a Variable name as it appears in schema text and on the Tauri IPC wire. Produced only at outbound edges from a Variable name; never the stored or internal form.
 _Avoid_: variable placeholder, %-name, wrapped name.
 
+**Built-in Variable**:
+A Variable the app supplies itself rather than the user: `DATE`, `YEAR`, `MONTH`, `DAY`, `PROJECT_NAME`. Each Target owns one list of them and one completion step that adds them to the user's Variable map before expansion; a user-defined Variable of the same name wins. Built-in Variables are excluded from auto-detection (they never appear as a row in the variable panel) and from undefined-variable warnings.
+_Avoid_: system variable, magic variable, automatic variable.
+
+**Schema intake**:
+The frontend sequence that turns a schema source — a template, an XML file, a zip, a scanned folder, a wizard completion, a recent project, or a watched file change — into a loaded Schema plus its Variables: read or scan, resolve template inheritance, parse, merge detected Variables, and report progress. Stateless — the result is returned to the caller; the store holds it. Picking a file or folder happens at the call site, not inside intake.
+_Avoid_: schema load, load flow, open schema.
+
 **Plan**:
 The tree of resolved nodes a Target produces by expanding a Schema with a complete Variable map (built-ins included): resolved names, rendered inline content, with IO-dependent content deferred as instructions (download, generate). Pure and deterministic — the unit the golden-vector contract pins. Creating a structure executes a Plan; diff preview compares a Plan against disk.
 _Avoid_: preview tree, expanded tree, diff tree.
@@ -41,6 +49,8 @@ _Avoid_: feature flag, permission.
 - A **Variable** has exactly one **Variable name** (clean, canonical).
 - A **Variable token** is derived from a **Variable name** at an outbound edge (IPC to the Rust backend, or template-substitution scan); converting back (strip delimiters) is idempotent.
 - A **Target** expands a **Schema** plus complete **Variable** values into a **Plan**; execution (create) and diff preview are thin consumers of the Plan.
+- A **Variable** map is *complete* when every **Built-in Variable** has a value and every key is a **Variable token**. Expansion requires a complete map; completing one is the Target's edge step, never part of expansion, so expansion stays pure.
+- **Schema intake** produces the Schema and Variables a **Creation run** later consumes; the two are separate sequences and neither calls the other.
 - A **Creation run** sequences validation, Plan preview, execution, history recording, and undo through the active **Target**; watch auto-create and the keyboard shortcut are ordinary callers of it.
 - Both **Target**s must produce identical results for the shared semantic core (substitution, transforms, templating, schema-structure semantics); they may differ only where one lacks a **Capability**, and there the lacking Target fails loudly.
 
