@@ -207,9 +207,9 @@ async cmdValidateSchema(content: string, variables: { [key in string]: string })
     else return { status: "error", error: e  as any };
 }
 },
-async cmdGenerateDiffPreview(tree: SchemaTree, outputPath: string, variables: { [key in string]: string }, overwrite: boolean) : Promise<Result<DiffResult, string>> {
+async cmdGenerateDiffPreview(tree: SchemaTree, outputPath: string, variables: { [key in string]: string }, overwrite: boolean, projectName: string | null) : Promise<Result<DiffResult, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("cmd_generate_diff_preview", { tree, outputPath, variables, overwrite }) };
+    return { status: "ok", data: await TAURI_INVOKE("cmd_generate_diff_preview", { tree, outputPath, variables, overwrite, projectName }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

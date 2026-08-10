@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 use crate::plan::{self, PlanContent, PlanKind, PlanNode, PlanNote};
 use crate::schema::SchemaTree;
+use crate::variables;
 use crate::types::{
     DiffAction, DiffHunk, DiffLine, DiffLineType, DiffNode, DiffNodeType, DiffResult, DiffSummary,
 };
@@ -36,8 +37,9 @@ const BINARY_THRESHOLD_DIVISOR: usize = 10;
 pub fn generate_diff_preview(
     tree: &SchemaTree,
     output_path: &str,
-    variables: &HashMap<String, String>,
+    user_variables: &HashMap<String, String>,
     overwrite: bool,
+    project_name: Option<&str>,
 ) -> Result<DiffResult, String> {
     let base_path = PathBuf::from(output_path);
     let mut summary = DiffSummary {
@@ -49,7 +51,11 @@ pub fn generate_diff_preview(
         warnings: Vec::new(),
     };
 
-    let structure_plan = plan::expand(tree, variables);
+    // Complete the Variable map exactly as creation does (ADR-0004), so the
+    // preview and the create it previews expand the same map.
+    let variables = variables::complete(user_variables, project_name, variables::now_local());
+
+    let structure_plan = plan::expand(tree, &variables);
 
     // Loud expansion errors/warnings surface as diff warnings; repeat
     // announcements and infos are execution-log concerns, not diff ones.
@@ -353,6 +359,46 @@ mod tests {
         }
     }
 
+    // The preview must expand the same Variable map creation does (ADR-0004):
+    // before this, diff preview injected no Built-in Variables at all, so a
+    // name using `%YEAR%` or `%PROJECT_NAME%` previewed as the literal token
+    // and then created with a value.
+    #[test]
+    fn diff_resolves_built_in_variables_like_creation() {
+        let t = tree(SchemaNode {
+            name: "root".to_string(),
+            node_type: "folder".to_string(),
+            children: Some(vec![
+                SchemaNode {
+                    name: "%YEAR%-notes.txt".to_string(),
+                    node_type: "file".to_string(),
+                    ..Default::default()
+                },
+                SchemaNode {
+                    name: "%PROJECT_NAME%.txt".to_string(),
+                    node_type: "file".to_string(),
+                    ..Default::default()
+                },
+            ]),
+            ..Default::default()
+        });
+
+        let temp = tempfile::tempdir().unwrap();
+        let result = generate_diff_preview(
+            &t,
+            temp.path().to_str().unwrap(),
+            &HashMap::new(),
+            false,
+            Some("my-project"),
+        )
+        .unwrap();
+
+        let children = result.root.children.as_ref().unwrap();
+        let year = chrono::Local::now().format("%Y").to_string();
+        assert_eq!(children[0].name, format!("{}-notes.txt", year));
+        assert_eq!(children[1].name, "my-project.txt");
+    }
+
     #[test]
     fn diff_matches_creation_semantics_for_repeat_edges() {
         // count above maximum: block skipped, loud warning — same as create
@@ -380,6 +426,7 @@ mod tests {
             temp.path().to_str().unwrap(),
             &HashMap::new(),
             false,
+            None,
         )
         .unwrap();
 
@@ -413,6 +460,7 @@ mod tests {
             temp.path().to_str().unwrap(),
             &HashMap::new(),
             true, // overwrite
+            None,
         )
         .unwrap();
 
@@ -442,7 +490,7 @@ mod tests {
 
         let temp = tempfile::tempdir().unwrap();
         let result =
-            generate_diff_preview(&t, temp.path().to_str().unwrap(), &variables, false).unwrap();
+            generate_diff_preview(&t, temp.path().to_str().unwrap(), &variables, false, None).unwrap();
 
         let file = &result.root.children.as_ref().unwrap()[0];
         assert_eq!(
@@ -493,7 +541,7 @@ mod tests {
 
         let temp = tempfile::tempdir().unwrap();
         let result =
-            generate_diff_preview(&t, temp.path().to_str().unwrap(), &variables, false).unwrap();
+            generate_diff_preview(&t, temp.path().to_str().unwrap(), &variables, false, None).unwrap();
 
         fn collect(node: &DiffNode, prefix: &str, out: &mut Vec<String>) {
             let path = if prefix.is_empty() {

@@ -239,12 +239,16 @@ export interface StructureCreatorAdapter {
 
   /**
    * Generate a diff preview showing what would be created/changed.
+   *
+   * `projectName` feeds the same Variable-map completion creation uses, so the
+   * preview and the create it previews expand the same map (ADR-0004).
    */
   generateDiffPreview(
     tree: SchemaTree,
     outputPath: string,
     variables: Record<string, string>,
-    overwrite: boolean
+    overwrite: boolean,
+    projectName?: string
   ): Promise<DiffResult>;
 
   /**

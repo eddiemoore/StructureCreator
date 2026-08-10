@@ -41,7 +41,7 @@ import { WebFileSystemAdapter, getHandleRegistry } from "./filesystem";
 import { parseSchema, exportSchemaXml, scanDirectoryToSchema } from "./schema-parser";
 import { createStructureFromTree, generateDiffPreview } from "./structure-creator";
 import { validateVariables as validateVars, extractVariablesFromContent } from "./transforms";
-import { toTokenKeys } from "@structure-creator/shared";
+import { completeVariableMap, toTokenKeys } from "@structure-creator/shared";
 import { WebTemplateImportExportAdapter } from "./template-io";
 import { scanZipToSchema } from "./zip-utils";
 import { CapabilityError } from "../../capabilities";
@@ -89,43 +89,6 @@ const extractExtendsFromXml = (xmlContent: string): string | undefined => {
   } catch {
     return undefined;
   }
-};
-
-/**
- * Inject built-in date variables into a variables object.
- * Built-in variables are injected first, then user-provided variables override them.
- * Matches the Tauri adapter behavior in lib.rs.
- */
-const injectBuiltInVariables = (
-  variables: Record<string, string>,
-  projectName?: string
-): Record<string, string> => {
-  const now = new Date();
-  const year = now.getFullYear().toString();
-  const month = (now.getMonth() + 1).toString().padStart(2, "0");
-  const day = now.getDate().toString().padStart(2, "0");
-
-  // Start with built-in variables
-  const allVariables: Record<string, string> = {
-    "%DATE%": `${year}-${month}-${day}`,
-    "%YEAR%": year,
-    "%MONTH%": month,
-    "%DAY%": day,
-  };
-
-  // Inject %PROJECT_NAME% if provided
-  if (projectName) {
-    allVariables["%PROJECT_NAME%"] = projectName;
-  }
-
-  // User-provided variables override built-ins. They arrive as clean
-  // canonical names (ADR-0001); the web engine looks variables up by their
-  // token form, so tokenize the keys at this adapter boundary.
-  for (const [key, value] of Object.entries(toTokenKeys(variables))) {
-    allVariables[key] = value;
-  }
-
-  return allVariables;
 };
 
 // ============================================================================
@@ -260,8 +223,12 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
       );
     }
 
-    // Inject built-in variables (date, project name), allowing user overrides
-    const allVariables = injectBuiltInVariables(options.variables, options.projectName);
+    // Complete the Variable map at the edge (ADR-0004), then expand
+    const allVariables = completeVariableMap(
+      options.variables,
+      options.projectName,
+      new Date()
+    );
 
     return createStructureFromTree(
       tree,
@@ -276,7 +243,8 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
     tree: SchemaTree,
     _outputPath: string,
     variables: Record<string, string>,
-    overwrite: boolean
+    overwrite: boolean,
+    projectName?: string
   ): Promise<DiffResult> {
     const rootHandle = getHandleRegistry().getRootHandle();
     if (!rootHandle) {
@@ -286,8 +254,9 @@ class WebStructureCreatorAdapter implements StructureCreatorAdapter {
       );
     }
 
-    // Inject built-in date variables for consistent preview
-    const allVariables = injectBuiltInVariables(variables);
+    // Complete the Variable map exactly as creation does, so the preview and
+    // the create it previews expand the same map.
+    const allVariables = completeVariableMap(variables, projectName, new Date());
 
     return generateDiffPreview(tree, rootHandle, allVariables, overwrite);
   }
