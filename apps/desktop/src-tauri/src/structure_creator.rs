@@ -15,6 +15,7 @@ use crate::generators;
 use crate::plan::{self, PlanContent, PlanKind, PlanNode, PlanNote};
 use crate::schema::SchemaTree;
 use crate::transforms::substitute_variables;
+use crate::variables;
 use crate::types::{
     CreateResult, CreatedItem, HookResult, ItemType, LogEntry, ResultSummary, UndoResult,
     UndoSummary,
@@ -46,21 +47,8 @@ pub fn create_structure_from_tree(
     let mut hook_results: Vec<HookResult> = Vec::new();
     let mut created_items: Vec<CreatedItem> = Vec::new();
 
-    // Inject built-in variables, allowing user overrides
-    let mut all_variables = HashMap::new();
-    let now = chrono::Local::now();
-    all_variables.insert("%DATE%".to_string(), now.format("%Y-%m-%d").to_string());
-    all_variables.insert("%YEAR%".to_string(), now.format("%Y").to_string());
-    all_variables.insert("%MONTH%".to_string(), now.format("%m").to_string());
-    all_variables.insert("%DAY%".to_string(), now.format("%d").to_string());
-    // Inject %PROJECT_NAME% if provided
-    if let Some(name) = project_name {
-        all_variables.insert("%PROJECT_NAME%".to_string(), name.to_string());
-    }
-    // User-provided variables override built-ins
-    for (k, v) in variables.iter() {
-        all_variables.insert(k.clone(), v.clone());
-    }
+    // Complete the Variable map at the edge (ADR-0004), then expand
+    let all_variables = variables::complete(variables, project_name, variables::now_local());
 
     // Expand the schema into a Plan (pure), then execute it
     let structure_plan = plan::expand(tree, &all_variables);

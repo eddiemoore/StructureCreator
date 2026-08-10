@@ -118,7 +118,9 @@ describe("preview", () => {
 
     expect(outcome).toEqual({ ok: true, diff });
     expect(reporter.onDiffStart).toHaveBeenCalledOnce();
-    expect(mockDiffPreview).toHaveBeenCalledWith(tree, "/out", { NAME: "x" }, false);
+    // projectName reaches the preview so it completes the same Variable map
+    // creation does (ADR-0004)
+    expect(mockDiffPreview).toHaveBeenCalledWith(tree, "/out", { NAME: "x" }, false, "proj");
   });
 
   it("stops at validation failure without computing the diff", async () => {

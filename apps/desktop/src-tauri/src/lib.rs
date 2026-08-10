@@ -13,6 +13,7 @@ pub mod team_library;
 pub mod templating;
 pub mod transforms;
 pub mod validation;
+pub mod variables;
 
 // New extracted modules
 pub mod commands;

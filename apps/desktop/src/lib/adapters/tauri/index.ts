@@ -325,9 +325,10 @@ class TauriStructureCreatorAdapter implements StructureCreatorAdapter {
     tree: SchemaTree,
     outputPath: string,
     variables: Record<string, string>,
-    overwrite: boolean
+    overwrite: boolean,
+    projectName?: string
   ): Promise<DiffResult> {
-    return _unwrap(await commands.cmdGenerateDiffPreview(tree, outputPath, toTokenKeys(variables), overwrite)) as DiffResult;
+    return _unwrap(await commands.cmdGenerateDiffPreview(tree, outputPath, toTokenKeys(variables), overwrite, projectName ?? null)) as DiffResult;
   }
 
   async undoStructure(

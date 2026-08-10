@@ -178,8 +178,15 @@ pub fn cmd_generate_diff_preview(
     output_path: String,
     variables: HashMap<String, String>,
     overwrite: bool,
+    project_name: Option<String>,
 ) -> Result<DiffResult, String> {
-    generate_diff_preview(&tree, &output_path, &variables, overwrite)
+    generate_diff_preview(
+        &tree,
+        &output_path,
+        &variables,
+        overwrite,
+        project_name.as_deref(),
+    )
 }
 
 // ============================================================================

@@ -1,0 +1,78 @@
+[
+  {
+    "name": "injects every built-in alongside user variables",
+    "now": "2026-08-10T14:30:00",
+    "projectName": "my-project",
+    "variables": { "%NAME%": "widget" },
+    "expected": {
+      "%DATE%": "2026-08-10",
+      "%YEAR%": "2026",
+      "%MONTH%": "08",
+      "%DAY%": "10",
+      "%PROJECT_NAME%": "my-project",
+      "%NAME%": "widget"
+    }
+  },
+  {
+    "name": "zero-pads month and day",
+    "now": "2026-03-05T09:00:00",
+    "projectName": "padded",
+    "variables": {},
+    "expected": {
+      "%DATE%": "2026-03-05",
+      "%YEAR%": "2026",
+      "%MONTH%": "03",
+      "%DAY%": "05",
+      "%PROJECT_NAME%": "padded"
+    }
+  },
+  {
+    "name": "omits PROJECT_NAME when no project name is supplied",
+    "now": "2026-08-10T14:30:00",
+    "projectName": null,
+    "variables": {},
+    "expected": {
+      "%DATE%": "2026-08-10",
+      "%YEAR%": "2026",
+      "%MONTH%": "08",
+      "%DAY%": "10"
+    }
+  },
+  {
+    "name": "reads wall-clock time, never a UTC-shifted date",
+    "now": "2026-01-01T00:30:00",
+    "projectName": null,
+    "variables": {},
+    "expected": {
+      "%DATE%": "2026-01-01",
+      "%YEAR%": "2026",
+      "%MONTH%": "01",
+      "%DAY%": "01"
+    }
+  },
+  {
+    "name": "reads wall-clock time near the end of a day",
+    "now": "2025-12-31T23:45:00",
+    "projectName": null,
+    "variables": {},
+    "expected": {
+      "%DATE%": "2025-12-31",
+      "%YEAR%": "2025",
+      "%MONTH%": "12",
+      "%DAY%": "31"
+    }
+  },
+  {
+    "name": "user variables override built-ins",
+    "now": "2026-08-10T14:30:00",
+    "projectName": "supplied",
+    "variables": { "%DATE%": "custom-date", "%PROJECT_NAME%": "mine" },
+    "expected": {
+      "%DATE%": "custom-date",
+      "%YEAR%": "2026",
+      "%MONTH%": "08",
+      "%DAY%": "10",
+      "%PROJECT_NAME%": "mine"
+    }
+  }
+]

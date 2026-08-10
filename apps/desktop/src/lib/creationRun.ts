@@ -234,7 +234,8 @@ export const preview = async (
       inputs.tree,
       inputs.outputPath,
       varsMap,
-      inputs.overwrite
+      inputs.overwrite,
+      inputs.projectName
     );
     return { ok: true, diff };
   } catch (e) {
